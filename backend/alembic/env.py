@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.health_models import SchemaHealthCheck  # noqa: F401
 from app.db.provider_models import DataQualityCheck, MarketSnapshot, ProviderFetchLog  # noqa: F401
+from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence  # noqa: F401
 
 config = context.config
 

@@ -14,6 +14,11 @@
 - `/providers/akshare/status` 查看每个接口最近采集状态
 - `/providers/akshare/fetch-logs` 查看最近采集日志
 - `/providers/akshare/snapshots/latest` 查看最近快照摘要
+- 雷达扫描批次、候选信号、证据链基础表
+- `/radar/scans/run` 基于最近 Provider 快照生成雷达候选信号
+- `/radar/scans/latest` 查看最近一次雷达扫描
+- `/radar/signals` 查看候选信号列表
+- `/radar/signals/{signal_id}` 查看候选信号和证据
 - Pydantic 配置
 - SQLAlchemy 2.0 异步数据库连接
 - Alembic 迁移框架
@@ -75,6 +80,12 @@ PostgreSQL 迁移完成后，手动采集并写入数据库：
 uv run python infra/scripts/collect_akshare_minimal.py
 ```
 
+基于已入库快照手动运行雷达扫描：
+
+```powershell
+uv run python infra/scripts/run_radar_scan.py
+```
+
 启动 Celery Worker：
 
 ```powershell
@@ -95,4 +106,4 @@ uv run pytest
 
 ## 开发边界
 
-当前推进到 M2 数据底座早期：只接 AKShare 最小 Provider，不做雷达规则，不接 Agent、Telegram 或 Web。
+当前推进到 M3 雷达核心早期：只基于已入库 AKShare 快照生成候选信号，不接 Agent、Telegram 或 Web，不提供交易建议。
