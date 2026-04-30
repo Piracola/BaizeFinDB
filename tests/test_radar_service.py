@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -96,3 +96,118 @@ async def test_radar_scan_records_no_data_without_snapshots(
     assert scan.status == RadarScanStatus.NO_DATA
     assert scan.summary["candidate_count"] == 0
     assert scan.signals == []
+
+
+@pytest.mark.asyncio
+async def test_radar_scan_marks_consecutive_p1_quick_report_candidate(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        session.add(
+            MarketSnapshot(
+                provider_name="akshare",
+                endpoint="stock_board_concept_name_em",
+                market="A_SHARE",
+                snapshot_type="sector_concept",
+                source_time=None,
+                collected_at=datetime.now(UTC),
+                row_count=1,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "sector_code": "GN001",
+                        "sector_name": "AI Applications",
+                        "pct_change": 3.2,
+                        "turnover_rate": 3.1,
+                        "rising_count": 18,
+                        "falling_count": 8,
+                        "leading_stock": "Example AI",
+                        "leading_stock_pct_change": 7.5,
+                    }
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+
+        await run_radar_scan(session)
+        await run_radar_scan(session)
+        scan = await run_radar_scan(session)
+
+    assert scan.summary["quick_report_candidate_count"] == 1
+    assert scan.signals[0].priority == RadarPriority.P1
+    continuity = scan.signals[0].metrics["continuity"]
+    assert continuity["consecutive_p1_count"] == 3
+    assert continuity["quick_report_candidate"] is True
+    assert "continuous_p1_trigger" in continuity["continuity_reasons"]
+
+
+@pytest.mark.asyncio
+async def test_radar_scan_adjusts_lifecycle_from_previous_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    first_collected_at = datetime.now(UTC)
+
+    async with session_factory() as session:
+        session.add(
+            MarketSnapshot(
+                provider_name="akshare",
+                endpoint="stock_board_industry_name_em",
+                market="A_SHARE",
+                snapshot_type="sector_industry",
+                source_time=None,
+                collected_at=first_collected_at,
+                row_count=1,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "sector_code": "BK100",
+                        "sector_name": "Advanced Manufacturing",
+                        "pct_change": 6.8,
+                        "turnover_rate": 4.6,
+                        "rising_count": 30,
+                        "falling_count": 4,
+                        "leading_stock": "Example Robot",
+                        "leading_stock_pct_change": 10.5,
+                    }
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+        first_scan = await run_radar_scan(session)
+
+        session.add(
+            MarketSnapshot(
+                provider_name="akshare",
+                endpoint="stock_board_industry_name_em",
+                market="A_SHARE",
+                snapshot_type="sector_industry",
+                source_time=None,
+                collected_at=first_collected_at + timedelta(minutes=5),
+                row_count=1,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "sector_code": "BK100",
+                        "sector_name": "Advanced Manufacturing",
+                        "pct_change": 3.2,
+                        "turnover_rate": 3.0,
+                        "rising_count": 12,
+                        "falling_count": 8,
+                        "leading_stock": "Example Robot",
+                        "leading_stock_pct_change": 4.5,
+                    }
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+        second_scan = await run_radar_scan(session)
+
+    assert first_scan.signals[0].lifecycle_stage == "climax"
+    assert second_scan.signals[0].lifecycle_stage == "divergence"
+    continuity = second_scan.signals[0].metrics["continuity"]
+    assert continuity["previous_lifecycle_stage"] == "climax"
+    assert continuity["lifecycle_transition"] == "climax_to_divergence"
+    assert continuity["pct_change_delta"] < 0

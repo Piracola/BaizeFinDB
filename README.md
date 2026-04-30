@@ -19,6 +19,8 @@
 - `/radar/scans/latest` 查看最近一次雷达扫描
 - `/radar/signals` 查看候选信号列表
 - `/radar/signals/{signal_id}` 查看候选信号和证据
+- 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
+- `golden_cases` 规则黄金样例，用于锁定基础 P0/P1/P2 判定
 - Pydantic 配置
 - SQLAlchemy 2.0 异步数据库连接
 - Alembic 迁移框架
@@ -106,4 +108,4 @@ uv run pytest
 
 ## 开发边界
 
-当前推进到 M3 雷达核心早期：只基于已入库 AKShare 快照生成候选信号，不接 Agent、Telegram 或 Web，不提供交易建议。
+当前推进到 M3.2 雷达核心早期：只基于已入库 AKShare 快照生成候选信号，连续 P1 只标记为快报候选，不接 Agent、Telegram 或 Web，不提供交易建议。

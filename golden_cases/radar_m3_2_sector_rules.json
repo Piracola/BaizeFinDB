@@ -1,0 +1,35 @@
+[
+  {
+    "name": "broad_strong_mainline_candidate",
+    "metrics": {
+      "pct_change": 6.8,
+      "rising_count": 30,
+      "falling_count": 4,
+      "leading_stock_pct_change": 10.5
+    },
+    "expected_priority": "P0",
+    "expected_lifecycle_stage": "climax"
+  },
+  {
+    "name": "early_sector_ignition_candidate",
+    "metrics": {
+      "pct_change": 3.2,
+      "rising_count": 18,
+      "falling_count": 8,
+      "leading_stock_pct_change": 7.5
+    },
+    "expected_priority": "P1",
+    "expected_lifecycle_stage": "ignition"
+  },
+  {
+    "name": "weak_leader_only_candidate",
+    "metrics": {
+      "pct_change": 0.6,
+      "rising_count": 4,
+      "falling_count": 20,
+      "leading_stock_pct_change": 6.1
+    },
+    "expected_priority": "P2",
+    "expected_lifecycle_stage": "ignition"
+  }
+]
