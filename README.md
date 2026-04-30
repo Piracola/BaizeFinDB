@@ -1,6 +1,8 @@
 # BaizeFinDB
 
-个人 AI 金融雷达与投研辅助系统。当前只完成 M1 后端工程骨架。
+个人 AI 金融雷达与投研辅助系统。当前推进到 M3.2 雷达核心早期。
+
+当前状态详见 [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)。
 
 ## 当前包含
 
@@ -27,6 +29,15 @@
 - Celery Worker / Beat 配置壳
 - Docker Compose 的 PostgreSQL / Redis 配置
 - pytest 冒烟测试
+
+## 当前进度
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| M1 工程骨架 | 已完成 | 后端可启动、可测试，PostgreSQL / Redis / Alembic / Docker Compose 基础就绪。 |
+| M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
+| M3 雷达核心 | 进行中，已到 M3.2 | 可基于板块/概念快照生成候选信号、证据链、生命周期和连续 P1 标记。 |
+| M4+ | 未开始 | Agent 审查、Telegram、报告、Web、日报周报后置。 |
 
 ## 本地启动
 
