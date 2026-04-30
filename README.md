@@ -10,6 +10,7 @@
 - `/health` 存活检查
 - `/health/ready` PostgreSQL / Redis 就绪检查
 - AKShare 最小 Provider：A 股行情、行业板块、概念板块
+- AKShare 情绪 Provider：涨停股池、跌停股池、炸板股池
 - Provider 拉取日志、快照和数据质量表
 - `/providers/akshare/endpoints` 查看已封装接口
 - `/providers/akshare/fetch/minimal` 手动触发最小采集

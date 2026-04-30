@@ -28,6 +28,7 @@ class AkshareEndpointSpec:
     fetcher_name: str
     required_fields: tuple[str, ...]
     column_map: dict[str, str]
+    use_current_date: bool = False
 
 
 STOCK_COLUMN_MAP = {
@@ -63,6 +64,63 @@ SECTOR_COLUMN_MAP = {
     "领涨股票-涨跌幅": "leading_stock_pct_change",
 }
 
+LIMIT_UP_COLUMN_MAP = {
+    "序号": "rank",
+    "代码": "symbol",
+    "名称": "name",
+    "涨跌幅": "pct_change",
+    "最新价": "latest_price",
+    "成交额": "turnover",
+    "流通市值": "free_float_market_value",
+    "总市值": "total_market_value",
+    "换手率": "turnover_rate",
+    "封板资金": "seal_amount",
+    "首次封板时间": "first_limit_time",
+    "最后封板时间": "last_limit_time",
+    "炸板次数": "break_limit_count",
+    "涨停统计": "limit_up_statistics",
+    "连板数": "consecutive_limit_count",
+    "所属行业": "industry",
+}
+
+LIMIT_DOWN_COLUMN_MAP = {
+    "序号": "rank",
+    "代码": "symbol",
+    "名称": "name",
+    "涨跌幅": "pct_change",
+    "最新价": "latest_price",
+    "成交额": "turnover",
+    "流通市值": "free_float_market_value",
+    "总市值": "total_market_value",
+    "动态市盈率": "dynamic_pe",
+    "换手率": "turnover_rate",
+    "封单资金": "seal_amount",
+    "最后封板时间": "last_limit_time",
+    "板上成交额": "limit_board_turnover",
+    "连续跌停": "consecutive_limit_down_count",
+    "开板次数": "open_limit_count",
+    "所属行业": "industry",
+}
+
+BROKEN_LIMIT_UP_COLUMN_MAP = {
+    "序号": "rank",
+    "代码": "symbol",
+    "名称": "name",
+    "涨跌幅": "pct_change",
+    "最新价": "latest_price",
+    "涨停价": "limit_up_price",
+    "成交额": "turnover",
+    "流通市值": "free_float_market_value",
+    "总市值": "total_market_value",
+    "换手率": "turnover_rate",
+    "涨速": "speed",
+    "首次封板时间": "first_limit_time",
+    "炸板次数": "break_limit_count",
+    "涨停统计": "limit_up_statistics",
+    "振幅": "amplitude",
+    "所属行业": "industry",
+}
+
 AKSHARE_ENDPOINTS: dict[str, AkshareEndpointSpec] = {
     "stock_zh_a_spot_em": AkshareEndpointSpec(
         endpoint="stock_zh_a_spot_em",
@@ -91,6 +149,69 @@ AKSHARE_ENDPOINTS: dict[str, AkshareEndpointSpec] = {
         required_fields=("板块代码", "板块名称", "涨跌幅", "上涨家数", "下跌家数"),
         column_map=SECTOR_COLUMN_MAP,
     ),
+    "stock_zt_pool_em": AkshareEndpointSpec(
+        endpoint="stock_zt_pool_em",
+        title="涨停股池",
+        market="A_SHARE",
+        snapshot_type="limit_up_pool",
+        fetcher_name="stock_zt_pool_em",
+        required_fields=(
+            "代码",
+            "名称",
+            "涨跌幅",
+            "最新价",
+            "成交额",
+            "封板资金",
+            "首次封板时间",
+            "最后封板时间",
+            "炸板次数",
+            "连板数",
+            "所属行业",
+        ),
+        column_map=LIMIT_UP_COLUMN_MAP,
+        use_current_date=True,
+    ),
+    "stock_zt_pool_dtgc_em": AkshareEndpointSpec(
+        endpoint="stock_zt_pool_dtgc_em",
+        title="跌停股池",
+        market="A_SHARE",
+        snapshot_type="limit_down_pool",
+        fetcher_name="stock_zt_pool_dtgc_em",
+        required_fields=(
+            "代码",
+            "名称",
+            "涨跌幅",
+            "最新价",
+            "成交额",
+            "封单资金",
+            "最后封板时间",
+            "连续跌停",
+            "开板次数",
+            "所属行业",
+        ),
+        column_map=LIMIT_DOWN_COLUMN_MAP,
+        use_current_date=True,
+    ),
+    "stock_zt_pool_zbgc_em": AkshareEndpointSpec(
+        endpoint="stock_zt_pool_zbgc_em",
+        title="炸板股池",
+        market="A_SHARE",
+        snapshot_type="broken_limit_up_pool",
+        fetcher_name="stock_zt_pool_zbgc_em",
+        required_fields=(
+            "代码",
+            "名称",
+            "涨跌幅",
+            "最新价",
+            "涨停价",
+            "成交额",
+            "首次封板时间",
+            "炸板次数",
+            "所属行业",
+        ),
+        column_map=BROKEN_LIMIT_UP_COLUMN_MAP,
+        use_current_date=True,
+    ),
 }
 
 
@@ -104,10 +225,10 @@ class AkshareClient:
 
         return ak
 
-    def fetch_dataframe(self, fetcher_name: str) -> "pd.DataFrame":
+    def fetch_dataframe(self, fetcher_name: str, **kwargs: object) -> "pd.DataFrame":
         akshare_module = self._module_loader()
         fetcher = getattr(akshare_module, fetcher_name)
-        return fetcher()
+        return fetcher(**kwargs)
 
 
 class AkshareProvider:
@@ -118,7 +239,11 @@ class AkshareProvider:
 
     async def fetch(self, endpoint: str) -> ProviderDataset:
         spec = AKSHARE_ENDPOINTS[endpoint]
-        dataframe = await asyncio.to_thread(self.client.fetch_dataframe, spec.fetcher_name)
+        dataframe = await asyncio.to_thread(
+            self.client.fetch_dataframe,
+            spec.fetcher_name,
+            **_fetcher_kwargs(spec),
+        )
         return normalize_dataframe(dataframe, spec)
 
 
@@ -167,6 +292,13 @@ def normalize_dataframe(dataframe: "pd.DataFrame", spec: AkshareEndpointSpec) ->
             missing_fields=missing_fields,
         ),
     )
+
+
+def _fetcher_kwargs(spec: AkshareEndpointSpec) -> dict[str, object]:
+    if not spec.use_current_date:
+        return {}
+
+    return {"date": datetime.now(UTC).strftime("%Y%m%d")}
 
 
 def _dataframe_to_records(dataframe: "pd.DataFrame") -> list[dict[str, object]]:
