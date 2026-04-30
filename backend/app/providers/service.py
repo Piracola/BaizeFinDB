@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.provider_models import DataQualityCheck, MarketSnapshot, ProviderFetchLog
@@ -7,7 +8,11 @@ from app.providers.akshare import AKSHARE_ENDPOINTS, NORMALIZATION_VERSION, Aksh
 from app.providers.schemas import (
     AkshareCollectionResponse,
     DataQualityStatus,
+    ProviderCollectionStatusResponse,
+    ProviderEndpointCollectionStatus,
     ProviderEndpointResult,
+    ProviderFetchLogRead,
+    ProviderSnapshotSummary,
     ProviderStatus,
 )
 
@@ -99,6 +104,108 @@ async def collect_akshare_endpoint(
     )
 
 
+async def list_provider_fetch_logs(
+    session: AsyncSession,
+    provider_name: str = "akshare",
+    endpoint: str | None = None,
+    limit: int = 20,
+) -> list[ProviderFetchLogRead]:
+    statement = select(ProviderFetchLog).where(ProviderFetchLog.provider_name == provider_name)
+
+    if endpoint is not None:
+        statement = statement.where(ProviderFetchLog.endpoint == endpoint)
+
+    statement = statement.order_by(
+        desc(ProviderFetchLog.fetch_finished_at),
+        desc(ProviderFetchLog.id),
+    ).limit(limit)
+
+    logs = (await session.scalars(statement)).all()
+    return [ProviderFetchLogRead.model_validate(log) for log in logs]
+
+
+async def list_latest_provider_snapshots(
+    session: AsyncSession,
+    provider_name: str = "akshare",
+    endpoint: str | None = None,
+) -> list[ProviderSnapshotSummary]:
+    endpoints = [endpoint] if endpoint is not None else list(AKSHARE_ENDPOINTS)
+    snapshots: list[ProviderSnapshotSummary] = []
+
+    for current_endpoint in endpoints:
+        statement = (
+            select(MarketSnapshot)
+            .where(
+                MarketSnapshot.provider_name == provider_name,
+                MarketSnapshot.endpoint == current_endpoint,
+            )
+            .order_by(desc(MarketSnapshot.collected_at), desc(MarketSnapshot.id))
+            .limit(1)
+        )
+        snapshot = await session.scalar(statement)
+
+        if snapshot is not None:
+            snapshots.append(_snapshot_summary(snapshot))
+
+    return snapshots
+
+
+async def get_akshare_collection_status(
+    session: AsyncSession,
+) -> ProviderCollectionStatusResponse:
+    endpoint_statuses: list[ProviderEndpointCollectionStatus] = []
+
+    for spec in AKSHARE_ENDPOINTS.values():
+        latest_log = await _latest_fetch_log(session, spec.endpoint)
+        latest_quality_check = (
+            await _latest_quality_check(session, latest_log.id) if latest_log is not None else None
+        )
+        last_success = await _latest_fetch_log(
+            session,
+            spec.endpoint,
+            status=ProviderStatus.SUCCESS.value,
+        )
+        last_failure = await _latest_fetch_log(
+            session,
+            spec.endpoint,
+            status=ProviderStatus.FAILURE.value,
+        )
+
+        endpoint_statuses.append(
+            ProviderEndpointCollectionStatus(
+                endpoint=spec.endpoint,
+                title=spec.title,
+                latest_status=latest_log.status if latest_log is not None else None,
+                latest_quality_status=(
+                    latest_quality_check.status if latest_quality_check is not None else None
+                ),
+                latest_fetch_log_id=latest_log.id if latest_log is not None else None,
+                latest_snapshot_id=(
+                    latest_log.raw_snapshot_id if latest_log is not None else None
+                ),
+                latest_checked_at=(
+                    latest_log.fetch_finished_at if latest_log is not None else None
+                ),
+                last_success_at=(
+                    last_success.fetch_finished_at if last_success is not None else None
+                ),
+                last_failure_at=(
+                    last_failure.fetch_finished_at if last_failure is not None else None
+                ),
+                row_count=latest_log.row_count if latest_log is not None else None,
+                freshness=latest_log.freshness if latest_log is not None else None,
+                confidence=latest_log.confidence if latest_log is not None else None,
+                missing_fields=latest_log.missing_fields if latest_log is not None else [],
+                error_message=latest_log.error_message if latest_log is not None else None,
+            )
+        )
+
+    return ProviderCollectionStatusResponse(
+        provider_name="akshare",
+        endpoints=endpoint_statuses,
+    )
+
+
 async def _record_failure(
     session: AsyncSession,
     endpoint: str,
@@ -146,3 +253,51 @@ async def _record_failure(
         error_message=error_message,
     )
 
+
+def _snapshot_summary(snapshot: MarketSnapshot) -> ProviderSnapshotSummary:
+    return ProviderSnapshotSummary(
+        id=snapshot.id,
+        provider_name=snapshot.provider_name,
+        endpoint=snapshot.endpoint,
+        market=snapshot.market,
+        snapshot_type=snapshot.snapshot_type,
+        source_time=snapshot.source_time,
+        collected_at=snapshot.collected_at,
+        row_count=snapshot.row_count,
+        normalization_version=snapshot.normalization_version,
+        raw_summary=snapshot.raw_summary,
+        preview_rows=snapshot.normalized_rows[:5],
+    )
+
+
+async def _latest_fetch_log(
+    session: AsyncSession,
+    endpoint: str,
+    status: str | None = None,
+) -> ProviderFetchLog | None:
+    statement = select(ProviderFetchLog).where(
+        ProviderFetchLog.provider_name == "akshare",
+        ProviderFetchLog.endpoint == endpoint,
+    )
+
+    if status is not None:
+        statement = statement.where(ProviderFetchLog.status == status)
+
+    statement = statement.order_by(
+        desc(ProviderFetchLog.fetch_finished_at),
+        desc(ProviderFetchLog.id),
+    ).limit(1)
+    return await session.scalar(statement)
+
+
+async def _latest_quality_check(
+    session: AsyncSession,
+    fetch_log_id: int,
+) -> DataQualityCheck | None:
+    statement = (
+        select(DataQualityCheck)
+        .where(DataQualityCheck.fetch_log_id == fetch_log_id)
+        .order_by(desc(DataQualityCheck.created_at), desc(DataQualityCheck.id))
+        .limit(1)
+    )
+    return await session.scalar(statement)

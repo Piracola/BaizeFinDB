@@ -11,6 +11,9 @@
 - Provider 拉取日志、快照和数据质量表
 - `/providers/akshare/endpoints` 查看已封装接口
 - `/providers/akshare/fetch/minimal` 手动触发最小采集
+- `/providers/akshare/status` 查看每个接口最近采集状态
+- `/providers/akshare/fetch-logs` 查看最近采集日志
+- `/providers/akshare/snapshots/latest` 查看最近快照摘要
 - Pydantic 配置
 - SQLAlchemy 2.0 异步数据库连接
 - Alembic 迁移框架
@@ -64,6 +67,12 @@ uv run alembic upgrade head
 
 ```powershell
 uv run python infra/scripts/verify_akshare_minimal.py
+```
+
+PostgreSQL 迁移完成后，手动采集并写入数据库：
+
+```powershell
+uv run python infra/scripts/collect_akshare_minimal.py
 ```
 
 启动 Celery Worker：
