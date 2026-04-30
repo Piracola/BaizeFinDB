@@ -29,6 +29,14 @@ class RadarScanStatus(StrEnum):
 
 class RadarReviewStatus(StrEnum):
     CANDIDATE = "candidate"
+    APPROVED = "approved"
+    BLOCKED = "blocked"
+    NEEDS_HUMAN_REVIEW = "needs_human_review"
+
+
+class RadarSignalShareStatus(StrEnum):
+    READY = "ready"
+    BLOCKED = "blocked"
 
 
 class RadarSignalRead(BaseModel):
@@ -73,6 +81,63 @@ class RadarSignalDetail(RadarSignalRead):
     evidences: list[SignalEvidenceRead] = Field(default_factory=list)
 
 
+class RadarSignalReviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    signal_id: int
+    review_status: RadarReviewStatus
+    reviewer: str
+    rule_version: str
+    reasons: list[str]
+    details: dict[str, object]
+    created_at: datetime
+
+
+class RadarSignalShareEvidenceRead(BaseModel):
+    summary: str
+    evidence_label: str
+    confidence_label: str
+    freshness_label: str
+
+
+class RadarSignalPublicShareRead(BaseModel):
+    title: str
+    summary: str
+    subject_name: str
+    priority_label: str
+    lifecycle_label: str
+    evidences: list[RadarSignalShareEvidenceRead] = Field(default_factory=list)
+    disclaimer: str
+
+
+class RadarSignalSharePreviewRead(BaseModel):
+    signal_id: int
+    share_status: RadarSignalShareStatus
+    review_status: RadarReviewStatus
+    latest_review_id: int | None = None
+    blocked_reasons: list[str]
+    sanitization_notes: list[str]
+    title: str
+    summary: str
+    subject_type: str
+    subject_code: str | None = None
+    subject_name: str
+    priority: RadarPriority
+    lifecycle_stage: RadarLifecycleStage
+    evidences: list[RadarSignalShareEvidenceRead] = Field(default_factory=list)
+    disclaimer: str
+    public_payload: RadarSignalPublicShareRead
+
+
+class RadarSubjectOverviewRead(BaseModel):
+    signal_key: str
+    subject_type: str
+    subject_code: str | None = None
+    subject_name: str
+    latest_signal: RadarSignalRead
+
+
 class RadarScanRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,3 +150,11 @@ class RadarScanRead(BaseModel):
     error_message: str | None = None
     created_at: datetime
     signals: list[RadarSignalRead] = Field(default_factory=list)
+
+
+class RadarOverviewRead(BaseModel):
+    latest_scan: RadarScanRead | None = None
+    active_signals: list[RadarSignalRead] = Field(default_factory=list)
+    current_subjects: list[RadarSubjectOverviewRead] = Field(default_factory=list)
+    priority_counts: dict[str, int]
+    subject_count: int

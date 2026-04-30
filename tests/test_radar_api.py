@@ -74,9 +74,13 @@ async def test_radar_api_runs_scan_and_reads_signals(
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             run_response = await client.post("/radar/scans/run")
             latest_response = await client.get("/radar/scans/latest")
+            scan_id = run_response.json()["id"]
+            scan_detail_response = await client.get(f"/radar/scans/{scan_id}")
+            overview_response = await client.get("/radar/overview")
             signals_response = await client.get("/radar/signals", params={"priority": "P1"})
             signal_id = signals_response.json()[0]["id"]
             detail_response = await client.get(f"/radar/signals/{signal_id}")
+            missing_scan_response = await client.get("/radar/scans/999999")
             missing_response = await client.get("/radar/signals/999999")
     finally:
         app.dependency_overrides.clear()
@@ -88,10 +92,20 @@ async def test_radar_api_runs_scan_and_reads_signals(
     assert latest_response.status_code == 200
     assert latest_response.json()["summary"]["candidate_count"] == 1
 
+    assert scan_detail_response.status_code == 200
+    assert scan_detail_response.json()["id"] == run_response.json()["id"]
+
+    assert overview_response.status_code == 200
+    assert overview_response.json()["latest_scan"]["id"] == run_response.json()["id"]
+    assert overview_response.json()["priority_counts"] == {"P0": 0, "P1": 1, "P2": 0}
+    assert overview_response.json()["subject_count"] == 1
+    assert overview_response.json()["current_subjects"][0]["subject_name"] == "AI Applications"
+
     assert signals_response.status_code == 200
     assert signals_response.json()[0]["subject_name"] == "AI Applications"
 
     assert detail_response.status_code == 200
     assert detail_response.json()["evidences"][0]["evidence_type"] == "market_snapshot"
 
+    assert missing_scan_response.status_code == 404
     assert missing_response.status_code == 404

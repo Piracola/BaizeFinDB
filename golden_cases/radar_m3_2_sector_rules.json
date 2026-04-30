@@ -1,6 +1,6 @@
 [
   {
-    "name": "broad_strong_mainline_candidate",
+    "name": "strong_mainline_climax_candidate",
     "metrics": {
       "pct_change": 6.8,
       "rising_count": 30,
@@ -9,6 +9,28 @@
     },
     "expected_priority": "P0",
     "expected_lifecycle_stage": "climax"
+  },
+  {
+    "name": "p0_threshold_developing_candidate",
+    "metrics": {
+      "pct_change": 5.0,
+      "rising_count": 13,
+      "falling_count": 7,
+      "leading_stock_pct_change": 5.2
+    },
+    "expected_priority": "P0",
+    "expected_lifecycle_stage": "developing"
+  },
+  {
+    "name": "p1_developing_candidate",
+    "metrics": {
+      "pct_change": 4.2,
+      "rising_count": 16,
+      "falling_count": 8,
+      "leading_stock_pct_change": 6.0
+    },
+    "expected_priority": "P1",
+    "expected_lifecycle_stage": "developing"
   },
   {
     "name": "early_sector_ignition_candidate",
@@ -22,7 +44,18 @@
     "expected_lifecycle_stage": "ignition"
   },
   {
-    "name": "weak_leader_only_candidate",
+    "name": "p2_weak_sector_with_basic_breadth",
+    "metrics": {
+      "pct_change": 1.8,
+      "rising_count": 11,
+      "falling_count": 9,
+      "leading_stock_pct_change": 3.2
+    },
+    "expected_priority": "P2",
+    "expected_lifecycle_stage": "ignition"
+  },
+  {
+    "name": "p2_leader_move_with_muted_sector_pct",
     "metrics": {
       "pct_change": 0.6,
       "rising_count": 4,
@@ -31,5 +64,38 @@
     },
     "expected_priority": "P2",
     "expected_lifecycle_stage": "ignition"
+  },
+  {
+    "name": "narrow_breadth_sector_pct_false_positive",
+    "metrics": {
+      "pct_change": 2.6,
+      "rising_count": 4,
+      "falling_count": 20,
+      "leading_stock_pct_change": 4.8
+    },
+    "expected_priority": null,
+    "expected_lifecycle_stage": null
+  },
+  {
+    "name": "pct_below_p2_even_with_broad_breadth",
+    "metrics": {
+      "pct_change": 1.4,
+      "rising_count": 20,
+      "falling_count": 5,
+      "leading_stock_pct_change": 3.0
+    },
+    "expected_priority": null,
+    "expected_lifecycle_stage": null
+  },
+  {
+    "name": "quiet_sector_no_signal",
+    "metrics": {
+      "pct_change": 0.2,
+      "rising_count": 3,
+      "falling_count": 20,
+      "leading_stock_pct_change": 1.1
+    },
+    "expected_priority": null,
+    "expected_lifecycle_stage": null
   }
 ]

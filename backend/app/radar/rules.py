@@ -38,12 +38,20 @@ def classify_sector_movement(metrics: dict[str, object]) -> RadarRuleResult | No
             reasons=["sector_pct_change_ge_3", "breadth_ge_55pct"],
         )
 
-    if pct_change >= 1.5 or leading_stock_pct_change >= 5:
+    if pct_change >= 1.5 and breadth >= 0.5:
         return RadarRuleResult(
             priority=RadarPriority.P2,
             lifecycle_stage=RadarLifecycleStage.IGNITION,
             confidence=0.52,
-            reasons=["weak_positive_sector_or_leader_move"],
+            reasons=["weak_positive_sector_move", "breadth_ge_50pct"],
+        )
+
+    if leading_stock_pct_change >= 5:
+        return RadarRuleResult(
+            priority=RadarPriority.P2,
+            lifecycle_stage=RadarLifecycleStage.IGNITION,
+            confidence=0.52,
+            reasons=["leader_pct_change_ge_5"],
         )
 
     return None

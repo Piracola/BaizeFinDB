@@ -50,6 +50,27 @@ class RadarSignal(Base):
     )
 
 
+class RadarSignalReview(Base):
+    __tablename__ = "radar_signal_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    signal_id: Mapped[int] = mapped_column(
+        ForeignKey("radar_signals.id"),
+        nullable=False,
+        index=True,
+    )
+    review_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    reviewer: Mapped[str] = mapped_column(String(80), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    details: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
 class SignalEvidence(Base):
     __tablename__ = "signal_evidences"
 

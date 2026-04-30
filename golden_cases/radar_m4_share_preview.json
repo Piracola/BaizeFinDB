@@ -1,0 +1,114 @@
+[
+  {
+    "name": "approved_preview_is_ready_and_public_safe",
+    "signal": {
+      "review_status": "approved",
+      "title": "P1 radar candidate from tushare.pro",
+      "summary": "Research attention signal, details at https://example.com/source.",
+      "priority": "P1",
+      "lifecycle_stage": "developing"
+    },
+    "latest_review": {
+      "review_status": "approved"
+    },
+    "evidences": [
+      {
+        "evidence_type": "market_snapshot",
+        "normalized_summary": "Provider summary mirrored from market.example.hk.",
+        "confidence": 0.92,
+        "freshness": "snapshot_latest",
+        "public_share_policy": "internal_summary_only"
+      }
+    ],
+    "expected_share_status": "ready",
+    "expected_blocked_reasons": [],
+    "expected_evidence_label": "市场快照",
+    "expected_confidence_label": "高",
+    "expected_freshness_label": "较新",
+    "forbidden_fragments": [
+      "tushare.pro",
+      "https://example.com",
+      "market.example.hk",
+      "market_snapshot",
+      "snapshot_latest",
+      "source_time",
+      "source_name",
+      "source_ref",
+      "raw_excerpt"
+    ]
+  },
+  {
+    "name": "candidate_preview_requires_review",
+    "signal": {
+      "review_status": "candidate",
+      "title": "P1 radar candidate",
+      "summary": "Research attention signal from provider data.",
+      "priority": "P1",
+      "lifecycle_stage": "developing"
+    },
+    "latest_review": null,
+    "evidences": [
+      {
+        "evidence_type": "market_snapshot",
+        "normalized_summary": "Provider snapshot shows sector movement.",
+        "confidence": 0.88,
+        "freshness": "snapshot_latest",
+        "public_share_policy": "internal_summary_only"
+      }
+    ],
+    "expected_share_status": "blocked",
+    "expected_blocked_reasons": [
+      "review_required",
+      "signal_review_not_approved"
+    ],
+    "expected_evidence_label": "市场快照",
+    "expected_confidence_label": "高",
+    "expected_freshness_label": "较新",
+    "forbidden_fragments": [
+      "market_snapshot",
+      "snapshot_latest",
+      "source_time",
+      "source_name",
+      "source_ref",
+      "raw_excerpt"
+    ]
+  },
+  {
+    "name": "unsafe_share_policy_blocks_preview",
+    "signal": {
+      "review_status": "approved",
+      "title": "P1 radar candidate",
+      "summary": "Research attention signal from provider data.",
+      "priority": "P1",
+      "lifecycle_stage": "developing"
+    },
+    "latest_review": {
+      "review_status": "approved"
+    },
+    "evidences": [
+      {
+        "evidence_type": "market_snapshot",
+        "normalized_summary": "Provider snapshot shows sector movement.",
+        "confidence": 0.46,
+        "freshness": "unknown_source_time",
+        "public_share_policy": "internal_only"
+      }
+    ],
+    "expected_share_status": "blocked",
+    "expected_blocked_reasons": [
+      "unsafe_public_share_policy"
+    ],
+    "expected_evidence_label": "市场快照",
+    "expected_confidence_label": "低",
+    "expected_freshness_label": "未知",
+    "forbidden_fragments": [
+      "internal_only",
+      "market_snapshot",
+      "unknown_source_time",
+      "source_time",
+      "source_name",
+      "source_ref",
+      "raw_excerpt"
+    ]
+  }
+]

@@ -1,20 +1,24 @@
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import desc, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.provider_models import MarketSnapshot
+from app.db.provider_models import DataQualityCheck, MarketSnapshot
 from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
 from app.radar.rules import RadarRuleResult, classify_sector_movement
 from app.radar.schemas import (
     RadarLifecycleStage,
+    RadarOverviewRead,
     RadarPriority,
     RadarReviewStatus,
     RadarScanRead,
     RadarScanStatus,
     RadarSignalDetail,
     RadarSignalRead,
+    RadarSubjectOverviewRead,
     SignalEvidenceRead,
 )
 
@@ -25,6 +29,7 @@ RADAR_SOURCE_ENDPOINTS = (
 MAX_SIGNALS_PER_SCAN = 20
 CONTINUOUS_P1_TRIGGER_COUNT = 3
 CONTINUITY_WINDOW_MINUTES = 30
+MAX_ERROR_MESSAGE_LENGTH = 300
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,7 @@ class SignalCandidate:
     subject_code: str | None
     subject_name: str
     metrics: dict[str, object]
+    data_quality: dict[str, object]
     rule_result: RadarRuleResult
 
 
@@ -64,48 +70,77 @@ async def run_radar_scan(session: AsyncSession) -> RadarScanRead:
     )
     session.add(batch)
     await session.flush()
-
-    snapshots = await _load_latest_source_snapshots(session)
-    candidates = _build_signal_candidates(snapshots)
-
-    continuities: list[CandidateContinuity] = []
-
-    for candidate in candidates:
-        continuity = await _candidate_continuity(session, candidate, started_at)
-        continuities.append(continuity)
-
-        signal = _new_signal(batch.id, candidate, continuity)
-        session.add(signal)
-        await session.flush()
-
-        session.add(_new_evidence(signal.id, candidate, continuity))
-        signal.evidence_count = 1
-
-    batch.status = (
-        RadarScanStatus.SUCCESS.value if candidates else RadarScanStatus.NO_DATA.value
-    )
-    batch.finished_at = datetime.now(UTC)
-    batch.source_snapshot_ids = [snapshot.id for snapshot in snapshots]
-    batch.summary = {
-        "source_endpoints": [snapshot.endpoint for snapshot in snapshots],
-        "source_snapshot_count": len(snapshots),
-        "candidate_count": len(candidates),
-        "priority_counts": _priority_counts(candidates),
-        "continuity_tracked_count": sum(
-            1 for continuity in continuities if continuity.previous_signal_id is not None
-        ),
-        "quick_report_candidate_count": sum(
-            1 for continuity in continuities if continuity.quick_report_candidate
-        ),
-        "lifecycle_transition_counts": _lifecycle_transition_counts(continuities),
-        "max_signals_per_scan": MAX_SIGNALS_PER_SCAN,
-        "continuous_p1_trigger_count": CONTINUOUS_P1_TRIGGER_COUNT,
-        "continuity_window_minutes": CONTINUITY_WINDOW_MINUTES,
-    }
-
+    batch_id = batch.id
     await session.commit()
 
-    scan = await get_radar_scan(session, batch.id)
+    snapshots: list[MarketSnapshot] = []
+    source_snapshot_ids: list[int] = []
+    source_endpoints: list[str] = []
+    snapshot_quality_summaries: dict[int, dict[str, object]] = {}
+    candidates: list[SignalCandidate] = []
+    continuities: list[CandidateContinuity] = []
+
+    try:
+        snapshots = await _load_latest_source_snapshots(session)
+        source_snapshot_ids = [snapshot.id for snapshot in snapshots]
+        source_endpoints = [snapshot.endpoint for snapshot in snapshots]
+        snapshot_quality_summaries = await _load_snapshot_quality_summaries(
+            session,
+            snapshots,
+        )
+        candidates = _build_signal_candidates(snapshots, snapshot_quality_summaries)
+
+        for candidate in candidates:
+            continuity = await _candidate_continuity(session, candidate, started_at)
+            continuities.append(continuity)
+
+            signal = _new_signal(batch_id, candidate, continuity)
+            session.add(signal)
+            await session.flush()
+
+            session.add(_new_evidence(signal.id, candidate, continuity))
+            signal.evidence_count = 1
+
+        batch.status = (
+            RadarScanStatus.SUCCESS.value if candidates else RadarScanStatus.NO_DATA.value
+        )
+        batch.finished_at = datetime.now(UTC)
+        batch.source_snapshot_ids = source_snapshot_ids
+        batch.error_message = None
+        batch.summary = _scan_success_summary(
+            source_endpoints,
+            len(source_snapshot_ids),
+            snapshot_quality_summaries,
+            candidates,
+            continuities,
+        )
+
+        await session.commit()
+    except SQLAlchemyError as exc:
+        await _best_effort_record_scan_failure(
+            session=session,
+            batch_id=batch_id,
+            source_snapshot_ids=source_snapshot_ids,
+            source_endpoints=source_endpoints,
+            snapshot_quality_summaries=snapshot_quality_summaries,
+            candidates=candidates,
+            continuities=continuities,
+            exc=exc,
+        )
+        raise
+    except Exception as exc:
+        await _record_scan_failure(
+            session=session,
+            batch_id=batch_id,
+            source_snapshot_ids=source_snapshot_ids,
+            source_endpoints=source_endpoints,
+            snapshot_quality_summaries=snapshot_quality_summaries,
+            candidates=candidates,
+            continuities=continuities,
+            exc=exc,
+        )
+
+    scan = await get_radar_scan(session, batch_id)
     if scan is None:
         raise RuntimeError("radar scan was committed but could not be reloaded")
 
@@ -125,6 +160,32 @@ async def get_latest_radar_scan(session: AsyncSession) -> RadarScanRead | None:
 async def get_radar_scan(session: AsyncSession, scan_id: int) -> RadarScanRead | None:
     batch = await session.get(RadarScanBatch, scan_id)
     return await _scan_read(session, batch) if batch is not None else None
+
+
+async def get_radar_overview(
+    session: AsyncSession,
+    limit: int = 50,
+) -> RadarOverviewRead:
+    latest_scan = await get_latest_radar_scan(session)
+    current_signals = _dedupe_subject_signals(latest_scan.signals if latest_scan else [])
+    active_signals = current_signals[:limit]
+
+    return RadarOverviewRead(
+        latest_scan=latest_scan,
+        active_signals=active_signals,
+        current_subjects=[
+            RadarSubjectOverviewRead(
+                signal_key=signal.signal_key,
+                subject_type=signal.subject_type,
+                subject_code=signal.subject_code,
+                subject_name=signal.subject_name,
+                latest_signal=signal,
+            )
+            for signal in active_signals
+        ],
+        priority_counts=_signal_priority_counts(current_signals),
+        subject_count=len(current_signals),
+    )
 
 
 async def list_radar_signals(
@@ -186,6 +247,53 @@ async def _load_latest_source_snapshots(session: AsyncSession) -> list[MarketSna
     return snapshots
 
 
+async def _load_snapshot_quality_summaries(
+    session: AsyncSession,
+    snapshots: list[MarketSnapshot],
+) -> dict[int, dict[str, object]]:
+    summaries: dict[int, dict[str, object]] = {}
+
+    for snapshot in snapshots:
+        snapshot_quality_check = await _latest_snapshot_quality_check(session, snapshot.id)
+        endpoint_quality_check = await _latest_endpoint_quality_check(session, snapshot)
+        summaries[snapshot.id] = _snapshot_quality_summary(
+            snapshot,
+            snapshot_quality_check,
+            endpoint_quality_check,
+        )
+
+    return summaries
+
+
+async def _latest_snapshot_quality_check(
+    session: AsyncSession,
+    snapshot_id: int,
+) -> DataQualityCheck | None:
+    statement = (
+        select(DataQualityCheck)
+        .where(DataQualityCheck.snapshot_id == snapshot_id)
+        .order_by(desc(DataQualityCheck.created_at), desc(DataQualityCheck.id))
+        .limit(1)
+    )
+    return await session.scalar(statement)
+
+
+async def _latest_endpoint_quality_check(
+    session: AsyncSession,
+    snapshot: MarketSnapshot,
+) -> DataQualityCheck | None:
+    statement = (
+        select(DataQualityCheck)
+        .where(
+            DataQualityCheck.provider_name == snapshot.provider_name,
+            DataQualityCheck.endpoint == snapshot.endpoint,
+        )
+        .order_by(desc(DataQualityCheck.created_at), desc(DataQualityCheck.id))
+        .limit(1)
+    )
+    return await session.scalar(statement)
+
+
 async def _scan_read(
     session: AsyncSession,
     batch: RadarScanBatch,
@@ -203,10 +311,157 @@ async def _scan_read(
     )
 
 
-def _build_signal_candidates(snapshots: list[MarketSnapshot]) -> list[SignalCandidate]:
+def _dedupe_subject_signals(signals: list[RadarSignalRead]) -> list[RadarSignalRead]:
+    seen: set[str] = set()
+    deduped: list[RadarSignalRead] = []
+
+    for signal in signals:
+        if signal.signal_key in seen:
+            continue
+
+        seen.add(signal.signal_key)
+        deduped.append(signal)
+
+    return deduped
+
+
+def _scan_success_summary(
+    source_endpoints: list[str],
+    source_snapshot_count: int,
+    snapshot_quality_summaries: dict[int, dict[str, object]],
+    candidates: list[SignalCandidate],
+    continuities: list[CandidateContinuity],
+) -> dict[str, object]:
+    return {
+        "source_endpoints": source_endpoints,
+        "source_snapshot_count": source_snapshot_count,
+        "data_quality": _scan_data_quality_summary(snapshot_quality_summaries),
+        "candidate_count": len(candidates),
+        "priority_counts": _priority_counts(candidates),
+        "continuity_tracked_count": sum(
+            1 for continuity in continuities if continuity.previous_signal_id is not None
+        ),
+        "quick_report_candidate_count": sum(
+            1 for continuity in continuities if continuity.quick_report_candidate
+        ),
+        "lifecycle_transition_counts": _lifecycle_transition_counts(continuities),
+        "max_signals_per_scan": MAX_SIGNALS_PER_SCAN,
+        "continuous_p1_trigger_count": CONTINUOUS_P1_TRIGGER_COUNT,
+        "continuity_window_minutes": CONTINUITY_WINDOW_MINUTES,
+    }
+
+
+def _scan_failure_summary(
+    source_endpoints: list[str],
+    source_snapshot_count: int,
+    snapshot_quality_summaries: dict[int, dict[str, object]],
+    candidates: list[SignalCandidate],
+    continuities: list[CandidateContinuity],
+    exc: Exception,
+    error_message: str,
+) -> dict[str, object]:
+    return {
+        "source_endpoints": source_endpoints,
+        "source_snapshot_count": source_snapshot_count,
+        "data_quality": _scan_data_quality_summary(snapshot_quality_summaries),
+        "candidate_count": len(candidates),
+        "processed_candidate_count": len(continuities),
+        "error_type": exc.__class__.__name__,
+        "error_message": error_message,
+    }
+
+
+async def _record_scan_failure(
+    session: AsyncSession,
+    batch_id: int,
+    source_snapshot_ids: list[int],
+    source_endpoints: list[str],
+    snapshot_quality_summaries: dict[int, dict[str, object]],
+    candidates: list[SignalCandidate],
+    continuities: list[CandidateContinuity],
+    exc: Exception,
+) -> None:
+    await session.rollback()
+    failure_batch = await session.get(RadarScanBatch, batch_id)
+    if failure_batch is None:
+        raise RuntimeError("radar scan failed and the batch could not be reloaded") from exc
+
+    error_message = _short_error_message(exc)
+    failure_batch.status = RadarScanStatus.FAILURE.value
+    failure_batch.finished_at = datetime.now(UTC)
+    failure_batch.source_snapshot_ids = source_snapshot_ids
+    failure_batch.error_message = error_message
+    failure_batch.summary = _scan_failure_summary(
+        source_endpoints=source_endpoints,
+        source_snapshot_count=len(source_snapshot_ids),
+        snapshot_quality_summaries=snapshot_quality_summaries,
+        candidates=candidates,
+        continuities=continuities,
+        exc=exc,
+        error_message=error_message,
+    )
+    await session.commit()
+
+
+async def _best_effort_record_scan_failure(
+    session: AsyncSession,
+    batch_id: int,
+    source_snapshot_ids: list[int],
+    source_endpoints: list[str],
+    snapshot_quality_summaries: dict[int, dict[str, object]],
+    candidates: list[SignalCandidate],
+    continuities: list[CandidateContinuity],
+    exc: SQLAlchemyError,
+) -> None:
+    try:
+        await session.rollback()
+        failure_batch = await session.get(RadarScanBatch, batch_id)
+        if failure_batch is None or failure_batch.status != RadarScanStatus.RUNNING.value:
+            return
+
+        error_message = _short_error_message(exc)
+        failure_batch.status = RadarScanStatus.FAILURE.value
+        failure_batch.finished_at = datetime.now(UTC)
+        failure_batch.source_snapshot_ids = source_snapshot_ids
+        failure_batch.error_message = error_message
+        failure_batch.summary = _scan_failure_summary(
+            source_endpoints=source_endpoints,
+            source_snapshot_count=len(source_snapshot_ids),
+            snapshot_quality_summaries=snapshot_quality_summaries,
+            candidates=candidates,
+            continuities=continuities,
+            exc=exc,
+            error_message=error_message,
+        )
+        await session.commit()
+    except Exception:
+        with suppress(Exception):
+            await session.rollback()
+
+
+def _short_error_message(exc: Exception) -> str:
+    error_type = exc.__class__.__name__
+    detail = str(exc).strip()
+    message = f"{error_type}: {detail}" if detail else error_type
+    if len(message) <= MAX_ERROR_MESSAGE_LENGTH:
+        return message
+
+    return f"{message[: MAX_ERROR_MESSAGE_LENGTH - 3]}..."
+
+
+def _build_signal_candidates(
+    snapshots: list[MarketSnapshot],
+    snapshot_quality_summaries: dict[int, dict[str, object]] | None = None,
+) -> list[SignalCandidate]:
     candidates: list[SignalCandidate] = []
+    quality_summaries = snapshot_quality_summaries or {}
 
     for snapshot in snapshots:
+        data_quality = quality_summaries.get(
+            snapshot.id,
+            _snapshot_quality_summary(snapshot, None, None),
+        )
+
         for row in snapshot.normalized_rows:
             metrics = _row_metrics(row)
             rule_result = classify_sector_movement(metrics)
@@ -223,6 +478,7 @@ def _build_signal_candidates(snapshots: list[MarketSnapshot]) -> list[SignalCand
                     subject_code=subject_code,
                     subject_name=subject_name,
                     metrics=metrics,
+                    data_quality=data_quality,
                     rule_result=rule_result,
                 )
             )
@@ -322,6 +578,7 @@ def _new_signal(
             "continuity": _continuity_metrics(continuity),
             "source_endpoint": candidate.snapshot.endpoint,
             "source_snapshot_id": candidate.snapshot.id,
+            "provider_quality": candidate.data_quality,
         },
         evidence_count=0,
     )
@@ -360,6 +617,7 @@ def _new_evidence(
             "metrics": candidate.metrics,
             "rule_reasons": candidate.rule_result.reasons,
             "continuity": _continuity_metrics(continuity),
+            "provider_quality": candidate.data_quality,
         },
         public_share_policy="internal_summary_only",
     )
@@ -512,6 +770,99 @@ def _priority_counts(candidates: list[SignalCandidate]) -> dict[str, int]:
     for candidate in candidates:
         counts[candidate.rule_result.priority.value] += 1
     return counts
+
+
+def _signal_priority_counts(signals: list[RadarSignalRead]) -> dict[str, int]:
+    counts = {priority.value: 0 for priority in RadarPriority}
+    for signal in signals:
+        counts[signal.priority.value] += 1
+    return counts
+
+
+def _snapshot_quality_summary(
+    snapshot: MarketSnapshot,
+    snapshot_quality_check: DataQualityCheck | None,
+    endpoint_quality_check: DataQualityCheck | None,
+) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "snapshot_id": snapshot.id,
+        "endpoint": snapshot.endpoint,
+        "row_count": snapshot.row_count,
+        "normalization_version": snapshot.normalization_version,
+    }
+    quality_check = _selected_quality_check(snapshot_quality_check, endpoint_quality_check)
+
+    if quality_check is None:
+        return {
+            **summary,
+            "status": "unknown",
+            "confidence": None,
+            "freshness": "unknown",
+            "missing_fields": [],
+            "quality_check_id": None,
+            "fetch_log_id": None,
+            "quality_scope": "missing",
+            "snapshot_quality_status": None,
+            "latest_endpoint_quality_status": None,
+        }
+
+    freshness = quality_check.details.get("freshness")
+    return {
+        **summary,
+        "status": quality_check.status,
+        "confidence": quality_check.confidence,
+        "freshness": freshness if isinstance(freshness, str) else "unknown",
+        "missing_fields": quality_check.missing_fields,
+        "quality_check_id": quality_check.id,
+        "fetch_log_id": quality_check.fetch_log_id,
+        "quality_scope": _quality_scope(snapshot, quality_check),
+        "snapshot_quality_status": (
+            snapshot_quality_check.status if snapshot_quality_check is not None else None
+        ),
+        "latest_endpoint_quality_status": (
+            endpoint_quality_check.status if endpoint_quality_check is not None else None
+        ),
+    }
+
+
+def _selected_quality_check(
+    snapshot_quality_check: DataQualityCheck | None,
+    endpoint_quality_check: DataQualityCheck | None,
+) -> DataQualityCheck | None:
+    if endpoint_quality_check is not None and endpoint_quality_check.status == "failed":
+        return endpoint_quality_check
+
+    return snapshot_quality_check or endpoint_quality_check
+
+
+def _quality_scope(
+    snapshot: MarketSnapshot,
+    quality_check: DataQualityCheck,
+) -> str:
+    if quality_check.snapshot_id == snapshot.id:
+        return "snapshot"
+
+    return "latest_endpoint"
+
+
+def _scan_data_quality_summary(
+    snapshot_quality_summaries: dict[int, dict[str, object]],
+) -> dict[str, object]:
+    status_counts: dict[str, int] = {}
+    degraded_snapshot_ids: list[int] = []
+
+    for snapshot_id, quality in snapshot_quality_summaries.items():
+        status = str(quality.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        if status != "ok":
+            degraded_snapshot_ids.append(snapshot_id)
+
+    return {
+        "status_counts": status_counts,
+        "degraded_snapshot_ids": degraded_snapshot_ids,
+        "snapshots": list(snapshot_quality_summaries.values()),
+    }
 
 
 def _text(value: object, default: str) -> str:

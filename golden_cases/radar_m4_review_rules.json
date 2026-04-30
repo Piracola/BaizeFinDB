@@ -1,0 +1,275 @@
+[
+  {
+    "name": "safe_signal_approved",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 1,
+      "metrics": {
+        "continuity": {
+          "quick_report_candidate": false
+        },
+        "provider_quality": {
+          "status": "ok",
+          "confidence": 0.95,
+          "freshness": "unknown_source_time",
+          "missing_fields": []
+        }
+      }
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {
+          "provider_quality": {
+            "status": "ok",
+            "confidence": 0.95,
+            "freshness": "unknown_source_time",
+            "missing_fields": []
+          }
+        }
+      }
+    ],
+    "expected_status": "approved",
+    "expected_reasons": ["rule_review_passed"]
+  },
+  {
+    "name": "forbidden_trading_language_blocked",
+    "signal": {
+      "priority": "P1",
+      "summary": "Guardrail fixture with forbidden wording: 保证收益.",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "blocked",
+    "expected_reasons": ["forbidden_trading_language"],
+    "expected_detail_keys": ["matched_forbidden_terms"]
+  },
+  {
+    "name": "negated_safe_trading_language_approved",
+    "signal": {
+      "priority": "P1",
+      "summary": "仅作研究关注，不构成投资建议，不保证收益。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "approved",
+    "expected_reasons": ["rule_review_passed"]
+  },
+  {
+    "name": "actionable_buy_language_blocked",
+    "signal": {
+      "priority": "P1",
+      "summary": "仅作研究关注，不保证收益，但请马上买入。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "blocked",
+    "expected_reasons": ["forbidden_trading_language"],
+    "expected_detail_keys": ["matched_forbidden_terms"]
+  },
+  {
+    "name": "negated_action_warning_approved",
+    "signal": {
+      "priority": "P1",
+      "summary": "风险提示：不要马上买入，禁止满仓，不能跟着买。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "approved",
+    "expected_reasons": ["rule_review_passed"]
+  },
+  {
+    "name": "spaced_forbidden_language_blocked",
+    "signal": {
+      "priority": "P1",
+      "summary": "Guardrail fixture with spaced wording: 马 上 买 入，保 证 收 益。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "blocked",
+    "expected_reasons": ["forbidden_trading_language"],
+    "expected_detail_keys": ["matched_forbidden_terms"]
+  },
+  {
+    "name": "hype_language_blocked",
+    "signal": {
+      "priority": "P1",
+      "summary": "Guardrail fixture with hype wording: 闭眼冲，翻倍票，抄底加仓。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "blocked",
+    "expected_reasons": ["forbidden_trading_language"],
+    "expected_detail_keys": ["matched_forbidden_terms"]
+  },
+  {
+    "name": "actual_evidence_with_stale_count_needs_review",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 0,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "needs_human_review",
+    "expected_reasons": ["evidence_count_mismatch"]
+  },
+  {
+    "name": "degraded_provider_quality_needs_review",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 1,
+      "metrics": {
+        "provider_quality": {
+          "status": "degraded",
+          "confidence": 0.45,
+          "freshness": "unknown_source_time",
+          "missing_fields": ["pct_change"]
+        }
+      }
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "needs_human_review",
+    "expected_reasons": ["provider_quality_needs_review"]
+  },
+  {
+    "name": "failed_provider_quality_blocked",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {
+          "provider_quality": {
+            "status": "failed",
+            "confidence": 0.0,
+            "freshness": "unavailable",
+            "missing_fields": []
+          }
+        }
+      }
+    ],
+    "expected_status": "blocked",
+    "expected_reasons": ["failed_provider_quality"]
+  },
+  {
+    "name": "evidence_conflict_needs_review",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 1,
+      "metrics": {
+        "pct_change": 3.4,
+        "breadth": 0.7
+      }
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {
+          "metrics": {
+            "pct_change": -1.2,
+            "breadth": 0.7
+          }
+        }
+      }
+    ],
+    "expected_status": "needs_human_review",
+    "expected_reasons": ["evidence_conflict"],
+    "expected_detail_keys": ["evidence_conflicts"]
+  },
+  {
+    "name": "duplicate_trigger_review_hints_needs_review",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 1,
+      "metrics": {
+        "review_hints": [
+          "continuous_p1_trigger",
+          "continuous_p1_trigger"
+        ]
+      }
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "needs_human_review",
+    "expected_reasons": ["duplicate_trigger_review_hints"],
+    "expected_detail_keys": ["duplicate_trigger_review_hints"]
+  },
+  {
+    "name": "stale_source_freshness_needs_review",
+    "signal": {
+      "priority": "P1",
+      "summary": "Research attention signal from provider data, without trading advice.",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "freshness": "stale",
+        "details": {}
+      }
+    ],
+    "expected_status": "needs_human_review",
+    "expected_reasons": ["stale_source"],
+    "expected_detail_keys": ["stale_sources"]
+  }
+]
