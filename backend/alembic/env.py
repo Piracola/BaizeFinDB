@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.health_models import SchemaHealthCheck  # noqa: F401
+from app.db.provider_models import DataQualityCheck, MarketSnapshot, ProviderFetchLog  # noqa: F401
 
 config = context.config
 
@@ -64,4 +65,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

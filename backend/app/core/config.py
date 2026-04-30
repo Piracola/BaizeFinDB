@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     celery_broker_url: str | None = Field(default=None, alias="CELERY_BROKER_URL")
     celery_result_backend: str | None = Field(default=None, alias="CELERY_RESULT_BACKEND")
+    tushare_token: str | None = Field(default=None, alias="TUSHARE_TOKEN")
 
     @property
     def effective_celery_broker_url(self) -> str:
@@ -35,4 +36,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

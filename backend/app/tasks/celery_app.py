@@ -1,6 +1,10 @@
+import asyncio
+
 from celery import Celery
 
 from app.core.config import get_settings
+from app.db.session import AsyncSessionLocal
+from app.providers.service import collect_minimal_akshare
 
 settings = get_settings()
 
@@ -18,8 +22,31 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
 )
 
+celery_app.conf.beat_schedule = {
+    "collect-akshare-minimal-every-5-minutes": {
+        "task": "baizefindb.providers.collect_akshare_minimal",
+        "schedule": 300.0,
+    }
+}
+
 
 @celery_app.task(name="baizefindb.tasks.ping")
 def ping() -> str:
     return "pong"
+
+
+@celery_app.task(
+    name="baizefindb.providers.collect_akshare_minimal",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def collect_akshare_minimal_task() -> dict[str, object]:
+    return asyncio.run(_collect_akshare_minimal())
+
+
+async def _collect_akshare_minimal() -> dict[str, object]:
+    async with AsyncSessionLocal() as session:
+        result = await collect_minimal_akshare(session)
+        return result.model_dump(mode="json")
 

@@ -7,6 +7,10 @@
 - FastAPI 后端入口
 - `/health` 存活检查
 - `/health/ready` PostgreSQL / Redis 就绪检查
+- AKShare 最小 Provider：A 股行情、行业板块、概念板块
+- Provider 拉取日志、快照和数据质量表
+- `/providers/akshare/endpoints` 查看已封装接口
+- `/providers/akshare/fetch/minimal` 手动触发最小采集
 - Pydantic 配置
 - SQLAlchemy 2.0 异步数据库连接
 - Alembic 迁移框架
@@ -56,6 +60,12 @@ docker compose up -d postgres redis
 uv run alembic upgrade head
 ```
 
+验证 AKShare 最小接口，不写数据库：
+
+```powershell
+uv run python infra/scripts/verify_akshare_minimal.py
+```
+
 启动 Celery Worker：
 
 ```powershell
@@ -76,5 +86,4 @@ uv run pytest
 
 ## 开发边界
 
-M1 只做工程骨架，不接 AKShare，不做雷达规则，不接 Agent、Telegram 或 Web。
-
+当前推进到 M2 数据底座早期：只接 AKShare 最小 Provider，不做雷达规则，不接 Agent、Telegram 或 Web。

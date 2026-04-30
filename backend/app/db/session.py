@@ -1,5 +1,7 @@
+from collections.abc import AsyncIterator
+
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 
@@ -16,6 +18,11 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
 async def check_database() -> dict[str, str]:
     try:
         async with engine.connect() as connection:
@@ -28,4 +35,3 @@ async def check_database() -> dict[str, str]:
         }
 
     return {"status": "ok"}
-
