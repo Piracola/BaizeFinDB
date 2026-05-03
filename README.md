@@ -47,7 +47,7 @@
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
 - Telegram Bot MVP Webhook 模块：只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
-- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录

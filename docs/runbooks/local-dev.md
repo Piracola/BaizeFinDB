@@ -217,6 +217,14 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":1,"message":{"message_id":1,"chat":{"id":1001},"text":"/help"}}'
 ```
 
+本地 preview `/id`，用于拿到绑定白名单时需要填写的 chat id：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":11,"message":{"message_id":11,"chat":{"id":1001},"text":"/id"}}'
+```
+
 本地 preview `/radar`：
 
 ```powershell

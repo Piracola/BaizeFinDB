@@ -105,6 +105,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert data["delivery"] == "preview"
     assert data["sent"] is False
     assert "可用命令" in data["preview"]
+    assert "/id" in data["preview"]
     assert "/holding" in data["preview"]
     assert "/watchlist" in data["preview"]
     assert "/reports" in data["preview"]
@@ -133,6 +134,26 @@ async def test_telegram_unauthorized_chat_is_rejected(
     assert data["delivery"] == "skipped"
     assert data["sent"] is False
     assert "白名单" in data["preview"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_id_command_is_available_before_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001")
+    get_settings.cache_clear()
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/id", chat_id=9999))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["accepted"] is True
+    assert data["authorized"] is False
+    assert data["command"] == "/id"
+    assert data["delivery"] == "preview"
+    assert "当前聊天 ID：9999" in data["preview"]
+    assert "不构成投资建议" in data["preview"]
 
 
 @pytest.mark.asyncio

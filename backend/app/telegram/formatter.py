@@ -62,6 +62,7 @@ def format_help() -> str:
                 "",
                 "可用命令：",
                 "/help - 查看命令说明",
+                "/id - 查看当前聊天 ID，用于绑定白名单",
                 "/health - 查看 API、数据库、Redis 状态",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
@@ -430,6 +431,20 @@ def format_no_text() -> str:
 
 def format_unknown_command() -> str:
     return "未识别命令。发送 /help 查看可用命令。"
+
+
+def format_chat_identity(chat_id: int) -> str:
+    return _trim_message(
+        "\n".join(
+            [
+                "Telegram Chat ID",
+                f"当前聊天 ID：{chat_id}",
+                "可在 Web/Windows/API 的 Telegram 绑定中使用这个 ID。",
+                "",
+                DISCLAIMER,
+            ],
+        ),
+    )
 
 
 def format_invalid_signal_id() -> str:

@@ -12,6 +12,7 @@ from app.scores.service import generate_signal_scores
 from app.telegram.binding_service import is_telegram_chat_authorized
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import (
+    format_chat_identity,
     format_health,
     format_help,
     format_holdings,
@@ -75,16 +76,27 @@ class TelegramCommandService:
             )
 
         chat_id = message.chat.id
+        text = message.text.strip() if message.text else ""
+        command, arguments = _parse_command(text) if text else (None, [])
+
+        if command in {"/id", "/chatid"}:
+            return await self._deliver(
+                chat_id=chat_id,
+                command=command,
+                text=format_chat_identity(chat_id),
+                accepted=True,
+                authorized=False,
+            )
+
         if not await is_telegram_chat_authorized(session, self._settings, chat_id):
             return _preview_response(
                 accepted=False,
                 authorized=False,
-                command=None,
+                command=command,
                 text=format_unauthorized(),
                 delivery="skipped",
             )
 
-        text = message.text.strip() if message.text else ""
         if not text:
             return await self._deliver(
                 chat_id=chat_id,
@@ -93,7 +105,6 @@ class TelegramCommandService:
                 accepted=False,
             )
 
-        command, arguments = _parse_command(text)
         response_text = await self._command_response(session, chat_id, command, arguments)
         return await self._deliver(
             chat_id=chat_id,
@@ -211,11 +222,12 @@ class TelegramCommandService:
         command: str | None,
         text: str,
         accepted: bool,
+        authorized: bool = True,
     ) -> TelegramWebhookResponse:
         if not self._client.configured:
             return _preview_response(
                 accepted=accepted,
-                authorized=True,
+                authorized=authorized,
                 command=command,
                 text=text,
                 delivery="preview",
@@ -225,7 +237,7 @@ class TelegramCommandService:
         if send_result.ok:
             return TelegramWebhookResponse(
                 accepted=accepted,
-                authorized=True,
+                authorized=authorized,
                 command=command,
                 delivery="sent",
                 sent=True,
@@ -234,7 +246,7 @@ class TelegramCommandService:
 
         return TelegramWebhookResponse(
             accepted=accepted,
-            authorized=True,
+            authorized=authorized,
             command=command,
             delivery="failed",
             sent=False,

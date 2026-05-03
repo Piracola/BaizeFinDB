@@ -116,7 +116,7 @@ Telegram：
 - `PATCH /telegram/bindings/{chat_id}`
 - `POST /telegram/push/latest`
 - `GET /telegram/push/logs`
-- Telegram 命令：`/help`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`
+- Telegram 命令：`/help`、`/id`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`
 
 Windows 客户端：
 
