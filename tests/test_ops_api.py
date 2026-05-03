@@ -374,6 +374,82 @@ async def test_ops_history_lists_recent_runtime_failures(
 
 
 @pytest.mark.asyncio
+async def test_ops_readiness_reports_ready_when_core_runtime_is_healthy(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add(
+            RadarScanBatch(
+                status="success",
+                started_at=now - timedelta(minutes=5),
+                finished_at=now - timedelta(minutes=4),
+                source_snapshot_ids=[1],
+                summary={"signal_count": 2},
+            ),
+        )
+        session.add(
+            ProviderFetchLog(
+                provider_name="akshare",
+                endpoint="stock_zh_a_spot_em",
+                status="success",
+                fetch_started_at=now - timedelta(minutes=8),
+                fetch_finished_at=now - timedelta(minutes=7),
+                source_time=None,
+                row_count=100,
+                error_message=None,
+                freshness="unknown_source_time",
+                confidence=0.95,
+                missing_fields=[],
+                raw_snapshot_id=None,
+                normalization_version="test",
+            ),
+        )
+        session.add(
+            DataQualityCheck(
+                provider_name="akshare",
+                endpoint="stock_zh_a_spot_em",
+                check_name="normalization",
+                status="ok",
+                confidence=0.95,
+                missing_fields=[],
+                details={},
+                created_at=now - timedelta(minutes=7),
+            ),
+        )
+        await session.commit()
+
+    response = await _get_ops_readiness(session_factory, lookback_hours=24)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ready"
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert checks["server_disk"]["status"] == "ok"
+    assert checks["radar_freshness"]["status"] == "ok"
+    assert checks["radar_failure_rate"]["status"] == "ok"
+    assert checks["provider_fetch"]["status"] == "ok"
+    assert checks["data_quality"]["status"] == "ok"
+    assert checks["telegram_push"]["status"] == "ok"
+    assert checks["model_calls"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_ops_readiness_blocks_when_no_scan_exists(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    response = await _get_ops_readiness(session_factory, lookback_hours=1)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "blocked"
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert checks["radar_freshness"]["status"] == "fail"
+    assert checks["provider_fetch"]["status"] == "warning"
+    assert checks["data_quality"]["status"] == "warning"
+
+
+@pytest.mark.asyncio
 async def test_ops_overview_alerts_when_server_disk_space_is_low(
     monkeypatch: pytest.MonkeyPatch,
     session_factory: async_sessionmaker[AsyncSession],
@@ -436,6 +512,30 @@ async def _get_ops_history(
             return await client.get(
                 "/ops/history",
                 params={"lookback_hours": lookback_hours, "limit": limit},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+
+async def _get_ops_readiness(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    lookback_hours: int,
+):
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.get(
+                "/ops/readiness",
+                params={"lookback_hours": lookback_hours},
             )
     finally:
         app.dependency_overrides.clear()

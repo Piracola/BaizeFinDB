@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.ops.schemas import OpsHistoryRead, OpsOverviewRead
+from app.ops.schemas import OpsHistoryRead, OpsOverviewRead, OpsReadinessRead
 from app.portfolio.schemas import HoldingRead, WatchlistItemRead
 from app.providers.schemas import TushareProviderStatusResponse
 from app.radar.schemas import (
@@ -107,6 +107,7 @@ def format_help() -> str:
                 "/health - 查看 API、数据库、Redis 和最近扫描状态",
                 "/ops - 查看最近运行状态、失败率和降级摘要",
                 "/ops_history - 查看最近运维异常历史",
+                "/ops_ready - 查看部署/运行就绪自检",
                 "/tushare - 查看 Tushare 数据源配置状态",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
@@ -219,6 +220,24 @@ def format_ops_history(history: OpsHistoryRead) -> str:
             )
     else:
         lines.append("最近事件：暂无")
+
+    lines.extend(["该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。", "", DISCLAIMER])
+    return _trim_message("\n".join(lines))
+
+
+def format_ops_readiness(readiness: OpsReadinessRead) -> str:
+    lines = [
+        "运行就绪自检",
+        f"状态：{_readiness_status_label(readiness.status)}",
+        f"统计窗口：最近 {readiness.lookback_hours} 小时",
+    ]
+    for check in readiness.checks:
+        lines.append(
+            (
+                f"- {_ops_check_label(check.name)}："
+                f"{_readiness_check_label(check.status)}，{check.message}"
+            ),
+        )
 
     lines.extend(["该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。", "", DISCLAIMER])
     return _trim_message("\n".join(lines))
@@ -579,6 +598,37 @@ def _ops_kind_label(value: object) -> str:
         "data_quality": "数据质量",
         "telegram_push": "推送",
         "model_call": "模型",
+    }
+    return labels.get(_value(value), _value(value))
+
+
+def _ops_check_label(value: object) -> str:
+    labels = {
+        "server_disk": "服务端磁盘",
+        "radar_freshness": "雷达新鲜度",
+        "radar_failure_rate": "扫描失败率",
+        "provider_fetch": "Provider",
+        "data_quality": "数据质量",
+        "telegram_push": "推送",
+        "model_calls": "模型",
+    }
+    return labels.get(_value(value), _value(value))
+
+
+def _readiness_status_label(value: object) -> str:
+    labels = {
+        "ready": "可运行",
+        "warning": "有警告",
+        "blocked": "阻断",
+    }
+    return labels.get(_value(value), _value(value))
+
+
+def _readiness_check_label(value: object) -> str:
+    labels = {
+        "ok": "正常",
+        "warning": "警告",
+        "fail": "失败",
     }
     return labels.get(_value(value), _value(value))
 

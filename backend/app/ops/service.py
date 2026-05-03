@@ -21,6 +21,8 @@ from app.ops.schemas import (
     OpsHistoryRead,
     OpsOverviewRead,
     OpsRadarSummary,
+    OpsReadinessCheckRead,
+    OpsReadinessRead,
     OpsServerSummary,
 )
 
@@ -131,6 +133,242 @@ async def get_ops_history(
         recent_events=events,
         failure_summary=failure_summary,
     )
+
+
+async def get_ops_readiness(
+    session: AsyncSession,
+    *,
+    lookback_hours: int = 24,
+    now: datetime | None = None,
+) -> OpsReadinessRead:
+    generated_at = _as_utc(now or datetime.now(UTC))
+    overview = await get_ops_overview(
+        session,
+        lookback_hours=lookback_hours,
+        now=generated_at,
+    )
+    settings = get_settings()
+    checks = _readiness_checks(
+        overview,
+        telegram_push_enabled=settings.telegram_push_enabled,
+    )
+    return OpsReadinessRead(
+        generated_at=generated_at,
+        lookback_hours=lookback_hours,
+        status=_readiness_status(checks),
+        checks=checks,
+    )
+
+
+def _readiness_checks(
+    overview: OpsOverviewRead,
+    *,
+    telegram_push_enabled: bool,
+) -> list[OpsReadinessCheckRead]:
+    return [
+        _server_disk_readiness(overview.server),
+        _radar_freshness_readiness(overview.radar),
+        _radar_failure_readiness(overview.radar),
+        _count_summary_readiness(
+            "provider_fetch",
+            "Provider 拉取",
+            overview.provider_fetch,
+            empty_status="warning",
+        ),
+        _count_summary_readiness(
+            "data_quality",
+            "数据质量",
+            overview.data_quality,
+            empty_status="warning",
+        ),
+        _telegram_push_readiness(
+            overview.telegram_push,
+            telegram_push_enabled=telegram_push_enabled,
+        ),
+        _count_summary_readiness(
+            "model_calls",
+            "模型调用",
+            overview.model_calls,
+            empty_status="ok",
+        ),
+    ]
+
+
+def _server_disk_readiness(server: OpsServerSummary) -> OpsReadinessCheckRead:
+    if server.disk_error:
+        return _readiness_check(
+            "server_disk",
+            "fail",
+            "服务端磁盘空间检查失败。",
+            disk_error=server.disk_error,
+            disk_path=server.disk_path,
+        )
+
+    if server.is_disk_space_low:
+        return _readiness_check(
+            "server_disk",
+            "warning",
+            "服务端磁盘可用空间偏低。",
+            disk_free_percent=server.disk_free_percent,
+            disk_path=server.disk_path,
+        )
+
+    return _readiness_check(
+        "server_disk",
+        "ok",
+        "服务端磁盘空间充足。",
+        disk_free_percent=server.disk_free_percent,
+        disk_path=server.disk_path,
+    )
+
+
+def _radar_freshness_readiness(radar: OpsRadarSummary) -> OpsReadinessCheckRead:
+    if radar.latest_scan_id is None:
+        return _readiness_check(
+            "radar_freshness",
+            "fail",
+            "尚未找到雷达扫描记录。",
+        )
+
+    if radar.is_latest_scan_stale:
+        return _readiness_check(
+            "radar_freshness",
+            "warning",
+            "最新雷达扫描已超过预期调度间隔。",
+            latest_scan_id=radar.latest_scan_id,
+            latest_scan_age_seconds=radar.latest_scan_age_seconds,
+        )
+
+    return _readiness_check(
+        "radar_freshness",
+        "ok",
+        "雷达扫描节奏正常。",
+        latest_scan_id=radar.latest_scan_id,
+        latest_scan_age_seconds=radar.latest_scan_age_seconds,
+    )
+
+
+def _radar_failure_readiness(radar: OpsRadarSummary) -> OpsReadinessCheckRead:
+    if radar.recent_scan_count <= 0:
+        return _readiness_check(
+            "radar_failure_rate",
+            "warning",
+            "统计窗口内没有雷达扫描记录。",
+        )
+
+    if radar.recent_scan_failure_rate >= 0.5:
+        return _readiness_check(
+            "radar_failure_rate",
+            "fail",
+            "最近雷达扫描失败率过高。",
+            recent_scan_count=radar.recent_scan_count,
+            recent_scan_failure_rate=radar.recent_scan_failure_rate,
+        )
+
+    if radar.recent_scan_failure_rate >= RADAR_FAILURE_RATE_ALERT_THRESHOLD:
+        return _readiness_check(
+            "radar_failure_rate",
+            "warning",
+            "最近雷达扫描失败率偏高。",
+            recent_scan_count=radar.recent_scan_count,
+            recent_scan_failure_rate=radar.recent_scan_failure_rate,
+        )
+
+    return _readiness_check(
+        "radar_failure_rate",
+        "ok",
+        "最近雷达扫描失败率正常。",
+        recent_scan_count=radar.recent_scan_count,
+        recent_scan_failure_rate=radar.recent_scan_failure_rate,
+    )
+
+
+def _telegram_push_readiness(
+    summary: OpsCountSummary,
+    *,
+    telegram_push_enabled: bool,
+) -> OpsReadinessCheckRead:
+    if not telegram_push_enabled:
+        return _readiness_check(
+            "telegram_push",
+            "ok",
+            "Telegram 推送未启用，跳过推送就绪判断。",
+            push_enabled=False,
+        )
+
+    return _count_summary_readiness(
+        "telegram_push",
+        "Telegram 推送",
+        summary,
+        empty_status="warning",
+    )
+
+
+def _count_summary_readiness(
+    name: str,
+    label: str,
+    summary: OpsCountSummary,
+    *,
+    empty_status: str,
+) -> OpsReadinessCheckRead:
+    if summary.total_count <= 0:
+        return _readiness_check(
+            name,
+            empty_status,
+            f"统计窗口内没有{label}记录。",
+            total_count=summary.total_count,
+            unhealthy_count=summary.unhealthy_count,
+        )
+
+    if summary.unhealthy_count >= summary.total_count:
+        return _readiness_check(
+            name,
+            "fail",
+            f"{label}最近记录全部异常。",
+            total_count=summary.total_count,
+            unhealthy_count=summary.unhealthy_count,
+        )
+
+    if summary.unhealthy_count > 0:
+        return _readiness_check(
+            name,
+            "warning",
+            f"{label}存在异常记录。",
+            total_count=summary.total_count,
+            unhealthy_count=summary.unhealthy_count,
+        )
+
+    return _readiness_check(
+        name,
+        "ok",
+        f"{label}最近记录正常。",
+        total_count=summary.total_count,
+        unhealthy_count=summary.unhealthy_count,
+    )
+
+
+def _readiness_check(
+    name: str,
+    status: str,
+    message: str,
+    **metadata: object,
+) -> OpsReadinessCheckRead:
+    return OpsReadinessCheckRead(
+        name=name,
+        status=status,
+        message=message,
+        metadata=metadata,
+    )
+
+
+def _readiness_status(checks: list[OpsReadinessCheckRead]) -> str:
+    statuses = {check.status for check in checks}
+    if "fail" in statuses:
+        return "blocked"
+    if "warning" in statuses:
+        return "warning"
+
+    return "ready"
 
 
 async def _history_event_groups(

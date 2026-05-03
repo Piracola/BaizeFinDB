@@ -40,6 +40,15 @@ M5_SMOKE_ENDPOINTS = (
             "failure_summary",
         ),
     ),
+    (
+        "/ops/readiness",
+        (
+            "generated_at",
+            "lookback_hours",
+            "status",
+            "checks",
+        ),
+    ),
     ("/providers/akshare/status", ("provider_name", "endpoints")),
     (
         "/providers/tushare/status",

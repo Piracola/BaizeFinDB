@@ -40,6 +40,7 @@ const elements = {
   readyStatus: document.querySelector("#ready-status"),
   opsOverview: document.querySelector("#ops-overview"),
   opsHistory: document.querySelector("#ops-history"),
+  opsReadiness: document.querySelector("#ops-readiness"),
   tushareStatus: document.querySelector("#tushare-status"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
@@ -98,6 +99,7 @@ async function refreshAll() {
     await Promise.all([
       loadOpsOverview(),
       loadOpsHistory(),
+      loadOpsReadiness(),
       loadTushareStatus(),
       loadOverview(),
       loadSignals(),
@@ -126,6 +128,7 @@ async function loadReadyStatus() {
     elements.readyStatus.innerHTML = emptyState(`无法连接 API：${formatError(error)}`);
     renderOpsUnavailable("无法连接 API。");
     renderOpsHistoryUnavailable("无法连接 API。");
+    renderOpsReadinessUnavailable("无法连接 API。");
     return false;
   }
 }
@@ -145,6 +148,15 @@ async function loadOpsHistory() {
     renderOpsHistory(history);
   } catch (error) {
     renderOpsHistoryUnavailable(`运维历史暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadOpsReadiness() {
+  try {
+    const readiness = await fetchJson("/ops/readiness?lookback_hours=24");
+    renderOpsReadiness(readiness);
+  } catch (error) {
+    renderOpsReadinessUnavailable(`就绪自检暂不可用：${formatError(error)}`);
   }
 }
 
@@ -245,6 +257,7 @@ async function loadPeriodicReport(period, options = {}) {
 function renderRadarUnavailable(reason) {
   renderOpsUnavailable("依赖服务恢复后再读取运行状态。");
   renderOpsHistoryUnavailable("依赖服务恢复后再读取运维历史。");
+  renderOpsReadinessUnavailable("依赖服务恢复后再读取就绪自检。");
   renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
@@ -463,7 +476,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -478,6 +491,14 @@ function executeCommand() {
     opshistory: () => {
       scrollToPanel("status-panel");
       loadOpsHistory();
+    },
+    ready: () => {
+      scrollToPanel("status-panel");
+      loadOpsReadiness();
+    },
+    readiness: () => {
+      scrollToPanel("status-panel");
+      loadOpsReadiness();
     },
     tushare: () => {
       scrollToPanel("status-panel");
@@ -510,7 +531,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -695,6 +716,34 @@ function renderOpsHistoryUnavailable(reason) {
   elements.opsHistory.innerHTML = emptyState(reason);
 }
 
+function renderOpsReadiness(readiness) {
+  const checks = Array.isArray(readiness?.checks) ? readiness.checks : [];
+  const cards = [
+    `
+      <article class="detail-card">
+        <strong>总体状态</strong>
+        <div>${escapeHtml(readinessStatusLabel(readiness?.status || "unknown"))}</div>
+        <div class="muted">最近 ${escapeHtml(readiness?.lookback_hours ?? 24)} 小时</div>
+      </article>
+    `,
+    ...checks.map((check) => {
+      return `
+        <article class="detail-card">
+          <strong>${escapeHtml(opsCheckLabel(check.name))}</strong>
+          <div>${escapeHtml(readinessCheckLabel(check.status))}</div>
+          <div class="muted">${escapeHtml(check.message || "未返回检查说明")}</div>
+        </article>
+      `;
+    }),
+  ];
+
+  elements.opsReadiness.innerHTML = cards.join("");
+}
+
+function renderOpsReadinessUnavailable(reason) {
+  elements.opsReadiness.innerHTML = emptyState(reason);
+}
+
 function renderTushareStatus(status) {
   const tokenConfigured = Boolean(status?.token_configured);
   const fetchEnabled = Boolean(status?.fetch_enabled);
@@ -756,6 +805,37 @@ function opsKindLabel(value) {
     data_quality: "数据质量",
     telegram_push: "推送",
     model_call: "模型",
+  };
+  return labels[value] || value || "-";
+}
+
+function opsCheckLabel(value) {
+  const labels = {
+    server_disk: "服务端磁盘",
+    radar_freshness: "雷达新鲜度",
+    radar_failure_rate: "扫描失败率",
+    provider_fetch: "Provider",
+    data_quality: "数据质量",
+    telegram_push: "推送",
+    model_calls: "模型",
+  };
+  return labels[value] || value || "-";
+}
+
+function readinessStatusLabel(value) {
+  const labels = {
+    ready: "可运行",
+    warning: "有警告",
+    blocked: "阻断",
+  };
+  return labels[value] || value || "-";
+}
+
+function readinessCheckLabel(value) {
+  const labels = {
+    ok: "正常",
+    warning: "警告",
+    fail: "失败",
   };
   return labels[value] || value || "-";
 }

@@ -311,6 +311,21 @@ def fetch_ops_history(
     return _expect_object(payload, "/ops/history")
 
 
+def fetch_ops_readiness(
+    base_url: str | None,
+    *,
+    lookback_hours: int = 24,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(
+        base_url,
+        "/ops/readiness",
+        query={"lookback_hours": _positive_int(lookback_hours, "lookback_hours")},
+        opener=opener,
+    )
+    return _expect_object(payload, "/ops/readiness")
+
+
 def fetch_tushare_status(
     base_url: str | None,
     *,
@@ -606,6 +621,37 @@ def format_ops_history(payload: Mapping[str, Any]) -> str:
             )
     else:
         lines.append("最近事件：暂无")
+
+    lines.extend(
+        [
+            "该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def format_ops_readiness(payload: Mapping[str, Any]) -> str:
+    checks = _sequence(payload.get("checks"))
+    lines = [
+        "运行就绪自检",
+        f"状态：{_readiness_status_label(payload.get('status'))}",
+        f"统计窗口：最近 {_int_text(payload.get('lookback_hours'))} 小时",
+    ]
+
+    for check in checks:
+        check_map = _mapping(check)
+        lines.append(
+            (
+                f"- {_ops_check_label(check_map.get('name'))}："
+                f"{_readiness_check_label(check_map.get('status'))}，"
+                f"{_text(check_map.get('message'), '未返回检查说明')}"
+            ),
+        )
+
+    if not checks:
+        lines.append("检查项：暂无")
 
     lines.extend(
         [
@@ -1095,6 +1141,37 @@ def _ops_kind_label(value: Any) -> str:
         "data_quality": "数据质量",
         "telegram_push": "推送",
         "model_call": "模型",
+    }
+    return labels.get(_text(value, ""), _text(value, "-"))
+
+
+def _ops_check_label(value: Any) -> str:
+    labels = {
+        "server_disk": "服务端磁盘",
+        "radar_freshness": "雷达新鲜度",
+        "radar_failure_rate": "扫描失败率",
+        "provider_fetch": "Provider",
+        "data_quality": "数据质量",
+        "telegram_push": "推送",
+        "model_calls": "模型",
+    }
+    return labels.get(_text(value, ""), _text(value, "-"))
+
+
+def _readiness_status_label(value: Any) -> str:
+    labels = {
+        "ready": "可运行",
+        "warning": "有警告",
+        "blocked": "阻断",
+    }
+    return labels.get(_text(value, ""), _text(value, "-"))
+
+
+def _readiness_check_label(value: Any) -> str:
+    labels = {
+        "ok": "正常",
+        "warning": "警告",
+        "fail": "失败",
     }
     return labels.get(_text(value, ""), _text(value, "-"))
 

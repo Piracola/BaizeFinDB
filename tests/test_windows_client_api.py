@@ -161,6 +161,32 @@ def test_fetch_ops_history_uses_lookback_and_limit_query() -> None:
     assert payload["limit"] == 5
 
 
+def test_fetch_ops_readiness_uses_lookback_query() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        return FakeResponse(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-04T09:30:00Z",
+                    "lookback_hours": 12,
+                    "status": "ready",
+                    "checks": [],
+                },
+            ),
+        )
+
+    payload = client_api.fetch_ops_readiness(
+        "http://localhost:8000",
+        lookback_hours=12,
+        opener=opener,
+    )
+
+    assert calls["url"] == "http://localhost:8000/ops/readiness?lookback_hours=12"
+    assert payload["status"] == "ready"
+
+
 def test_fetch_tushare_status_uses_provider_status_endpoint() -> None:
     calls = {}
 
@@ -293,6 +319,29 @@ def test_format_ops_history_outputs_recent_events() -> None:
     assert "统计窗口：最近 24 小时" in text
     assert "异常汇总：模型 review/fallback/RateLimitError=1" in text
     assert "- 模型 #3 降级切换 | 2026-05-04T09:25:00Z | RateLimitError" in text
+    assert "只读取已有运行记录" in text
+
+
+def test_format_ops_readiness_outputs_checks() -> None:
+    text = client_api.format_ops_readiness(
+        {
+            "generated_at": "2026-05-04T09:30:00Z",
+            "lookback_hours": 24,
+            "status": "warning",
+            "checks": [
+                {
+                    "name": "radar_freshness",
+                    "status": "warning",
+                    "message": "最新雷达扫描已超过预期调度间隔。",
+                    "metadata": {"latest_scan_id": 7},
+                }
+            ],
+        },
+    )
+
+    assert "运行就绪自检" in text
+    assert "状态：有警告" in text
+    assert "雷达新鲜度：警告，最新雷达扫描已超过预期调度间隔。" in text
     assert "只读取已有运行记录" in text
 
 

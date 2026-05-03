@@ -65,7 +65,7 @@ uv run python infra/scripts/server_deploy_check.py
 uv run python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
-验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态、服务端磁盘摘要、`/ops/history` 运维历史、AKShare 状态和 Tushare 状态：
+验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态、服务端磁盘摘要、`/ops/history` 运维历史、`/ops/readiness` 运行就绪自检、AKShare 状态和 Tushare 状态：
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
@@ -132,6 +132,14 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20"
 ```
 
 重点看 `recent_events` 和 `failure_summary`。该接口同样只读，不触发采集、扫描、推送或模型调用。
+
+查看运行就绪自检：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
+```
+
+重点看 `status` 和 `checks`。`ready` 表示核心运行条件满足，`warning` 表示可运行但有警告，`blocked` 表示至少一个关键检查失败。
 
 ## Secrets 边界
 

@@ -83,3 +83,17 @@ class OpsHistoryRead(BaseModel):
     limit: int = Field(ge=1, le=100)
     recent_events: list[OpsHistoryEventRead] = Field(default_factory=list)
     failure_summary: list[OpsFailureSummaryRead] = Field(default_factory=list)
+
+
+class OpsReadinessCheckRead(BaseModel):
+    name: str
+    status: str
+    message: str
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class OpsReadinessRead(BaseModel):
+    generated_at: datetime
+    lookback_hours: int = Field(ge=1, le=168)
+    status: str
+    checks: list[OpsReadinessCheckRead] = Field(default_factory=list)

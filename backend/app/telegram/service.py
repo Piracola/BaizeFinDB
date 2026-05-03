@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.redis import check_redis
 from app.db.session import check_database
-from app.ops.service import get_ops_history, get_ops_overview
+from app.ops.service import get_ops_history, get_ops_overview, get_ops_readiness
 from app.portfolio.service import list_holdings, list_watchlist_items
 from app.providers.tushare import get_tushare_provider_status
 from app.radar.service import (
@@ -28,6 +28,7 @@ from app.telegram.formatter import (
     format_no_text,
     format_ops_history,
     format_ops_overview,
+    format_ops_readiness,
     format_periodic_report,
     format_radar_overview,
     format_reports,
@@ -151,6 +152,10 @@ class TelegramCommandService:
             if command == "/ops_history":
                 history = await get_ops_history(session, lookback_hours=24, limit=10)
                 return format_ops_history(history)
+
+            if command == "/ops_ready":
+                readiness = await get_ops_readiness(session, lookback_hours=24)
+                return format_ops_readiness(readiness)
 
             if command == "/tushare":
                 return format_tushare_status(get_tushare_provider_status(self._settings))

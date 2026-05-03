@@ -353,6 +353,7 @@ h3 {
 .evidence-list,
 .portfolio-list,
 .ops-history-list,
+.ops-readiness-list,
 .report-list {
   display: grid;
   gap: 10px;

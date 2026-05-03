@@ -138,6 +138,7 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
         "/health/ready",
         "/ops/overview",
         "/ops/history",
+        "/ops/readiness",
         "/providers/akshare/status",
         "/providers/tushare/status",
         "/radar/overview",
@@ -149,3 +150,6 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
     ops_history_call = calls[3]
     assert "recent_events" in ops_history_call[2]
     assert "failure_summary" in ops_history_call[2]
+    ops_readiness_call = calls[4]
+    assert "status" in ops_readiness_call[2]
+    assert "checks" in ops_readiness_call[2]
