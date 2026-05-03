@@ -38,7 +38,7 @@
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
 - `/radar/scans/{scan_id}` 按批次查看雷达扫描结果
-- `/radar/overview` 查看最新雷达总览、优先级聚合、生命周期分布、个股回推证据和去重当前视图
+- `/radar/overview` 查看最新雷达总览、优先级聚合、生命周期分布、个股回推证据、市场情绪摘要和去重当前视图
 - `/radar/signals` 查看候选信号列表
 - `/radar/signals/{signal_id}` 查看候选信号和证据
 - `/radar/signals/{signal_id}/review` 对单个雷达信号执行轻量规则审查
@@ -55,7 +55,7 @@
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含
-- 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
+- 雷达扫描会携带 Provider 数据质量摘要和涨停/跌停/炸板池情绪摘要，信号和证据也会保留对应质量标签
 - 雷达扫描失败会记录 `failure`、`error_message` 和失败摘要，避免普通异常留下 `running` 批次
 - 轻量审查层：拦截诱导交易语言、证据缺失、低置信度证据、失败/降级数据质量，并标记证据冲突、重复触发和来源过期
 - 分享预览安全门：内部预检输出阻断原因；公开 payload 只输出脱源脱敏摘要和公开标签

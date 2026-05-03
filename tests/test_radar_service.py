@@ -181,6 +181,64 @@ async def test_radar_scan_generates_risk_p0_from_major_event_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_radar_scan_carries_limit_pool_sentiment_into_mainline_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add_all(
+            [
+                MarketSnapshot(
+                    provider_name="akshare",
+                    endpoint="stock_board_concept_name_em",
+                    market="A_SHARE",
+                    snapshot_type="sector_concept",
+                    source_time=None,
+                    collected_at=now,
+                    row_count=1,
+                    raw_summary={"columns": []},
+                    normalized_rows=[
+                        {
+                            "sector_code": "GN001",
+                            "sector_name": "AI Applications",
+                            "pct_change": 3.8,
+                            "rising_count": 18,
+                            "falling_count": 6,
+                            "leading_stock": "Example AI",
+                            "leading_stock_pct_change": 8.5,
+                        }
+                    ],
+                    normalization_version="test",
+                ),
+                _sentiment_snapshot("stock_zt_pool_em", "limit_up_pool", 12, now),
+                _sentiment_snapshot("stock_zt_pool_dtgc_em", "limit_down_pool", 2, now),
+                _sentiment_snapshot("stock_zt_pool_zbgc_em", "broken_limit_up_pool", 3, now),
+            ]
+        )
+        await session.commit()
+
+        scan = await run_radar_scan(session)
+        detail = await get_radar_signal_detail(session, scan.signals[0].id)
+
+    sentiment = scan.summary["market_sentiment"]
+    assert sentiment == {
+        "limit_up_count": 12,
+        "limit_down_count": 2,
+        "broken_limit_up_count": 3,
+        "net_limit_pressure": 7,
+        "sentiment_bias": "positive",
+    }
+
+    signal_sentiment = scan.signals[0].metrics["market_sentiment"]
+    assert signal_sentiment["limit_up_count"] == 12
+    assert scan.signals[0].metrics["sentiment_confirmation"] == "positive_limit_up_pressure"
+
+    assert detail is not None
+    evidence_metrics = detail.evidences[0].details["metrics"]
+    assert evidence_metrics["market_sentiment"]["sentiment_bias"] == "positive"
+
+
+@pytest.mark.asyncio
 async def test_radar_scan_carries_provider_quality_into_signal_and_evidence(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -336,9 +394,11 @@ async def test_radar_scan_records_failure_when_candidate_build_raises(
     def raise_candidate_build(
         snapshots: list[MarketSnapshot],
         snapshot_quality_summaries: dict[int, dict[str, object]] | None = None,
+        market_sentiment: dict[str, object] | None = None,
     ) -> list[object]:
         assert len(snapshots) == 1
         assert snapshot_quality_summaries is not None
+        assert market_sentiment is not None
         raise ValueError("bad normalized row")
 
     monkeypatch.setattr(radar_service, "_build_signal_candidates", raise_candidate_build)
@@ -896,4 +956,24 @@ def _manual_signal(
         metrics={"pct_change": 1.2},
         evidence_count=0,
         created_at=created_at,
+    )
+
+
+def _sentiment_snapshot(
+    endpoint: str,
+    snapshot_type: str,
+    row_count: int,
+    collected_at: datetime,
+) -> MarketSnapshot:
+    return MarketSnapshot(
+        provider_name="akshare",
+        endpoint=endpoint,
+        market="A_SHARE",
+        snapshot_type=snapshot_type,
+        source_time=None,
+        collected_at=collected_at,
+        row_count=row_count,
+        raw_summary={"columns": []},
+        normalized_rows=[{"name": f"{snapshot_type} fixture"} for _ in range(row_count)],
+        normalization_version="test",
     )

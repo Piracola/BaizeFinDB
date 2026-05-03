@@ -38,7 +38,16 @@ RISK_EVENT_SOURCE_ENDPOINTS = (
     "regulatory_events",
     "black_swan_events",
 )
-RADAR_SOURCE_ENDPOINTS = MARKET_MAINLINE_SOURCE_ENDPOINTS + RISK_EVENT_SOURCE_ENDPOINTS
+SENTIMENT_SOURCE_ENDPOINTS = (
+    "stock_zt_pool_em",
+    "stock_zt_pool_dtgc_em",
+    "stock_zt_pool_zbgc_em",
+)
+RADAR_SOURCE_ENDPOINTS = (
+    MARKET_MAINLINE_SOURCE_ENDPOINTS
+    + RISK_EVENT_SOURCE_ENDPOINTS
+    + SENTIMENT_SOURCE_ENDPOINTS
+)
 RADAR_SOURCE_PROVIDER_NAMES = ("akshare", "manual")
 MAX_SIGNALS_PER_SCAN = 20
 P2_OBSERVATION_WINDOW_DAYS = 7
@@ -90,6 +99,7 @@ async def run_radar_scan(session: AsyncSession) -> RadarScanRead:
     source_snapshot_ids: list[int] = []
     source_endpoints: list[str] = []
     snapshot_quality_summaries: dict[int, dict[str, object]] = {}
+    market_sentiment: dict[str, object] = _empty_market_sentiment_summary()
     candidates: list[SignalCandidate] = []
     continuities: list[CandidateContinuity] = []
 
@@ -101,7 +111,12 @@ async def run_radar_scan(session: AsyncSession) -> RadarScanRead:
             session,
             snapshots,
         )
-        candidates = _build_signal_candidates(snapshots, snapshot_quality_summaries)
+        market_sentiment = _market_sentiment_summary(snapshots)
+        candidates = _build_signal_candidates(
+            snapshots,
+            snapshot_quality_summaries,
+            market_sentiment=market_sentiment,
+        )
 
         for candidate in candidates:
             continuity = await _candidate_continuity(session, candidate, started_at)
@@ -126,6 +141,7 @@ async def run_radar_scan(session: AsyncSession) -> RadarScanRead:
             snapshot_quality_summaries,
             candidates,
             continuities,
+            market_sentiment,
         )
 
         await session.commit()
@@ -382,11 +398,13 @@ def _scan_success_summary(
     snapshot_quality_summaries: dict[int, dict[str, object]],
     candidates: list[SignalCandidate],
     continuities: list[CandidateContinuity],
+    market_sentiment: dict[str, object],
 ) -> dict[str, object]:
     return {
         "source_endpoints": source_endpoints,
         "source_snapshot_count": source_snapshot_count,
         "data_quality": _scan_data_quality_summary(snapshot_quality_summaries),
+        "market_sentiment": market_sentiment,
         "candidate_count": len(candidates),
         "priority_counts": _priority_counts(candidates),
         "continuity_tracked_count": sum(
@@ -503,9 +521,11 @@ def _short_error_message(exc: Exception) -> str:
 def _build_signal_candidates(
     snapshots: list[MarketSnapshot],
     snapshot_quality_summaries: dict[int, dict[str, object]] | None = None,
+    market_sentiment: dict[str, object] | None = None,
 ) -> list[SignalCandidate]:
     candidates: list[SignalCandidate] = []
     quality_summaries = snapshot_quality_summaries or {}
+    sentiment_summary = market_sentiment or _empty_market_sentiment_summary()
 
     for snapshot in snapshots:
         data_quality = quality_summaries.get(
@@ -514,7 +534,11 @@ def _build_signal_candidates(
         )
 
         for row in snapshot.normalized_rows:
-            metrics, rule_result = _classify_snapshot_row(snapshot, row)
+            metrics, rule_result = _classify_snapshot_row(
+                snapshot,
+                row,
+                market_sentiment=sentiment_summary,
+            )
             if rule_result is None:
                 continue
 
@@ -708,6 +732,8 @@ def _risk_row_metrics(row: dict[str, object]) -> dict[str, object]:
 def _classify_snapshot_row(
     snapshot: MarketSnapshot,
     row: dict[str, object],
+    *,
+    market_sentiment: dict[str, object],
 ) -> tuple[dict[str, object], RadarRuleResult | None]:
     if _is_risk_event_snapshot(snapshot):
         metrics = _risk_row_metrics(row)
@@ -715,6 +741,9 @@ def _classify_snapshot_row(
 
     if _is_market_mainline_snapshot(snapshot):
         metrics = _row_metrics(row)
+        metrics["market_sentiment"] = market_sentiment
+        if market_sentiment.get("sentiment_bias") == "positive":
+            metrics["sentiment_confirmation"] = "positive_limit_up_pressure"
         return metrics, classify_sector_movement(metrics)
 
     return {}, None
@@ -833,8 +862,62 @@ def _is_risk_event_snapshot(snapshot: MarketSnapshot) -> bool:
     return snapshot.endpoint in RISK_EVENT_SOURCE_ENDPOINTS
 
 
+def _is_sentiment_snapshot(snapshot: MarketSnapshot) -> bool:
+    return snapshot.endpoint in SENTIMENT_SOURCE_ENDPOINTS
+
+
 def _is_risk_event_candidate(candidate: SignalCandidate) -> bool:
     return _is_risk_event_snapshot(candidate.snapshot)
+
+
+def _market_sentiment_summary(snapshots: list[MarketSnapshot]) -> dict[str, object]:
+    counts = {
+        snapshot.endpoint: snapshot.row_count
+        for snapshot in snapshots
+        if _is_sentiment_snapshot(snapshot)
+    }
+    limit_up_count = counts.get("stock_zt_pool_em", 0)
+    limit_down_count = counts.get("stock_zt_pool_dtgc_em", 0)
+    broken_limit_up_count = counts.get("stock_zt_pool_zbgc_em", 0)
+
+    return {
+        "limit_up_count": limit_up_count,
+        "limit_down_count": limit_down_count,
+        "broken_limit_up_count": broken_limit_up_count,
+        "net_limit_pressure": limit_up_count - limit_down_count - broken_limit_up_count,
+        "sentiment_bias": _sentiment_bias(
+            limit_up_count,
+            limit_down_count,
+            broken_limit_up_count,
+        ),
+    }
+
+
+def _empty_market_sentiment_summary() -> dict[str, object]:
+    return {
+        "limit_up_count": 0,
+        "limit_down_count": 0,
+        "broken_limit_up_count": 0,
+        "net_limit_pressure": 0,
+        "sentiment_bias": "unknown",
+    }
+
+
+def _sentiment_bias(
+    limit_up_count: int,
+    limit_down_count: int,
+    broken_limit_up_count: int,
+) -> str:
+    if limit_up_count <= 0 and limit_down_count <= 0 and broken_limit_up_count <= 0:
+        return "unknown"
+
+    if limit_up_count >= max(3, limit_down_count * 2) and limit_up_count > broken_limit_up_count:
+        return "positive"
+
+    if limit_down_count > limit_up_count:
+        return "negative"
+
+    return "mixed"
 
 
 def _continuity_metrics(continuity: CandidateContinuity) -> dict[str, object]:

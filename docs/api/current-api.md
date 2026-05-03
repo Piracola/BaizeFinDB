@@ -237,6 +237,8 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/scans/1
 
 用途：查看当前雷达总览、活跃信号、优先级聚合、生命周期分布、个股回推证据和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
 
+`latest_scan.summary.market_sentiment` 会透传后端从涨停、跌停和炸板池快照计算的情绪摘要；主线信号的 `metrics.market_sentiment` 和 `metrics.sentiment_confirmation` 只由后端雷达生成，前端和 Telegram 不重算。
+
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 ```
@@ -247,6 +249,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 - `active_signals`
 - `current_subjects`
 - `stock_backtrace_evidences`：从后端信号 metrics 派生的领涨个股、涨幅和反推主题，不由前端重算。
+- `latest_scan.summary.market_sentiment`：涨停数、跌停数、炸板数、净涨停压力和情绪偏向。
 - `priority_counts`
 - `lifecycle_counts`
 - `subject_count`
