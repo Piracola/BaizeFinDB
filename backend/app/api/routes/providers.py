@@ -12,6 +12,8 @@ from app.providers.schemas import (
     ProviderEndpointInfo,
     ProviderFetchLogRead,
     ProviderSnapshotSummary,
+    TushareEndpointInfo,
+    TushareProviderStatusResponse,
 )
 from app.providers.service import (
     collect_minimal_akshare,
@@ -19,6 +21,7 @@ from app.providers.service import (
     list_latest_provider_snapshots,
     list_provider_fetch_logs,
 )
+from app.providers.tushare import get_tushare_provider_status, list_tushare_endpoints
 
 router = APIRouter(prefix="/providers", tags=["providers"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -28,6 +31,16 @@ LimitQuery = Annotated[int, Query(ge=1, le=100)]
 @router.get("/akshare/endpoints", response_model=list[ProviderEndpointInfo])
 async def akshare_endpoints() -> list[ProviderEndpointInfo]:
     return list_akshare_endpoints()
+
+
+@router.get("/tushare/endpoints", response_model=list[TushareEndpointInfo])
+async def tushare_endpoints() -> list[TushareEndpointInfo]:
+    return list_tushare_endpoints()
+
+
+@router.get("/tushare/status", response_model=TushareProviderStatusResponse)
+async def tushare_provider_status() -> TushareProviderStatusResponse:
+    return get_tushare_provider_status()
 
 
 @router.post("/akshare/fetch/minimal", response_model=AkshareCollectionResponse)

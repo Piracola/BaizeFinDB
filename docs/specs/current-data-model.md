@@ -86,6 +86,7 @@ Provider 表只回答：
 - 数据新鲜度和置信度如何。
 - 标准化后保留了什么摘要和行数据。
 - `market_snapshots` 当前也可承载轻量风险事件快照，例如 `risk_events`、`announcement_events`、`regulatory_events`、`black_swan_events`；普通 `news_flash` 不会被雷达主线规则直接升为 P0。
+- Tushare 当前只有 Provider 壳和 API 能力声明，不写入任何表；后续启用真实抓取时仍复用 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`，并必须补标准化契约和迁移评估。
 
 Provider 表不负责：
 

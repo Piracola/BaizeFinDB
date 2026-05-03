@@ -11,6 +11,7 @@ def test_settings_defaults() -> None:
     assert settings.radar_scan_interval_seconds == 300
     assert settings.radar_continuous_p1_trigger_count == 3
     assert settings.radar_continuity_window_minutes == 30
+    assert not settings.tushare_token_configured
     assert settings.telegram_bot_token is None
     assert settings.telegram_allowed_chat_id_set == set()
     assert not settings.telegram_bot_token_configured
@@ -34,6 +35,7 @@ def test_settings_reads_environment(monkeypatch) -> None:
 
 
 def test_settings_reads_telegram_environment(monkeypatch) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "tushare-token")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001, 1002")
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
@@ -41,6 +43,7 @@ def test_settings_reads_telegram_environment(monkeypatch) -> None:
 
     settings = Settings()
 
+    assert settings.tushare_token_configured
     assert settings.telegram_bot_token_configured
     assert settings.telegram_allowed_chat_id_set == {"1001", "1002"}
     assert settings.telegram_webhook_secret_enabled

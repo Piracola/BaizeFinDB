@@ -115,3 +115,24 @@ class ProviderEndpointCollectionStatus(BaseModel):
 class ProviderCollectionStatusResponse(BaseModel):
     provider_name: str
     endpoints: list[ProviderEndpointCollectionStatus]
+
+
+class TushareEndpointInfo(BaseModel):
+    endpoint: str
+    title: str
+    market: str
+    snapshot_type: str
+    required_fields: list[str]
+    purpose: str
+    permission_note: str
+    implemented: bool = False
+
+
+class TushareProviderStatusResponse(BaseModel):
+    provider_name: str = "tushare"
+    token_configured: bool
+    fetch_enabled: bool = False
+    endpoint_count: int
+    implemented_endpoint_count: int
+    status: str
+    message: str

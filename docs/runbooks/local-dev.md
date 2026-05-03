@@ -46,6 +46,7 @@ Web 终端工作台当前可查看 API 状态、运行状态、雷达总览、�
 Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/health/ready
 Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
+Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
 ```
 
 期望：
@@ -106,7 +107,24 @@ uv run python infra/scripts/collect_akshare_minimal.py
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/minimal
 ```
 
-### 4.3 基于最新快照运行雷达扫描
+### 4.3 查看 Tushare 预留状态
+
+Tushare 当前只是补充数据源 Provider 壳，用于确认 token 配置和后续计划端点；不会抓取真实数据，也不会写入数据库。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
+Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
+```
+
+`.env` 中可预留：
+
+```dotenv
+TUSHARE_TOKEN=
+```
+
+配置真实 token 后，`/providers/tushare/status` 只会返回 `token_configured=true`，不会返回 token 原文。后续启用真实抓取前，还需要补 Tushare 依赖、权限失败记录、标准化入库和测试。
+
+### 4.4 基于最新快照运行雷达扫描
 
 ```powershell
 uv run python infra/scripts/run_radar_scan.py
@@ -118,7 +136,7 @@ uv run python infra/scripts/run_radar_scan.py
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/scans/run
 ```
 
-### 4.4 查看扫描结果
+### 4.5 查看扫描结果
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/scans/latest
@@ -126,7 +144,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/overview
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals
 ```
 
-### 4.5 手动维护持仓和自选
+### 4.6 手动维护持仓和自选
 
 持仓和自选是单用户 MVP 能力，按 `user_key` 隔离。默认 `user_key` 是 `default`：
 
@@ -149,7 +167,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/portfolio/watchlist?user_key=default"
 
 当前 API 不接券商、不保存交易密码、不导入持仓截图；持仓/自选只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2。
 
-### 4.6 从信号生成报告
+### 4.7 从信号生成报告
 
 报告生成前会复用轻量审查。blocked 信号不会生成报告：
 

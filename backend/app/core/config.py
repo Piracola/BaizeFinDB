@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     def telegram_webhook_secret_enabled(self) -> bool:
         return bool(self.telegram_webhook_secret and self.telegram_webhook_secret.strip())
 
+    @property
+    def tushare_token_configured(self) -> bool:
+        return bool(self.tushare_token and self.tushare_token.strip())
+
 
 @lru_cache
 def get_settings() -> Settings:

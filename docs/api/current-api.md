@@ -10,6 +10,8 @@
 GET  /health/ready
 GET  /ops/overview
 GET  /providers/akshare/endpoints
+GET  /providers/tushare/endpoints
+GET  /providers/tushare/status
 POST /providers/akshare/fetch/minimal
 GET  /providers/akshare/status
 POST /radar/scans/run
@@ -151,6 +153,50 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/min
 ```
 
 注意：AKShare 可能因为网络、接口变化、非交易时段导致部分接口失败。失败应记录为单个 endpoint 的 `failure`，不应该拖垮整个 API。
+
+### `GET /providers/tushare/endpoints`
+
+用途：查看计划接入的 Tushare 补充源端点。当前是 Provider 壳和能力声明，不会触发真实抓取。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
+```
+
+当前预留：
+
+- `anns_d`：公告快讯，后续用于重大公告、风险事件和持仓/自选催化。
+- `stock_company`：上市公司基本信息，后续用于主体画像和报告上下文。
+- `stock_basic`：股票基础信息，后续用于证券主数据和跨源标准化。
+
+响应字段比 AKShare endpoint 多：
+
+| 字段 | 含义 |
+| --- | --- |
+| `purpose` | 接入目的 |
+| `permission_note` | token、权限或积分提示 |
+| `implemented` | 当前是否已实现真实抓取；现阶段均为 `false` |
+
+### `GET /providers/tushare/status`
+
+用途：查看 `TUSHARE_TOKEN` 是否配置和 Tushare Provider 是否启用真实抓取。该接口不返回 token 原文。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
+```
+
+示例响应：
+
+```json
+{
+  "provider_name": "tushare",
+  "token_configured": false,
+  "fetch_enabled": false,
+  "endpoint_count": 3,
+  "implemented_endpoint_count": 0,
+  "status": "not_configured",
+  "message": "Tushare provider shell is registered; real fetch is not implemented yet."
+}
+```
 
 ### `GET /providers/akshare/status`
 
