@@ -6,16 +6,21 @@ from app.core.redis import check_redis
 from app.db.session import check_database
 from app.portfolio.service import list_holdings, list_watchlist_items
 from app.radar.service import get_radar_overview, get_radar_signal_detail, list_radar_signals
-from app.reports.service import list_reports
+from app.reports.schemas import PeriodicReportType
+from app.reports.service import generate_periodic_report, list_reports
+from app.scores.service import generate_signal_scores
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import (
     format_health,
     format_help,
     format_holdings,
+    format_invalid_score_signal_id,
     format_invalid_signal_id,
     format_no_text,
+    format_periodic_report,
     format_radar_overview,
     format_reports,
+    format_scores,
     format_signal_detail,
     format_signal_not_found,
     format_signals,
@@ -134,6 +139,25 @@ class TelegramCommandService:
             if command == "/reports":
                 reports = await list_reports(session, user_key=_telegram_user_key(chat_id))
                 return format_reports(reports)
+
+            if command == "/daily":
+                report = await generate_periodic_report(
+                    session,
+                    report_type=PeriodicReportType.DAILY,
+                    user_key=_telegram_user_key(chat_id),
+                )
+                return format_periodic_report(report)
+
+            if command == "/weekly":
+                report = await generate_periodic_report(
+                    session,
+                    report_type=PeriodicReportType.WEEKLY,
+                    user_key=_telegram_user_key(chat_id),
+                )
+                return format_periodic_report(report)
+
+            if command == "/score":
+                return await self._score_response(session, arguments)
         except SQLAlchemyError:
             return "数据库暂不可用，稍后再观察和复盘。"
 
@@ -157,6 +181,25 @@ class TelegramCommandService:
             return format_signal_not_found(signal_id)
 
         return format_signal_detail(signal)
+
+    async def _score_response(
+        self,
+        session: AsyncSession,
+        arguments: list[str],
+    ) -> str:
+        if not arguments:
+            return format_invalid_score_signal_id()
+
+        try:
+            signal_id = int(arguments[0])
+        except ValueError:
+            return format_invalid_score_signal_id()
+
+        score_run = await generate_signal_scores(session, signal_id)
+        if score_run is None:
+            return format_signal_not_found(signal_id)
+
+        return format_scores(score_run)
 
     async def _deliver(
         self,

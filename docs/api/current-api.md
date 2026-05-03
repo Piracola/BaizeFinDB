@@ -586,6 +586,9 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/holding`、`/holdings` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的手动持仓 |
 | `/watchlist` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的自选关注 |
 | `/reports` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的报告列表 |
+| `/daily` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的日报汇总 |
+| `/weekly` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的周报汇总 |
+| `/score <id>` | 生成并查看单个信号的 1d/3d/5d/10d 综合评分 |
 
 本地不配置 `TELEGRAM_BOT_TOKEN` 时，接口返回 `preview`，不会调用 Telegram Bot API：
 
@@ -617,7 +620,7 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
-`/holding`、`/watchlist` 和 `/reports` 只读取后端维护的个人数据或报告结果，不改变市场级雷达等级，不输出交易指令。
+`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令。
 
 ### `POST /telegram/push/latest`
 

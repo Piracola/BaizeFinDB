@@ -9,7 +9,8 @@ from app.radar.schemas import (
     RadarSignalDetail,
     RadarSignalRead,
 )
-from app.reports.schemas import ReportRead
+from app.reports.schemas import PeriodicReportRead, ReportRead
+from app.scores.schemas import ScoreRunRead
 
 MAX_MESSAGE_LENGTH = 3500
 SIGNALS_PREVIEW_LIMIT = 5
@@ -68,6 +69,9 @@ def format_help() -> str:
                 "/holding - 查看当前聊天绑定的手动持仓",
                 "/watchlist - 查看当前聊天绑定的自选关注",
                 "/reports - 查看当前聊天绑定的报告列表",
+                "/daily - 查看当前聊天绑定的日报汇总",
+                "/weekly - 查看当前聊天绑定的周报汇总",
+                "/score <id> - 生成并查看单个信号的 1d/3d/5d/10d 综合评分",
                 "",
                 DISCLAIMER,
             ],
@@ -295,6 +299,72 @@ def format_reports(reports: list[ReportRead]) -> str:
     return _trim_message("\n".join(lines))
 
 
+def format_periodic_report(report: PeriodicReportRead) -> str:
+    label = "日报" if report.report_type.value == "daily" else "周报"
+    lines = [
+        f"{label}汇总",
+        report.summary,
+        (
+            "优先级："
+            f"P0 {report.priority_counts.get('P0', 0)} / "
+            f"P1 {report.priority_counts.get('P1', 0)} / "
+            f"P2 {report.priority_counts.get('P2', 0)}"
+        ),
+        f"报告：{report.report_count} 份",
+        f"Telegram 推送：{report.push_count} 次",
+    ]
+
+    if report.top_subjects:
+        lines.append("")
+        lines.append("重点主题：")
+        for subject in report.top_subjects[:REPORT_PREVIEW_LIMIT]:
+            lines.append(
+                (
+                    f"- #{subject.signal_id} [{subject.priority}] {subject.subject_name} | "
+                    f"生命周期：{_lifecycle_label(subject.lifecycle_stage)} | "
+                    f"审查：{_review_label(subject.review_status)}"
+                ),
+            )
+    else:
+        lines.append("重点主题：暂无。")
+
+    lines.extend(["", DISCLAIMER])
+    return _trim_message("\n".join(lines))
+
+
+def format_scores(score_run: ScoreRunRead) -> str:
+    if not score_run.records:
+        return _trim_message(
+            "\n".join(
+                [
+                    f"信号 #{score_run.signal_id} 评分",
+                    "暂无评分记录。可稍后重试。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = [f"信号 #{score_run.signal_id} 综合评分"]
+    for record in score_run.records:
+        status_label = "已完成" if record.score_status.value == "generated" else "窗口未结束"
+        lines.append(
+            (
+                f"- {record.window_days}d：{record.composite_score:.2f} "
+                f"({status_label})"
+            ),
+        )
+
+    lines.extend(
+        [
+            "评分综合优先级、生命周期、审查、证据和连续性；不是价格回测或交易建议。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_message("\n".join(lines))
+
+
 def format_radar_push(
     scan_id: int,
     signals: list[RadarSignalRead],
@@ -364,6 +434,10 @@ def format_unknown_command() -> str:
 
 def format_invalid_signal_id() -> str:
     return "请使用 /signal <id> 查看单个信号复盘。"
+
+
+def format_invalid_score_signal_id() -> str:
+    return "请使用 /score <id> 生成并查看单个信号评分。"
 
 
 def format_signal_not_found(signal_id: int) -> str:

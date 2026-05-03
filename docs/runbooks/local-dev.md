@@ -211,6 +211,18 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":2,"message":{"message_id":2,"chat":{"id":1001},"text":"/radar"}}'
 ```
 
+本地 preview 日报/评分：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":20,"message":{"message_id":20,"chat":{"id":1001},"text":"/daily"}}'
+
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":21,"message":{"message_id":21,"chat":{"id":1001},"text":"/score 1"}}'
+```
+
 如果启用了 `TELEGRAM_WEBHOOK_SECRET`，本地请求也要带 header：
 
 ```powershell
@@ -244,6 +256,8 @@ Telegram 个人数据命令：
 - `/holding` 读取 `user_key=telegram-<chat_id>` 的持仓。
 - `/watchlist` 读取 `user_key=telegram-<chat_id>` 的自选关注。
 - `/reports` 读取 `user_key=telegram-<chat_id>` 的报告列表。
+- `/daily` 和 `/weekly` 读取 `user_key=telegram-<chat_id>` 的周期汇总。
+- `/score <id>` 触发后端评分记录生成；评分不改变雷达等级，不构成交易建议。
 
 本地 preview 示例：
 

@@ -106,6 +106,9 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "/holding" in data["preview"]
     assert "/watchlist" in data["preview"]
     assert "/reports" in data["preview"]
+    assert "/daily" in data["preview"]
+    assert "/weekly" in data["preview"]
+    assert "/score <id>" in data["preview"]
     assert "不构成投资建议" in data["preview"]
     for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
         assert forbidden not in data["preview"]
@@ -298,6 +301,50 @@ async def test_telegram_reports_command_uses_chat_user_key(
 
     assert empty_response.status_code == 200
     assert "暂未生成报告" in empty_response.json()["preview"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_periodic_and_score_commands(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+
+    daily_response = await client.post("/telegram/webhook", json=_telegram_update("/daily"))
+    weekly_response = await client.post("/telegram/webhook", json=_telegram_update("/weekly"))
+    score_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update(f"/score {signal_id}"),
+    )
+    invalid_score_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/score not-a-number"),
+    )
+
+    assert daily_response.status_code == 200
+    assert "日报汇总" in daily_response.json()["preview"]
+    assert "优先级" in daily_response.json()["preview"]
+
+    assert weekly_response.status_code == 200
+    assert "周报汇总" in weekly_response.json()["preview"]
+
+    assert score_response.status_code == 200
+    score_preview = score_response.json()["preview"]
+    assert f"信号 #{signal_id} 综合评分" in score_preview
+    assert "1d" in score_preview
+    assert "10d" in score_preview
+    assert "不是价格回测或交易建议" in score_preview
+
+    assert invalid_score_response.status_code == 200
+    assert "请使用 /score <id>" in invalid_score_response.json()["preview"]
+
+    for preview in (
+        daily_response.json()["preview"],
+        weekly_response.json()["preview"],
+        score_preview,
+    ):
+        for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
+            assert forbidden not in preview
 
 
 def test_telegram_formatter_accepts_enum_value_strings() -> None:
