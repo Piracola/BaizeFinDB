@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BaizeFinDB 雷达面板</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">BaizeFinDB</p>
+        <h1>雷达工作台</h1>
+      </div>
+      <div class="toolbar">
+        <button id="refresh-button" type="button">刷新</button>
+        <button id="run-scan-button" type="button">运行雷达扫描</button>
+        <button id="fetch-akshare-button" type="button">触发 AKShare 最小采集</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel status-panel" aria-labelledby="status-title">
+        <div class="section-heading">
+          <h2 id="status-title">API 状态</h2>
+          <span id="last-updated" class="muted">尚未刷新</span>
+        </div>
+        <div id="ready-status" class="status-grid"></div>
+        <div id="action-message" class="message" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="panel overview-panel" aria-labelledby="overview-title">
+        <div class="section-heading">
+          <h2 id="overview-title">雷达总览</h2>
+          <span class="muted">来自 /radar/overview</span>
+        </div>
+        <div id="priority-counts" class="priority-grid"></div>
+        <div id="latest-scan" class="latest-scan"></div>
+        <h3>当前主题</h3>
+        <div id="current-subjects" class="subject-list"></div>
+      </section>
+
+      <section class="panel signals-panel" aria-labelledby="signals-title">
+        <div class="section-heading">
+          <h2 id="signals-title">信号列表</h2>
+          <span class="muted">来自 /radar/signals</span>
+        </div>
+        <div id="signals-list" class="signal-list"></div>
+      </section>
+
+      <section class="panel detail-panel" aria-labelledby="detail-title">
+        <div class="section-heading">
+          <h2 id="detail-title">信号详情</h2>
+          <span class="muted">点击信号查看</span>
+        </div>
+        <div id="signal-detail" class="detail-body empty-state">
+          还没有选择信号。先刷新列表，或运行采集和扫描后再查看详情。
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      内容仅用于个人研究和复盘；雷达等级由后端规则生成，前端只负责展示。
+    </footer>
+
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

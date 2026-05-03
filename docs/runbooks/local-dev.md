@@ -34,6 +34,12 @@ uv run uvicorn app.main:app --reload
 
 启动后检查：
 
+浏览器打开静态 Web 雷达面板：
+
+```text
+http://127.0.0.1:8000/
+```
+
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/health/ready
