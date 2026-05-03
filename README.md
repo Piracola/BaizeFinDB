@@ -31,7 +31,7 @@
 - `/portfolio/watchlist` 手动维护自选关注项
 - `/reports/from-signal` 从雷达信号生成 quick/standard 模板报告，生成前复用审查
 - `/reports` 查看当前 `user_key` 的报告列表
-- 静态 Web 雷达面板可查看雷达总览、信号详情，维护默认 `user_key` 的持仓/自选，并生成/查看 quick/standard 报告
+- 静态 Web 雷达终端工作台可查看雷达总览、信号详情，维护默认 `user_key` 的持仓/自选，并生成/查看 quick/standard 报告
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -70,7 +70,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP 和 Web 报告视图；后续继续补折叠推送、日报周报和评分。 |
+| M5 | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP 和 Web 报告视图；后续继续补折叠推送、日报周报和评分。 |
 
 ## 本地启动
 
@@ -95,7 +95,7 @@ uv run uvicorn app.main:app --reload
 
 访问：
 
-- `http://127.0.0.1:8000/` 静态 Web 雷达面板
+- `http://127.0.0.1:8000/` 静态 Web 雷达终端工作台
 - `http://127.0.0.1:8000/health`
 - `http://127.0.0.1:8000/health/ready`
 

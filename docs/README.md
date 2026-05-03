@@ -13,6 +13,7 @@
 | [api/current-api.md](api/current-api.md) | 当前 API、调用顺序、curl 示例、响应示例 | 写脚本、接 Telegram/Web/报告前读 |
 | [specs/current-data-model.md](specs/current-data-model.md) | 当前真实数据表和规划表边界 | 改数据库、写迁移、设计新模块前读 |
 | [prd/m5-next-step.md](prd/m5-next-step.md) | M5 A 股 5 分钟资金主线雷达 MVP PRD | 开始雷达闭环、Telegram/Web/报告前读 |
+| [research-terminal-reference.md](research-terminal-reference.md) | FinceptTerminal / OpenBB 参考评估和采用边界 | 做 Web/客户端终端化改造前读 |
 
 ## 当前开发原则
 

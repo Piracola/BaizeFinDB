@@ -11,6 +11,8 @@ def test_frontend_index_returns_static_page() -> None:
     assert response.status_code == 200
     assert "BaizeFinDB" in response.text
     assert "雷达" in response.text
+    assert "Radar Terminal" in response.text
+    assert "command-input" in response.text
     assert "持仓 / 自选" in response.text
     assert "报告列表" in response.text
 
@@ -25,7 +27,10 @@ def test_frontend_assets_are_served() -> None:
     assert "refreshAll" in js_response.text
     assert "loadPortfolio" in js_response.text
     assert "createReport" in js_response.text
+    assert "executeCommand" in js_response.text
+    assert "scrollToPanel" in js_response.text
     assert css_response.status_code == 200
+    assert "terminal-shell" in css_response.text
     assert "status-panel" in css_response.text
     assert "portfolio-panel" in css_response.text
     assert "reports-panel" in css_response.text

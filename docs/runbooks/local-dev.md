@@ -34,13 +34,13 @@ uv run uvicorn app.main:app --reload
 
 启动后检查：
 
-浏览器打开静态 Web 雷达面板：
+浏览器打开静态 Web 雷达终端工作台：
 
 ```text
 http://127.0.0.1:8000/
 ```
 
-Web 面板当前可查看 API 状态、雷达总览、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告。
+Web 终端工作台当前可查看 API 状态、雷达总览、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告。顶部命令栏支持 `radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health

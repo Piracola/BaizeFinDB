@@ -6,6 +6,8 @@ const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   runScanButton: document.querySelector("#run-scan-button"),
   fetchAkshareButton: document.querySelector("#fetch-akshare-button"),
+  commandInput: document.querySelector("#command-input"),
+  commandRunButton: document.querySelector("#command-run-button"),
   lastUpdated: document.querySelector("#last-updated"),
   readyStatus: document.querySelector("#ready-status"),
   actionMessage: document.querySelector("#action-message"),
@@ -26,6 +28,15 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.refreshButton.addEventListener("click", refreshAll);
   elements.runScanButton.addEventListener("click", runRadarScan);
   elements.fetchAkshareButton.addEventListener("click", fetchMinimalAkshare);
+  elements.commandRunButton.addEventListener("click", executeCommand);
+  elements.commandInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      executeCommand();
+    }
+  });
+  document.querySelectorAll("[data-scroll-target]").forEach((button) => {
+    button.addEventListener("click", () => scrollToPanel(button.dataset.scrollTarget));
+  });
   elements.portfolioUserKey.addEventListener("change", () => {
     loadPortfolio();
     loadReports();
@@ -247,6 +258,51 @@ async function createReport(reportType) {
   } finally {
     setButtonsBusy(false);
   }
+}
+
+function executeCommand() {
+  const command = elements.commandInput.value.trim().toLowerCase();
+  if (!command) {
+    showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports。");
+    return;
+  }
+
+  const [name] = command.split(/\s+/);
+  const commands = {
+    radar: refreshAll,
+    refresh: refreshAll,
+    scan: runRadarScan,
+    fetch: fetchMinimalAkshare,
+    akshare: fetchMinimalAkshare,
+    signals: () => scrollToPanel("signals-panel"),
+    signal: () => scrollToPanel("signals-panel"),
+    detail: () => scrollToPanel("detail-panel"),
+    portfolio: () => scrollToPanel("portfolio-panel"),
+    holding: () => scrollToPanel("portfolio-panel"),
+    watchlist: () => scrollToPanel("portfolio-panel"),
+    reports: () => scrollToPanel("reports-panel"),
+    report: () => scrollToPanel("reports-panel"),
+    help: () => showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports。"),
+  };
+
+  const action = commands[name];
+  if (!action) {
+    showMessage("error", `未知命令：${command}`);
+    return;
+  }
+
+  action();
+}
+
+function scrollToPanel(panelId) {
+  const target = document.querySelector(`#${panelId}`);
+  if (!target) {
+    return;
+  }
+
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  target.classList.add("panel-focus");
+  window.setTimeout(() => target.classList.remove("panel-focus"), 900);
 }
 
 function renderReadyStatus(ok, payload) {
@@ -567,6 +623,7 @@ function setButtonsBusy(isBusy) {
   elements.refreshButton.disabled = isBusy;
   elements.runScanButton.disabled = isBusy;
   elements.fetchAkshareButton.disabled = isBusy;
+  elements.commandRunButton.disabled = isBusy;
   elements.holdingForm.querySelector("button").disabled = isBusy;
   elements.watchlistForm.querySelector("button").disabled = isBusy;
 }
