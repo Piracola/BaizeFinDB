@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.db.provider_models import DataQualityCheck, MarketSnapshot
 from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
-from app.radar.rules import RadarRuleResult, classify_sector_movement
+from app.radar.rules import (
+    RadarRuleResult,
+    classify_risk_event,
+    classify_sector_movement,
+)
 from app.radar.schemas import (
     RadarLifecycleStage,
     RadarOverviewRead,
@@ -24,10 +28,18 @@ from app.radar.schemas import (
     SignalEvidenceRead,
 )
 
-RADAR_SOURCE_ENDPOINTS = (
+MARKET_MAINLINE_SOURCE_ENDPOINTS = (
     "stock_board_industry_name_em",
     "stock_board_concept_name_em",
 )
+RISK_EVENT_SOURCE_ENDPOINTS = (
+    "risk_events",
+    "announcement_events",
+    "regulatory_events",
+    "black_swan_events",
+)
+RADAR_SOURCE_ENDPOINTS = MARKET_MAINLINE_SOURCE_ENDPOINTS + RISK_EVENT_SOURCE_ENDPOINTS
+RADAR_SOURCE_PROVIDER_NAMES = ("akshare", "manual")
 MAX_SIGNALS_PER_SCAN = 20
 P2_OBSERVATION_WINDOW_DAYS = 7
 MAX_ERROR_MESSAGE_LENGTH = 300
@@ -255,7 +267,7 @@ async def _load_latest_source_snapshots(session: AsyncSession) -> list[MarketSna
         statement = (
             select(MarketSnapshot)
             .where(
-                MarketSnapshot.provider_name == "akshare",
+                MarketSnapshot.provider_name.in_(RADAR_SOURCE_PROVIDER_NAMES),
                 MarketSnapshot.endpoint == endpoint,
             )
             .order_by(desc(MarketSnapshot.collected_at), desc(MarketSnapshot.id))
@@ -502,13 +514,12 @@ def _build_signal_candidates(
         )
 
         for row in snapshot.normalized_rows:
-            metrics = _row_metrics(row)
-            rule_result = classify_sector_movement(metrics)
+            metrics, rule_result = _classify_snapshot_row(snapshot, row)
             if rule_result is None:
                 continue
 
-            subject_name = _text(row.get("sector_name") or row.get("name"), "unknown")
-            subject_code = _optional_text(row.get("sector_code") or row.get("symbol"))
+            subject_name = _candidate_subject_name(snapshot, row)
+            subject_code = _candidate_subject_code(row)
             candidates.append(
                 SignalCandidate(
                     snapshot=snapshot,
@@ -628,6 +639,9 @@ def _new_evidence(
     candidate: SignalCandidate,
     continuity: CandidateContinuity,
 ) -> SignalEvidence:
+    if _is_risk_event_candidate(candidate):
+        return _new_risk_event_evidence(signal_id, candidate, continuity)
+
     pct_change = candidate.metrics["pct_change"]
     rising_count = candidate.metrics["rising_count"]
     falling_count = candidate.metrics["falling_count"]
@@ -679,25 +693,86 @@ def _row_metrics(row: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _risk_row_metrics(row: dict[str, object]) -> dict[str, object]:
+    return {
+        "risk_event_type": _text(
+            row.get("risk_event_type") or row.get("event_type") or row.get("category"),
+            "",
+        ),
+        "severity": _text(row.get("severity") or row.get("risk_level"), ""),
+        "severity_score": _float(row.get("severity_score") or row.get("impact_score")),
+        "source_label": _text(row.get("source_label") or row.get("source"), ""),
+    }
+
+
+def _classify_snapshot_row(
+    snapshot: MarketSnapshot,
+    row: dict[str, object],
+) -> tuple[dict[str, object], RadarRuleResult | None]:
+    if _is_risk_event_snapshot(snapshot):
+        metrics = _risk_row_metrics(row)
+        return metrics, classify_risk_event(metrics)
+
+    if _is_market_mainline_snapshot(snapshot):
+        metrics = _row_metrics(row)
+        return metrics, classify_sector_movement(metrics)
+
+    return {}, None
+
+
+def _candidate_subject_name(snapshot: MarketSnapshot, row: dict[str, object]) -> str:
+    if _is_risk_event_snapshot(snapshot):
+        return _text(
+            row.get("event_name")
+            or row.get("announcement_title")
+            or row.get("title")
+            or row.get("name"),
+            "unknown risk event",
+        )
+
+    return _text(row.get("sector_name") or row.get("name"), "unknown")
+
+
+def _candidate_subject_code(row: dict[str, object]) -> str | None:
+    return _optional_text(
+        row.get("sector_code")
+        or row.get("event_id")
+        or row.get("announcement_id")
+        or row.get("symbol")
+    )
+
+
 def _candidate_sort_key(candidate: SignalCandidate) -> tuple[int, float, float]:
     priority_rank = {
         RadarPriority.P0: 0,
         RadarPriority.P1: 1,
         RadarPriority.P2: 2,
     }[candidate.rule_result.priority]
+    strength = float(
+        candidate.metrics.get("pct_change") or candidate.metrics.get("severity_score") or 0
+    )
+    breadth = float(
+        candidate.metrics.get("breadth") or candidate.metrics.get("severity_score") or 0
+    )
     return (
         priority_rank,
-        -float(candidate.metrics["pct_change"]),
-        -float(candidate.metrics["breadth"]),
+        -strength,
+        -breadth,
     )
 
 
 def _signal_key(candidate: SignalCandidate) -> str:
     subject_ref = candidate.subject_code or candidate.subject_name
-    return f"akshare:{candidate.snapshot.endpoint}:{subject_ref}"
+    return f"{candidate.snapshot.provider_name}:{candidate.snapshot.endpoint}:{subject_ref}"
 
 
 def _signal_summary(candidate: SignalCandidate, continuity: CandidateContinuity) -> str:
+    if _is_risk_event_candidate(candidate):
+        return (
+            "Risk event candidate detected from the latest provider snapshot. "
+            "Use it as research attention, not as trading advice."
+        )
+
     summary = (
         "Sector movement detected from the latest provider snapshot. "
         "Use it as research attention, not as trading advice."
@@ -713,6 +788,53 @@ def _signal_summary(candidate: SignalCandidate, continuity: CandidateContinuity)
         return f"{summary} Continuity was compared with the previous scan."
 
     return summary
+
+
+def _new_risk_event_evidence(
+    signal_id: int,
+    candidate: SignalCandidate,
+    continuity: CandidateContinuity,
+) -> SignalEvidence:
+    risk_event_type = candidate.metrics.get("risk_event_type")
+    severity = candidate.metrics.get("severity")
+    severity_score = candidate.metrics.get("severity_score")
+    raw_excerpt = (
+        f"{candidate.subject_name}: risk_event_type={risk_event_type}, "
+        f"severity={severity}, severity_score={severity_score}"
+    )
+    return SignalEvidence(
+        signal_id=signal_id,
+        evidence_type="risk_event",
+        source_name=candidate.snapshot.provider_name,
+        source_ref=f"market_snapshot:{candidate.snapshot.id}",
+        source_time=candidate.snapshot.source_time,
+        collected_at=candidate.snapshot.collected_at,
+        raw_excerpt=raw_excerpt,
+        normalized_summary="Provider snapshot describes a major risk event.",
+        confidence=candidate.rule_result.confidence,
+        freshness="snapshot_latest",
+        details={
+            "endpoint": candidate.snapshot.endpoint,
+            "snapshot_type": candidate.snapshot.snapshot_type,
+            "metrics": candidate.metrics,
+            "rule_reasons": candidate.rule_result.reasons,
+            "continuity": _continuity_metrics(continuity),
+            "provider_quality": candidate.data_quality,
+        },
+        public_share_policy="internal_summary_only",
+    )
+
+
+def _is_market_mainline_snapshot(snapshot: MarketSnapshot) -> bool:
+    return snapshot.endpoint in MARKET_MAINLINE_SOURCE_ENDPOINTS
+
+
+def _is_risk_event_snapshot(snapshot: MarketSnapshot) -> bool:
+    return snapshot.endpoint in RISK_EVENT_SOURCE_ENDPOINTS
+
+
+def _is_risk_event_candidate(candidate: SignalCandidate) -> bool:
+    return _is_risk_event_snapshot(candidate.snapshot)
 
 
 def _continuity_metrics(continuity: CandidateContinuity) -> dict[str, object]:

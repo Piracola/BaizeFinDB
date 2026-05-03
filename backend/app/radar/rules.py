@@ -57,6 +57,32 @@ def classify_sector_movement(metrics: dict[str, object]) -> RadarRuleResult | No
     return None
 
 
+def classify_risk_event(metrics: dict[str, object]) -> RadarRuleResult | None:
+    event_type = _normalized_text(metrics.get("risk_event_type"))
+    severity = _normalized_text(metrics.get("severity"))
+    severity_score = _float(metrics.get("severity_score"))
+    reasons: list[str] = []
+
+    if event_type in {"major_announcement", "regulatory", "black_swan"}:
+        reasons.append(f"risk_event_type_{event_type}")
+
+    if severity in {"major", "critical"}:
+        reasons.append(f"risk_severity_{severity}")
+
+    if severity_score >= 0.85:
+        reasons.append("risk_severity_score_ge_85pct")
+
+    if not reasons:
+        return None
+
+    return RadarRuleResult(
+        priority=RadarPriority.P0,
+        lifecycle_stage=RadarLifecycleStage.IGNITION,
+        confidence=0.78,
+        reasons=reasons,
+    )
+
+
 def _lifecycle_for(pct_change: float, breadth: float) -> RadarLifecycleStage:
     if pct_change >= 6.5 and breadth >= 0.75:
         return RadarLifecycleStage.CLIMAX
@@ -93,3 +119,10 @@ def _int(value: object) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _normalized_text(value: object) -> str:
+    if value is None:
+        return ""
+
+    return str(value).strip().lower()

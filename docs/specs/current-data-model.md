@@ -81,6 +81,7 @@ Provider 表只回答：
 - 拉取成功还是失败。
 - 数据新鲜度和置信度如何。
 - 标准化后保留了什么摘要和行数据。
+- `market_snapshots` 当前也可承载轻量风险事件快照，例如 `risk_events`、`announcement_events`、`regulatory_events`、`black_swan_events`；普通 `news_flash` 不会被雷达主线规则直接升为 P0。
 
 Provider 表不负责：
 

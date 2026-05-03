@@ -94,6 +94,93 @@ async def test_radar_scan_generates_signals_from_latest_snapshots(
 
 
 @pytest.mark.asyncio
+async def test_radar_scan_does_not_create_mainline_p0_from_news_only_snapshot(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        session.add(
+            MarketSnapshot(
+                provider_name="manual",
+                endpoint="news_flash",
+                market="A_SHARE",
+                snapshot_type="news_event",
+                source_time=None,
+                collected_at=datetime.now(UTC),
+                row_count=1,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "title": "Rumor headline without market confirmation",
+                        "event_type": "market_news",
+                        "severity": "major",
+                        "severity_score": 0.95,
+                    }
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+
+        scan = await run_radar_scan(session)
+        p0_signals = await list_radar_signals(session, priority=RadarPriority.P0)
+
+    assert scan.status == RadarScanStatus.NO_DATA
+    assert scan.summary["candidate_count"] == 0
+    assert scan.summary["source_snapshot_count"] == 0
+    assert scan.signals == []
+    assert p0_signals == []
+
+
+@pytest.mark.asyncio
+async def test_radar_scan_generates_risk_p0_from_major_event_snapshot(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        session.add(
+            MarketSnapshot(
+                provider_name="manual",
+                endpoint="risk_events",
+                market="A_SHARE",
+                snapshot_type="risk_event",
+                source_time=None,
+                collected_at=datetime.now(UTC),
+                row_count=1,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "event_id": "risk-001",
+                        "event_name": "重大监管风险事件",
+                        "event_type": "regulatory",
+                        "severity": "major",
+                        "severity_score": 0.9,
+                        "source_label": "manual-fixture",
+                    }
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+
+        scan = await run_radar_scan(session)
+        detail = await get_radar_signal_detail(session, scan.signals[0].id)
+
+    assert scan.status == RadarScanStatus.SUCCESS
+    assert scan.summary["candidate_count"] == 1
+    assert scan.summary["priority_counts"]["P0"] == 1
+    assert scan.signals[0].priority == RadarPriority.P0
+    assert scan.signals[0].subject_type == "risk_event"
+    assert scan.signals[0].subject_name == "重大监管风险事件"
+    assert scan.signals[0].metrics["risk_event_type"] == "regulatory"
+    assert "risk_event_type_regulatory" in scan.signals[0].metrics["rule_reasons"]
+    assert "risk_severity_major" in scan.signals[0].metrics["rule_reasons"]
+
+    assert detail is not None
+    assert detail.evidences[0].evidence_type == "risk_event"
+    assert detail.evidences[0].source_name == "manual"
+    assert detail.evidences[0].details["metrics"]["severity_score"] == 0.9
+
+
+@pytest.mark.asyncio
 async def test_radar_scan_carries_provider_quality_into_signal_and_evidence(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
