@@ -32,6 +32,7 @@ class TushareEndpointSpec:
     implemented: bool = False
     fields: tuple[str, ...] = ()
     query_params: dict[str, object] | None = None
+    freshness: str = "reference_data"
 
 
 TUSHARE_ENDPOINTS: dict[str, TushareEndpointSpec] = {
@@ -43,6 +44,9 @@ TUSHARE_ENDPOINTS: dict[str, TushareEndpointSpec] = {
         required_fields=("ann_date", "ts_code", "title"),
         purpose="补充重大公告、风险事件和持仓/自选相关催化。",
         permission_note="Tushare Pro 接口，真实抓取前需要 token 和对应权限。",
+        implemented=True,
+        fields=("ann_date", "ts_code", "name", "title", "url", "rec_time"),
+        freshness="dated_event_data",
     ),
     "stock_company": TushareEndpointSpec(
         endpoint="stock_company",
@@ -102,7 +106,11 @@ class TushareProvider:
         self.client = client
         self.settings = settings or get_settings()
 
-    async def fetch(self, endpoint: str) -> ProviderDataset:
+    async def fetch(
+        self,
+        endpoint: str,
+        query_params: dict[str, object] | None = None,
+    ) -> ProviderDataset:
         spec = TUSHARE_ENDPOINTS[endpoint]
         if not spec.implemented:
             raise NotImplementedError(f"tushare endpoint is not implemented: {endpoint}")
@@ -111,7 +119,7 @@ class TushareProvider:
         dataframe = await asyncio.to_thread(
             client.fetch_dataframe,
             spec.endpoint,
-            **_fetcher_kwargs(spec),
+            **_fetcher_kwargs(spec, query_params),
         )
         return normalize_dataframe(dataframe, spec)
 
@@ -188,14 +196,22 @@ def normalize_dataframe(dataframe: "pd.DataFrame", spec: TushareEndpointSpec) ->
         quality=DataQuality(
             status=_quality_status(row_count, missing_fields),
             confidence=_confidence(row_count, len(spec.required_fields), len(missing_fields)),
-            freshness="reference_data",
+            freshness=spec.freshness,
             missing_fields=missing_fields,
         ),
     )
 
 
-def _fetcher_kwargs(spec: TushareEndpointSpec) -> dict[str, object]:
+def _fetcher_kwargs(
+    spec: TushareEndpointSpec,
+    query_params: dict[str, object] | None = None,
+) -> dict[str, object]:
     kwargs = dict(spec.query_params or {})
+    kwargs.update(query_params or {})
+
+    if spec.endpoint == "anns_d" and "ann_date" not in kwargs:
+        kwargs["ann_date"] = datetime.now(UTC).strftime("%Y%m%d")
+
     if spec.fields:
         kwargs["fields"] = ",".join(spec.fields)
 

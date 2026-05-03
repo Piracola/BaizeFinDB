@@ -36,7 +36,7 @@ def test_tushare_endpoint_list_is_registered() -> None:
     }
     implemented = {item["endpoint"]: item["implemented"] for item in payload}
     assert implemented == {
-        "anns_d": False,
+        "anns_d": True,
         "stock_company": False,
         "stock_basic": True,
     }
@@ -60,7 +60,7 @@ def test_tushare_status_does_not_leak_token(monkeypatch) -> None:
         "token_configured": True,
         "fetch_enabled": True,
         "endpoint_count": 3,
-        "implemented_endpoint_count": 1,
+        "implemented_endpoint_count": 2,
         "status": "configured",
         "message": "Tushare token is configured and implemented endpoints can be enabled.",
     }
@@ -91,4 +91,34 @@ def test_tushare_stock_basic_fetch_route_uses_service(monkeypatch) -> None:
     assert response.json()["endpoint"] == "stock_basic"
     assert response.json()["status"] == "success"
     assert response.json()["fetch_log_id"] == 10
+
+
+def test_tushare_announcements_fetch_route_uses_service(monkeypatch) -> None:
+    calls = []
+
+    async def fake_collect_tushare_announcements(session, ann_date=None) -> ProviderEndpointResult:
+        calls.append(ann_date)
+        return ProviderEndpointResult(
+            endpoint="anns_d",
+            status=ProviderStatus.SUCCESS,
+            row_count=2,
+            quality_status=DataQualityStatus.OK,
+            confidence=0.95,
+            fetch_log_id=11,
+            snapshot_id=21,
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.providers.collect_tushare_announcements",
+        fake_collect_tushare_announcements,
+    )
+    client = TestClient(create_app())
+
+    response = client.post("/providers/tushare/fetch/announcements?ann_date=20260503")
+
+    assert response.status_code == 200
+    assert response.json()["endpoint"] == "anns_d"
+    assert response.json()["row_count"] == 2
+    assert response.json()["snapshot_id"] == 21
+    assert calls == ["20260503"]
 

@@ -18,6 +18,7 @@ from app.providers.schemas import (
 )
 from app.providers.service import (
     collect_minimal_akshare,
+    collect_tushare_announcements,
     collect_tushare_stock_basic,
     get_akshare_collection_status,
     list_latest_provider_snapshots,
@@ -32,6 +33,7 @@ from app.providers.tushare import (
 router = APIRouter(prefix="/providers", tags=["providers"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
+TushareDateQuery = Annotated[str | None, Query(pattern=r"^\d{8}$")]
 
 
 @router.get("/akshare/endpoints", response_model=list[ProviderEndpointInfo])
@@ -57,6 +59,17 @@ async def fetch_tushare_stock_basic(
         return await collect_tushare_stock_basic(session)
     except SQLAlchemyError as exc:
         raise _database_unavailable("recording tushare fetch", exc) from exc
+
+
+@router.post("/tushare/fetch/announcements", response_model=ProviderEndpointResult)
+async def fetch_tushare_announcements(
+    session: SessionDep,
+    ann_date: TushareDateQuery = None,
+) -> ProviderEndpointResult:
+    try:
+        return await collect_tushare_announcements(session, ann_date=ann_date)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("recording tushare announcements fetch", exc) from exc
 
 
 @router.post("/akshare/fetch/minimal", response_model=AkshareCollectionResponse)

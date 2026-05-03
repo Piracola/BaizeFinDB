@@ -45,7 +45,7 @@ class SuccessfulStockProvider:
 
 
 class SuccessfulTushareStockProvider:
-    async def fetch(self, endpoint: str):
+    async def fetch(self, endpoint: str, **kwargs):
         dataframe = pd.DataFrame(
             [
                 {

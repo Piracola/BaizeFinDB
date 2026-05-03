@@ -13,6 +13,7 @@ GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
 GET  /providers/tushare/status
 POST /providers/tushare/fetch/stock-basic
+POST /providers/tushare/fetch/announcements
 GET  /providers/tushare/fetch-logs
 GET  /providers/tushare/snapshots/latest
 POST /providers/akshare/fetch/minimal
@@ -159,7 +160,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/min
 
 ### `GET /providers/tushare/endpoints`
 
-用途：查看计划接入的 Tushare 补充源端点。当前 `stock_basic` 已支持手动抓取；公告和公司信息仍是能力声明，不会触发真实抓取。
+用途：查看计划接入的 Tushare 补充源端点。当前 `stock_basic` 和 `anns_d` 已支持手动抓取；公司信息仍是能力声明，不会触发真实抓取。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
@@ -167,7 +168,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
 
 当前预留：
 
-- `anns_d`：公告快讯，后续用于重大公告、风险事件和持仓/自选催化，当前 `implemented=false`。
+- `anns_d`：公告快讯，后续用于重大公告、风险事件和持仓/自选催化，当前 `implemented=true`，可手动抓取并写入 Provider 快照和质量记录。
 - `stock_company`：上市公司基本信息，后续用于主体画像和报告上下文，当前 `implemented=false`。
 - `stock_basic`：股票基础信息，当前 `implemented=true`，可手动抓取并写入 Provider 快照和质量记录。
 
@@ -181,7 +182,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
 
 ### `GET /providers/tushare/status`
 
-用途：查看 `TUSHARE_TOKEN` 是否配置和 Tushare Provider 是否启用真实抓取。该接口不返回 token 原文。当前只有 `stock_basic` 已实现，`fetch_enabled=true` 还要求 token 已配置。
+用途：查看 `TUSHARE_TOKEN` 是否配置和 Tushare Provider 是否启用真实抓取。该接口不返回 token 原文。当前 `stock_basic` 和 `anns_d` 已实现，`fetch_enabled=true` 还要求 token 已配置。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
@@ -195,7 +196,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
   "token_configured": false,
   "fetch_enabled": false,
   "endpoint_count": 3,
-  "implemented_endpoint_count": 1,
+  "implemented_endpoint_count": 2,
   "status": "not_configured",
   "message": "TUSHARE_TOKEN is required before enabling Tushare fetch."
 }
@@ -224,6 +225,31 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/sto
 
 如果 `TUSHARE_TOKEN` 未配置、依赖不可用、权限不足或接口异常，接口会记录一条 `provider_fetch_logs.status=failure` 和 `data_quality_checks.status=failed`，并在响应里返回 `quality_status=failed` 和错误摘要。
 
+### `POST /providers/tushare/fetch/announcements`
+
+用途：手动触发 Tushare `anns_d` 公告抓取，写入 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`。该接口不进入 Celery 5 分钟调度，也不会直接生成风险 P0；后续需要在真实样例稳定后再接风险事件映射。
+
+```powershell
+Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/announcements?ann_date=20260503"
+```
+
+查询参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `ann_date` | 可选，公告日期，`YYYYMMDD`；不传时使用当天日期 |
+
+当前标准化字段：
+
+- `ann_date`
+- `ts_code`
+- `name`
+- `title`
+- `url`
+- `rec_time`
+
+注意：公告 `url` 只允许留在内部 Provider 快照中，不能进入公开分享 payload。
+
 ### `GET /providers/tushare/fetch-logs`
 
 用途：查看最近 Tushare 抓取日志。
@@ -231,6 +257,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/sto
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?limit=20"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic"
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=anns_d"
 ```
 
 ### `GET /providers/tushare/snapshots/latest`

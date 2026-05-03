@@ -28,7 +28,7 @@ class FakeSession:
 
 
 class FailingProvider:
-    async def fetch(self, endpoint: str):
+    async def fetch(self, endpoint: str, **kwargs):
         raise RuntimeError("upstream unavailable")
 
 

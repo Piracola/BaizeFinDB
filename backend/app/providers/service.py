@@ -47,6 +47,21 @@ async def collect_tushare_stock_basic(
     return await collect_tushare_endpoint(session, tushare_provider, "stock_basic")
 
 
+async def collect_tushare_announcements(
+    session: AsyncSession,
+    ann_date: str | None = None,
+    provider: TushareProvider | None = None,
+) -> ProviderEndpointResult:
+    tushare_provider = provider or TushareProvider()
+    query_params = {"ann_date": ann_date} if ann_date is not None else None
+    return await collect_tushare_endpoint(
+        session,
+        tushare_provider,
+        "anns_d",
+        query_params=query_params,
+    )
+
+
 async def collect_akshare_endpoint(
     session: AsyncSession,
     provider: AkshareProvider,
@@ -73,11 +88,12 @@ async def collect_tushare_endpoint(
     session: AsyncSession,
     provider: TushareProvider,
     endpoint: str,
+    query_params: dict[str, object] | None = None,
 ) -> ProviderEndpointResult:
     started_at = datetime.now(UTC)
 
     try:
-        dataset = await provider.fetch(endpoint)
+        dataset = await provider.fetch(endpoint, query_params=query_params)
     except Exception as exc:
         return await _record_failure(
             session,
