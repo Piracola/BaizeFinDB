@@ -7,10 +7,13 @@
 - 查看 API 就绪状态：`GET /health/ready`。
 - 查看雷达总览：`GET /radar/overview`。
 - 查看信号列表：`GET /radar/signals`。
+- 查看持仓：`GET /portfolio/holdings`。
+- 查看自选：`GET /portfolio/watchlist`。
 - 打开现有 Web 面板：`/`。
 - P0/P1/P2、生命周期、审查状态和计数都来自后端 API，客户端不重新计算。
 - 不保存 token、secret、持仓截图或个人数据。
 - 不提供买卖建议、不接自动交易、不承诺收益。
+- 持仓/自选只作为个人提醒、展示排序和报告上下文，不改变市场雷达等级。
 
 ## 2. 前置要求
 
@@ -35,7 +38,7 @@ uv run uvicorn app.main:app --reload
 再启动客户端：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default
 ```
 
 ## 4. 连接 Linux 服务器 API
@@ -43,13 +46,14 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 服务器应已经部署 API，并通过 HTTPS 域名暴露：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain> -UserKey default
 ```
 
 如果暂时使用环境变量：
 
 ```powershell
 $env:BAIZEFINDB_SERVER_URL = "https://<your-domain>"
+$env:BAIZEFINDB_USER_KEY = "default"
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 ```
 
@@ -60,6 +64,8 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |
+| 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |
+| 查看自选 | 调用 `/portfolio/watchlist`，按 User Key 显示个人自选。 |
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
 
 ## 6. 常见问题

@@ -10,7 +10,7 @@
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓和自选；Telegram 仍只消费后端结果，不重新计算雷达等级。
 
-Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级，也不是完整安装包。
+Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级，也不是完整安装包。
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例。该状态只代表部署骨架完成，不代表完整生产部署完成。
 

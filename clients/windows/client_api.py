@@ -10,8 +10,10 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
+DEFAULT_USER_KEY = "default"
 DEFAULT_TIMEOUT_SECONDS = 10
 SIGNALS_PREVIEW_LIMIT = 20
+PORTFOLIO_PREVIEW_LIMIT = 20
 SUBJECTS_PREVIEW_LIMIT = 8
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
@@ -186,6 +188,42 @@ def fetch_signals(
     return [_expect_object(item, "/radar/signals item") for item in payload]
 
 
+def fetch_holdings(
+    base_url: str | None,
+    *,
+    user_key: str = DEFAULT_USER_KEY,
+    opener: UrlOpener | None = None,
+) -> list[JsonObject]:
+    payload = get_json(
+        base_url,
+        "/portfolio/holdings",
+        query={"user_key": _user_key(user_key)},
+        opener=opener,
+    )
+    if not isinstance(payload, list):
+        msg = "/portfolio/holdings did not return a list"
+        raise BaizeApiError(msg, payload=payload)
+    return [_expect_object(item, "/portfolio/holdings item") for item in payload]
+
+
+def fetch_watchlist(
+    base_url: str | None,
+    *,
+    user_key: str = DEFAULT_USER_KEY,
+    opener: UrlOpener | None = None,
+) -> list[JsonObject]:
+    payload = get_json(
+        base_url,
+        "/portfolio/watchlist",
+        query={"user_key": _user_key(user_key)},
+        opener=opener,
+    )
+    if not isinstance(payload, list):
+        msg = "/portfolio/watchlist did not return a list"
+        raise BaizeApiError(msg, payload=payload)
+    return [_expect_object(item, "/portfolio/watchlist item") for item in payload]
+
+
 def format_health(payload: Mapping[str, Any]) -> str:
     checks = _mapping(payload.get("checks"))
     lines = [
@@ -301,6 +339,100 @@ def format_signals(signals: Sequence[Mapping[str, Any]]) -> str:
     return _trim_text("\n".join(lines))
 
 
+def format_holdings(holdings: Sequence[Mapping[str, Any]]) -> str:
+    if not holdings:
+        return _trim_text(
+            "\n".join(
+                [
+                    "手动持仓",
+                    "暂无手动持仓。",
+                    "持仓只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["手动持仓"]
+    for holding in holdings[:PORTFOLIO_PREVIEW_LIMIT]:
+        lines.extend(
+            [
+                (
+                    f"#{_text(holding.get('id'), '-')} "
+                    f"{_text(holding.get('instrument_code'), '-')} "
+                    f"{_text(holding.get('instrument_name'), '未命名标的')}"
+                ),
+                (
+                    "  "
+                    f"市场：{_text(holding.get('market'), '-')} | "
+                    f"仓位：{_ratio_text(holding.get('position_ratio'))} | "
+                    f"成本：{_number_text(holding.get('cost_price'))} | "
+                    f"提醒：{_enabled_label(holding.get('alert_enabled'))}"
+                ),
+            ],
+        )
+        if holding.get("note"):
+            lines.append(f"  备注：{_text(holding.get('note'), '')}")
+
+    if len(holdings) > PORTFOLIO_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(holdings) - PORTFOLIO_PREVIEW_LIMIT} 条更多持仓。")
+
+    lines.extend(
+        [
+            "持仓只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def format_watchlist(items: Sequence[Mapping[str, Any]]) -> str:
+    if not items:
+        return _trim_text(
+            "\n".join(
+                [
+                    "自选关注",
+                    "暂无自选关注。",
+                    "自选只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["自选关注"]
+    for item in items[:PORTFOLIO_PREVIEW_LIMIT]:
+        lines.extend(
+            [
+                (
+                    f"#{_text(item.get('id'), '-')} "
+                    f"{_text(item.get('instrument_code'), '-')} "
+                    f"{_text(item.get('instrument_name'), '未命名标的')}"
+                ),
+                (
+                    "  "
+                    f"市场：{_text(item.get('market'), '-')} | "
+                    f"提醒：{_enabled_label(item.get('alert_enabled'))}"
+                ),
+            ],
+        )
+        if item.get("note"):
+            lines.append(f"  备注：{_text(item.get('note'), '')}")
+
+    if len(items) > PORTFOLIO_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(items) - PORTFOLIO_PREVIEW_LIMIT} 条更多自选。")
+
+    lines.extend(
+        [
+            "自选只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
 def format_api_error(error: BaseException) -> str:
     if isinstance(error, BaizeApiError):
         details = [_text(error, "请求失败")]
@@ -395,6 +527,32 @@ def _int_text(value: Any) -> str:
     if value is None:
         return "0"
     return str(value)
+
+
+def _number_text(value: Any) -> str:
+    if value is None:
+        return "未填"
+
+    return str(value)
+
+
+def _ratio_text(value: Any) -> str:
+    if value is None:
+        return "未填"
+
+    try:
+        return f"{float(value):.0%}"
+    except (TypeError, ValueError):
+        return _text(value, "未填")
+
+
+def _enabled_label(value: Any) -> str:
+    return "开启" if value is True else "关闭"
+
+
+def _user_key(value: str | None) -> str:
+    normalized = (value or DEFAULT_USER_KEY).strip()
+    return normalized or DEFAULT_USER_KEY
 
 
 def _trim_text(text: str) -> str:

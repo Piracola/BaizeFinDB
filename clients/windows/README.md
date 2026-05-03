@@ -1,6 +1,6 @@
 # BaizeFinDB Windows Client MVP
 
-这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、雷达总览、信号列表，并打开现有 Web 面板。
+这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、雷达总览、信号列表、持仓、自选，并打开现有 Web 面板。
 
 它不是安装包，也不会打包成 exe。后续如果需要桌面分发，可以在这个目录基础上再做打包、签名和自动更新。
 
@@ -26,19 +26,27 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
 
+指定个人数据隔离键：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default
+```
+
 也可以先设置环境变量：
 
 ```powershell
 $env:BAIZEFINDB_SERVER_URL = "https://<your-domain>"
+$env:BAIZEFINDB_USER_KEY = "default"
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 ```
 
 ## 功能边界
 
-- 客户端只消费后端 API：`/health/ready`、`/radar/overview`、`/radar/signals`。
+- 客户端只消费后端 API：`/health/ready`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`。
 - P0/P1/P2、生命周期、审查状态和雷达计数均来自后端，客户端不重新计算。
 - 客户端不保存 token、secret、持仓截图或个人数据。
 - 客户端不提供买卖建议、不接自动交易、不承诺收益。
+- 持仓/自选只作为个人提醒、展示排序和报告上下文，不改变市场雷达等级。
 
 ## 常见问题
 

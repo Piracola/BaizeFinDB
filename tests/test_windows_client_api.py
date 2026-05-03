@@ -154,3 +154,65 @@ def test_format_signals_lists_backend_fields_without_calculating_priority() -> N
     assert "生命周期：点火" in text
     assert "审查：候选" in text
     assert "证据：2" in text
+
+
+def test_fetch_holdings_uses_user_key_query() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["timeout"] = timeout
+        return FakeResponse(
+            '[{"id":1,"instrument_code":"600000","instrument_name":"浦发银行"}]',
+        )
+
+    holdings = client_api.fetch_holdings(
+        "http://localhost:8000",
+        user_key="telegram-1001",
+        opener=opener,
+    )
+
+    assert holdings[0]["instrument_name"] == "浦发银行"
+    assert calls == {
+        "url": "http://localhost:8000/portfolio/holdings?user_key=telegram-1001",
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
+def test_format_holdings_and_watchlist_keep_personal_context_separate() -> None:
+    holdings_text = client_api.format_holdings(
+        [
+            {
+                "id": 1,
+                "instrument_code": "600000",
+                "instrument_name": "浦发银行",
+                "market": "A_SHARE",
+                "position_ratio": 0.2,
+                "cost_price": 10.25,
+                "alert_enabled": True,
+                "note": "核心观察仓",
+            }
+        ],
+    )
+    watchlist_text = client_api.format_watchlist(
+        [
+            {
+                "id": 2,
+                "instrument_code": "SZ000001",
+                "instrument_name": "平安银行",
+                "market": "A_SHARE",
+                "alert_enabled": False,
+                "note": "观察风险变化",
+            }
+        ],
+    )
+
+    assert "手动持仓" in holdings_text
+    assert "600000 浦发银行" in holdings_text
+    assert "仓位：20%" in holdings_text
+    assert "不改变市场雷达等级" in holdings_text
+
+    assert "自选关注" in watchlist_text
+    assert "SZ000001 平安银行" in watchlist_text
+    assert "提醒：关闭" in watchlist_text
+    assert "不构成投资建议" in watchlist_text

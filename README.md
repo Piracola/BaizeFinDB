@@ -44,7 +44,7 @@
 - Telegram Bot MVP Webhook 模块：只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
 - `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表并打开 Web 面板
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集和雷达扫描
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
@@ -119,7 +119,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
 
-客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期或审查状态；不保存 token、secret、持仓截图或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
+客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期或审查状态；持仓/自选按 User Key 读取，只作为个人上下文；不保存 token、secret、持仓截图或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 
 ## Telegram Bot MVP
 
