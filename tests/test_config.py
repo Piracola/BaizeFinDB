@@ -20,12 +20,14 @@ def test_settings_defaults() -> None:
 
 def test_settings_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RADAR_SCAN_INTERVAL_SECONDS", "120")
     monkeypatch.setenv("RADAR_CONTINUOUS_P1_TRIGGER_COUNT", "2")
     monkeypatch.setenv("RADAR_CONTINUITY_WINDOW_MINUTES", "15")
 
     settings = Settings()
 
     assert settings.app_env == "test"
+    assert settings.radar_scan_interval_seconds == 120
     assert settings.radar_continuous_p1_trigger_count == 2
     assert settings.radar_continuity_window_minutes == 15
 
