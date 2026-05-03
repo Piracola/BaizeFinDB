@@ -29,8 +29,10 @@ class BaizeFinDBClientApp:
         self.user_key = tk.StringVar(
             value=os.environ.get("BAIZEFINDB_USER_KEY", client_api.DEFAULT_USER_KEY),
         )
+        self.signal_id = tk.StringVar(value=os.environ.get("BAIZEFINDB_SIGNAL_ID", "1"))
         self.status_text = tk.StringVar(value="就绪")
         self.buttons: list[ttk.Button] = []
+        self._button_index = 0
 
         self._build_ui()
 
@@ -42,7 +44,7 @@ class BaizeFinDBClientApp:
         main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
         main.columnconfigure(1, weight=1)
-        main.rowconfigure(3, weight=1)
+        main.rowconfigure(4, weight=1)
 
         ttk.Label(main, text="Server URL").grid(row=0, column=0, sticky=tk.W, padx=(0, 8))
         url_entry = ttk.Entry(main, textvariable=self.server_url)
@@ -52,8 +54,12 @@ class BaizeFinDBClientApp:
         user_entry = ttk.Entry(main, textvariable=self.user_key)
         user_entry.grid(row=1, column=1, sticky=tk.EW)
 
+        ttk.Label(main, text="Signal ID").grid(row=2, column=0, sticky=tk.W, padx=(0, 8))
+        signal_entry = ttk.Entry(main, textvariable=self.signal_id, width=18)
+        signal_entry.grid(row=2, column=1, sticky=tk.W)
+
         button_frame = ttk.Frame(main)
-        button_frame.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
+        button_frame.grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
 
         self._add_button(button_frame, "检查状态", self.check_status)
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
@@ -61,10 +67,13 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "查看持仓", self.view_holdings)
         self._add_button(button_frame, "查看自选", self.view_watchlist)
         self._add_button(button_frame, "查看报告", self.view_reports)
+        self._add_button(button_frame, "查看日报", self.view_daily_report)
+        self._add_button(button_frame, "查看周报", self.view_weekly_report)
+        self._add_button(button_frame, "生成评分", self.view_signal_scores)
         self._add_button(button_frame, "打开 Web 面板", self.open_web_panel)
 
         self.output = scrolledtext.ScrolledText(main, wrap=tk.WORD, height=24)
-        self.output.grid(row=3, column=0, columnspan=2, sticky=tk.NSEW)
+        self.output.grid(row=4, column=0, columnspan=2, sticky=tk.NSEW)
         self.output.insert(
             tk.END,
             "BaizeFinDB Windows 客户端 MVP\n\n"
@@ -73,11 +82,13 @@ class BaizeFinDBClientApp:
         self.output.configure(state=tk.DISABLED)
 
         status_bar = ttk.Label(main, textvariable=self.status_text, anchor=tk.W)
-        status_bar.grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
+        status_bar.grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
 
     def _add_button(self, parent: ttk.Frame, label: str, command: Callable[[], None]) -> None:
         button = ttk.Button(parent, text=label, command=command)
-        button.pack(side=tk.LEFT, padx=(0, 8))
+        row, column = divmod(self._button_index, 5)
+        button.grid(row=row, column=column, sticky=tk.W, padx=(0, 8), pady=(0, 6))
+        self._button_index += 1
         self.buttons.append(button)
 
     def check_status(self) -> None:
@@ -137,6 +148,39 @@ class BaizeFinDBClientApp:
 
         self._run_worker("读取报告", worker)
 
+    def view_daily_report(self) -> None:
+        self._view_periodic_report("daily", "读取日报")
+
+    def view_weekly_report(self) -> None:
+        self._view_periodic_report("weekly", "读取周报")
+
+    def _view_periodic_report(self, period: str, action: str) -> None:
+        def worker() -> str:
+            report = client_api.fetch_periodic_report(
+                self._normalized_server_url(),
+                user_key=self._normalized_user_key(),
+                period=period,
+            )
+            return client_api.format_periodic_report(report)
+
+        self._run_worker(action, worker)
+
+    def view_signal_scores(self) -> None:
+        try:
+            signal_id = self._normalized_signal_id()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        def worker() -> str:
+            score_run = client_api.score_signal(
+                self._normalized_server_url(),
+                signal_id,
+            )
+            return client_api.format_scores(score_run)
+
+        self._run_worker(f"生成信号 #{signal_id} 评分", worker)
+
     def open_web_panel(self) -> None:
         try:
             url = client_api.build_url(self._normalized_server_url(), "/")
@@ -153,6 +197,20 @@ class BaizeFinDBClientApp:
     def _normalized_user_key(self) -> str:
         value = self.user_key.get().strip()
         return value or client_api.DEFAULT_USER_KEY
+
+    def _normalized_signal_id(self) -> int:
+        value = self.signal_id.get().strip()
+        try:
+            signal_id = int(value)
+        except ValueError as exc:
+            msg = "Signal ID 必须是正整数。"
+            raise ValueError(msg) from exc
+
+        if signal_id <= 0:
+            msg = "Signal ID 必须是正整数。"
+            raise ValueError(msg)
+
+        return signal_id
 
     def _run_worker(self, action: str, worker: Callable[[], str]) -> None:
         try:

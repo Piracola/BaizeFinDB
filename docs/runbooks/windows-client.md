@@ -10,8 +10,11 @@
 - 查看持仓：`GET /portfolio/holdings`。
 - 查看自选：`GET /portfolio/watchlist`。
 - 查看报告摘要：`GET /reports`。
+- 查看日报/周报汇总：`GET /reports/periodic`。
+- 生成并查看单信号综合评分：`POST /scores/signals/{signal_id}`。
 - 打开现有 Web 面板：`/`。
 - P0/P1/P2、生命周期、审查状态和计数都来自后端 API，客户端不重新计算。
+- 日报/周报和评分结果也来自后端，客户端不做本地评分或规则推断。
 - 不保存 token、secret、持仓截图或个人数据。
 - 不保存报告导出文件；报告正文继续在 Web/API 查看。
 - 不提供买卖建议、不接自动交易、不承诺收益。
@@ -69,6 +72,9 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |
 | 查看自选 | 调用 `/portfolio/watchlist`，按 User Key 显示个人自选。 |
 | 查看报告 | 调用 `/reports`，按 User Key 显示 quick/standard 报告摘要。 |
+| 查看日报 | 调用 `/reports/periodic?period=daily`，按 User Key 显示周期汇总。 |
+| 查看周报 | 调用 `/reports/periodic?period=weekly`，按 User Key 显示周期汇总。 |
+| 生成评分 | 读取窗口里的 Signal ID，调用 `/scores/signals/{signal_id}` 生成并显示 1d/3d/5d/10d 综合评分。 |
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
 
 ## 6. 常见问题

@@ -268,3 +268,115 @@ def test_format_reports_lists_report_summaries_without_body() -> None:
     assert "主线当前为 P0 观察信号。" in text
     assert "internal report body" not in text
     assert "不构成投资建议" in text
+
+
+def test_fetch_periodic_report_uses_user_key_and_period() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["timeout"] = timeout
+        return FakeResponse(
+            '{"report_type":"weekly","user_key":"telegram-1001","signal_count":2}',
+        )
+
+    report = client_api.fetch_periodic_report(
+        "http://localhost:8000",
+        user_key="telegram-1001",
+        period="weekly",
+        opener=opener,
+    )
+
+    assert report["report_type"] == "weekly"
+    assert calls == {
+        "url": (
+            "http://localhost:8000/reports/periodic?"
+            "user_key=telegram-1001&period=weekly"
+        ),
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
+def test_format_periodic_report_lists_backend_summary_and_counts() -> None:
+    text = client_api.format_periodic_report(
+        {
+            "report_type": "daily",
+            "period_start": "2026-05-03T00:00:00Z",
+            "period_end": "2026-05-03T23:59:59Z",
+            "summary": "今日有 1 条雷达信号进入观察。",
+            "signal_count": 1,
+            "report_count": 2,
+            "push_count": 1,
+            "priority_counts": {"P0": 0, "P1": 1, "P2": 0},
+            "top_subjects": [
+                {
+                    "signal_id": 9,
+                    "subject_name": "AI Applications",
+                    "priority": "P1",
+                    "lifecycle_stage": "developing",
+                    "review_status": "approved",
+                }
+            ],
+            "body_markdown": "internal periodic body",
+        },
+    )
+
+    assert "日报汇总" in text
+    assert "P0=0 / P1=1 / P2=0" in text
+    assert "信号：1 条 | 报告：2 份 | Telegram 推送：1 次" in text
+    assert "#9 [P1] AI Applications" in text
+    assert "审查：已通过" in text
+    assert "internal periodic body" not in text
+    assert "不构成投资建议" in text
+
+
+def test_score_signal_posts_to_score_endpoint() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["method"] = request.get_method()
+        calls["timeout"] = timeout
+        return FakeResponse(
+            '{"signal_id":7,"records":[{"window_days":1,"composite_score":82.5}]}',
+        )
+
+    score_run = client_api.score_signal(
+        "http://localhost:8000",
+        7,
+        opener=opener,
+    )
+
+    assert score_run["signal_id"] == 7
+    assert calls == {
+        "url": "http://localhost:8000/scores/signals/7",
+        "method": "POST",
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
+def test_format_scores_lists_score_windows_without_trading_instruction() -> None:
+    text = client_api.format_scores(
+        {
+            "signal_id": 7,
+            "records": [
+                {
+                    "window_days": 1,
+                    "score_status": "pending_window",
+                    "composite_score": 82.5,
+                },
+                {
+                    "window_days": 3,
+                    "score_status": "generated",
+                    "composite_score": 76,
+                },
+            ],
+        },
+    )
+
+    assert "信号 #7 综合评分" in text
+    assert "1d：82.50" in text
+    assert "窗口未结束" in text
+    assert "3d：76.00" in text
+    assert "不是价格回测或交易建议" in text
+    assert "买入" not in text

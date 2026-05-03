@@ -55,6 +55,16 @@ DEPENDENCY_LABELS = {
     "unknown": "未知",
 }
 
+PERIOD_LABELS = {
+    "daily": "日报",
+    "weekly": "周报",
+}
+
+SCORE_STATUS_LABELS = {
+    "generated": "已生成",
+    "pending_window": "窗口未结束",
+}
+
 
 class BaizeApiError(RuntimeError):
     """API request failure with optional parsed response payload."""
@@ -133,8 +143,39 @@ def get_json(
 
     url = build_url(base_url, path, query)
     request = Request(url, headers={"Accept": "application/json"}, method="GET")
-    open_url = opener or urlopen
+    return _send_json_request(request, url, timeout=timeout, opener=opener)
 
+
+def post_json(
+    base_url: str | None,
+    path: str,
+    *,
+    query: Mapping[str, str | int | None] | None = None,
+    json_body: JsonPayload | None = None,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    opener: UrlOpener | None = None,
+) -> JsonPayload:
+    """POST an API endpoint and parse the JSON response."""
+
+    url = build_url(base_url, path, query)
+    headers = {"Accept": "application/json"}
+    data = None
+    if json_body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(json_body).encode("utf-8")
+
+    request = Request(url, data=data, headers=headers, method="POST")
+    return _send_json_request(request, url, timeout=timeout, opener=opener)
+
+
+def _send_json_request(
+    request: Request,
+    url: str,
+    *,
+    timeout: int,
+    opener: UrlOpener | None,
+) -> JsonPayload:
+    open_url = opener or urlopen
     try:
         with open_url(request, timeout=timeout) as response:
             return _read_json(response, url)
@@ -247,6 +288,55 @@ def fetch_reports(
         msg = "/reports did not return a list"
         raise BaizeApiError(msg, payload=payload)
     return [_expect_object(item, "/reports item") for item in payload]
+
+
+def fetch_periodic_report(
+    base_url: str | None,
+    *,
+    user_key: str = DEFAULT_USER_KEY,
+    period: str = "daily",
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(
+        base_url,
+        "/reports/periodic",
+        query={
+            "user_key": _user_key(user_key),
+            "period": period,
+        },
+        opener=opener,
+    )
+    return _expect_object(payload, "/reports/periodic")
+
+
+def score_signal(
+    base_url: str | None,
+    signal_id: int,
+    *,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_signal_id = _positive_int(signal_id, "signal_id")
+    payload = post_json(
+        base_url,
+        f"/scores/signals/{normalized_signal_id}",
+        opener=opener,
+    )
+    return _expect_object(payload, "/scores/signals/{signal_id}")
+
+
+def fetch_signal_scores(
+    base_url: str | None,
+    signal_id: int,
+    *,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_signal_id = _positive_int(signal_id, "signal_id")
+    payload = get_json(
+        base_url,
+        f"/scores/signals/{normalized_signal_id}",
+        opener=opener,
+    )
+    return _expect_object(payload, "/scores/signals/{signal_id}")
 
 
 def format_health(payload: Mapping[str, Any]) -> str:
@@ -504,6 +594,97 @@ def format_reports(reports: Sequence[Mapping[str, Any]]) -> str:
     return _trim_text("\n".join(lines))
 
 
+def format_periodic_report(report: Mapping[str, Any]) -> str:
+    report_type = _text(report.get("report_type"), "daily")
+    period_label = PERIOD_LABELS.get(report_type, report_type)
+    counts = _mapping(report.get("priority_counts"))
+    top_subjects = _sequence(report.get("top_subjects"))
+
+    lines = [
+        f"{period_label}汇总",
+        (
+            f"周期：{_text(report.get('period_start'), '未返回')} 至 "
+            f"{_text(report.get('period_end'), '未返回')}"
+        ),
+        _text(report.get("summary"), "暂无摘要。"),
+        (
+            "优先级计数："
+            f"P0={_int_text(counts.get('P0'))} / "
+            f"P1={_int_text(counts.get('P1'))} / "
+            f"P2={_int_text(counts.get('P2'))}"
+        ),
+        (
+            f"信号：{_int_text(report.get('signal_count'))} 条 | "
+            f"报告：{_int_text(report.get('report_count'))} 份 | "
+            f"Telegram 推送：{_int_text(report.get('push_count'))} 次"
+        ),
+    ]
+
+    if top_subjects:
+        lines.extend(["", "重点主题："])
+        for subject in top_subjects[:REPORT_PREVIEW_LIMIT]:
+            subject_map = _mapping(subject)
+            lines.append(
+                (
+                    f"- #{_text(subject_map.get('signal_id'), '-')} "
+                    f"[{_text(subject_map.get('priority'), '-')}] "
+                    f"{_text(subject_map.get('subject_name'), '未命名主题')} | "
+                    f"生命周期：{_lifecycle_label(subject_map.get('lifecycle_stage'))} | "
+                    f"审查：{_review_label(subject_map.get('review_status'))}"
+                ),
+            )
+        if len(top_subjects) > REPORT_PREVIEW_LIMIT:
+            lines.append(f"已折叠 {len(top_subjects) - REPORT_PREVIEW_LIMIT} 个更多主题。")
+    else:
+        lines.append("重点主题：暂无。")
+
+    lines.extend(
+        [
+            "周期汇总由后端生成；Windows 客户端只展示摘要。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def format_scores(score_run: Mapping[str, Any]) -> str:
+    signal_id = _text(score_run.get("signal_id"), "-")
+    records = _sequence(score_run.get("records"))
+    if not records:
+        return _trim_text(
+            "\n".join(
+                [
+                    f"信号 #{signal_id} 综合评分",
+                    "暂无评分记录。可生成评分后再查看。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = [f"信号 #{signal_id} 综合评分"]
+    for record in records:
+        record_map = _mapping(record)
+        status = _text(record_map.get("score_status"), "")
+        lines.append(
+            (
+                f"- {_int_text(record_map.get('window_days'))}d："
+                f"{_score_text(record_map.get('composite_score'))} "
+                f"（{SCORE_STATUS_LABELS.get(status, _text(status, '-'))}）"
+            ),
+        )
+
+    lines.extend(
+        [
+            "评分综合优先级、生命周期、审查、证据和连续性；不是价格回测或交易建议。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
 def format_api_error(error: BaseException) -> str:
     if isinstance(error, BaizeApiError):
         details = [_text(error, "请求失败")]
@@ -617,6 +798,13 @@ def _ratio_text(value: Any) -> str:
         return _text(value, "未填")
 
 
+def _score_text(value: Any) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return _text(value, "-")
+
+
 def _enabled_label(value: Any) -> str:
     return "开启" if value is True else "关闭"
 
@@ -624,6 +812,20 @@ def _enabled_label(value: Any) -> str:
 def _user_key(value: str | None) -> str:
     normalized = (value or DEFAULT_USER_KEY).strip()
     return normalized or DEFAULT_USER_KEY
+
+
+def _positive_int(value: int, field: str) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        msg = f"{field} must be a positive integer"
+        raise ValueError(msg) from exc
+
+    if normalized <= 0:
+        msg = f"{field} must be a positive integer"
+        raise ValueError(msg)
+
+    return normalized
 
 
 def _trim_text(text: str) -> str:
