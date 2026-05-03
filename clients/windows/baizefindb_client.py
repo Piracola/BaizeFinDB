@@ -84,6 +84,7 @@ class BaizeFinDBClientApp:
         button_frame.grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
 
         self._add_button(button_frame, "检查状态", self.check_status)
+        self._add_button(button_frame, "运行状态", self.view_ops_overview)
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
         self._add_button(button_frame, "查看信号", self.view_signals)
         self._add_button(button_frame, "查看持仓", self.view_holdings)
@@ -128,6 +129,13 @@ class BaizeFinDBClientApp:
                 raise
 
         self._run_worker("检查 API 状态", worker)
+
+    def view_ops_overview(self) -> None:
+        def worker() -> str:
+            overview = client_api.fetch_ops_overview(self._normalized_server_url())
+            return client_api.format_ops_overview(overview)
+
+        self._run_worker("读取运行状态", worker)
 
     def refresh_radar(self) -> None:
         def worker() -> str:

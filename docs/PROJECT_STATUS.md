@@ -12,13 +12,13 @@ Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康�
 
 M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻不能单独触发主线 P0、风险事件 P0、生命周期、Review Agent 审查范围、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告预留约束、模型降级审计、Web 核心页面顺序和公开分享脱敏。
 
-Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
+Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、运行状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级、运行状态或评分，也不是完整安装包。
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、Provider、Radar 和 Telegram 状态接口 JSON 契约。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。
 
-持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
+持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能查看运行状态、维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
 
 报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记；报告发布前审查不受信号候选范围限制，确保发布前安全门始终执行；`deep` 已作为报告类型预留，但不会被 `/reports/from-signal` 自动或普通手动创建。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d v2 综合评分记录，已纳入 Provider 数据质量、信号时效性、评分档位和权重说明。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告、查看报告列表、生成日报/周报、查看单信号评分档位和组件明细，并维护 Telegram chat 绑定/白名单。
 
@@ -57,7 +57,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 验收项完成 | 静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check 已接入。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 验收项完成 | 静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计、运行状态汇总和只读 M5 smoke check 已接入。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查和只读 M5 smoke check）、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/scripts/postgres_restore.py` PostgreSQL 恢复脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -211,6 +211,6 @@ uv run uvicorn app.main:app --reload
 
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移和只读 M5 smoke check。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
-- 增加运行可观测性：`/ops/overview` 已汇总扫描耗时、失败率、推送结果、模型降级和数据质量状态；后续再接趋势图、告警和服务器监控。
+- 增加运行可观测性：`/ops/overview` 已汇总扫描耗时、失败率、推送结果、模型降级和数据质量状态，Web 状态面板和 Windows 客户端已展示该摘要；后续再接趋势图、告警和服务器监控。
 - 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

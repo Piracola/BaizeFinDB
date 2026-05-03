@@ -34,7 +34,7 @@
 - `/reports` 查看当前 `user_key` 的报告列表
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
-- 静态 Web 雷达终端工作台可查看雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单
+- 静态 Web 雷达终端工作台可查看运行状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -52,7 +52,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含
@@ -129,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
 
-客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、审查状态或评分；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
+客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、审查状态或评分；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 
 ## Telegram Bot MVP
 

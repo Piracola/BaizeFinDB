@@ -17,6 +17,7 @@
         </div>
       </div>
       <nav class="module-nav" aria-label="模块">
+        <button type="button" data-scroll-target="status-panel">OPS</button>
         <button type="button" data-scroll-target="overview-panel">RADAR</button>
         <button type="button" data-scroll-target="signals-panel">SIGNALS</button>
         <button type="button" data-scroll-target="detail-panel">DETAIL</button>
@@ -40,7 +41,7 @@
             type="text"
             autocomplete="off"
             spellcheck="false"
-            placeholder="radar / scan / fetch / portfolio / reports / daily / score / telegram"
+            placeholder="ops / radar / scan / fetch / portfolio / reports / daily / score / telegram"
           />
           <button id="command-run-button" type="button">执行</button>
         </div>
@@ -64,6 +65,8 @@
           <span id="last-updated" class="muted">尚未刷新</span>
         </div>
         <div id="ready-status" class="status-grid"></div>
+        <h3>运行状态</h3>
+        <div id="ops-overview" class="ops-grid"></div>
         <div id="action-message" class="message" role="status" aria-live="polite"></div>
       </section>
 

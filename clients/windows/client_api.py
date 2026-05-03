@@ -270,6 +270,21 @@ def fetch_health(base_url: str | None, *, opener: UrlOpener | None = None) -> Js
     return _expect_object(payload, "/health/ready")
 
 
+def fetch_ops_overview(
+    base_url: str | None,
+    *,
+    lookback_hours: int = 24,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(
+        base_url,
+        "/ops/overview",
+        query={"lookback_hours": _positive_int(lookback_hours, "lookback_hours")},
+        opener=opener,
+    )
+    return _expect_object(payload, "/ops/overview")
+
+
 def fetch_radar_overview(
     base_url: str | None,
     *,
@@ -490,6 +505,40 @@ def format_health(payload: Mapping[str, Any]) -> str:
             lines.append(f"{_dependency_name(name)}：{status}{suffix}")
 
     lines.extend(["", DISCLAIMER])
+    return _trim_text("\n".join(lines))
+
+
+def format_ops_overview(payload: Mapping[str, Any]) -> str:
+    radar = _mapping(payload.get("radar"))
+    lines = [
+        "运行状态",
+        f"统计窗口：最近 {_int_text(payload.get('lookback_hours'))} 小时",
+        (
+            "雷达扫描："
+            f"#{_text(radar.get('latest_scan_id'), '暂无')} "
+            f"{_ops_status_label(radar.get('latest_scan_status'))} | "
+            f"新鲜度：{_duration_text(radar.get('latest_scan_age_seconds'))} | "
+            f"{_stale_label(radar.get('is_latest_scan_stale'))}"
+        ),
+        (
+            "扫描失败率："
+            f"{_rate_text(radar.get('recent_scan_failure_rate'))} "
+            f"({_int_text(radar.get('recent_scan_failure_count'))}/"
+            f"{_int_text(radar.get('recent_scan_count'))})"
+        ),
+        _ops_count_text("Provider", _mapping(payload.get("provider_fetch"))),
+        _ops_count_text("数据质量", _mapping(payload.get("data_quality"))),
+        _ops_count_text("Telegram 推送", _mapping(payload.get("telegram_push"))),
+        _ops_count_text("模型调用", _mapping(payload.get("model_calls"))),
+    ]
+
+    lines.extend(
+        [
+            "该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。",
+            "",
+            DISCLAIMER,
+        ],
+    )
     return _trim_text("\n".join(lines))
 
 
@@ -895,6 +944,30 @@ def _sentiment_bias_label(value: Any) -> str:
     return labels.get(_text(value, "unknown"), _text(value, "unknown"))
 
 
+def _ops_count_text(name: str, summary: Mapping[str, Any]) -> str:
+    return (
+        f"{name}："
+        f"异常={_int_text(summary.get('unhealthy_count'))} / "
+        f"总数={_int_text(summary.get('total_count'))} / "
+        f"最新={_ops_status_label(summary.get('latest_status'))}"
+    )
+
+
+def _ops_status_label(value: Any) -> str:
+    labels = {
+        "success": "成功",
+        "failure": "失败",
+        "ok": "正常",
+        "degraded": "降级",
+        "failed": "失败",
+        "fallback": "降级切换",
+        "sent": "已发送",
+        "preview": "预览",
+        "skipped": "跳过",
+    }
+    return labels.get(_text(value, ""), _text(value, "暂无"))
+
+
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:
     if not bindings:
         return _trim_text(
@@ -1040,6 +1113,33 @@ def _number_text(value: Any) -> str:
         return "未填"
 
     return str(value)
+
+
+def _rate_text(value: Any) -> str:
+    try:
+        rate = float(value)
+    except (TypeError, ValueError):
+        return "-"
+
+    return f"{rate * 100:.1f}".rstrip("0").rstrip(".") + "%"
+
+
+def _duration_text(value: Any) -> str:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return "暂无"
+
+    if seconds < 60:
+        return f"{max(0, round(seconds))} 秒"
+    if seconds < 3600:
+        return f"{round(seconds / 60)} 分钟"
+
+    return f"{seconds / 3600:.1f}".rstrip("0").rstrip(".") + " 小时"
+
+
+def _stale_label(value: Any) -> str:
+    return "可能停滞" if value is True else "正常"
 
 
 def _signed_percent(value: Any) -> str:

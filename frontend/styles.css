@@ -272,6 +272,7 @@ h3 {
 }
 
 .status-grid,
+.ops-grid,
 .priority-grid,
 .lifecycle-grid,
 .sentiment-grid {
@@ -280,6 +281,7 @@ h3 {
   gap: 10px;
 }
 
+.ops-grid,
 .lifecycle-grid,
 .sentiment-grid {
   margin-top: 10px;
@@ -664,6 +666,7 @@ pre {
   }
 
   .status-grid,
+  .ops-grid,
   .priority-grid,
   .lifecycle-grid,
   .sentiment-grid,

@@ -759,6 +759,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 ## 11. 接 Telegram / Web / 报告时的推荐用法
 
+- 状态面板：用 `GET /health/ready` 和 `GET /ops/overview`，展示依赖就绪、扫描新鲜度、失败率、数据质量、推送和模型调用摘要。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。

@@ -104,6 +104,35 @@ def test_get_json_wraps_url_errors() -> None:
         client_api.get_json("http://localhost:8000", "/health", opener=opener)
 
 
+def test_fetch_ops_overview_uses_lookback_query() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        return FakeResponse(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-03T09:30:00Z",
+                    "lookback_hours": 12,
+                    "radar": {},
+                    "provider_fetch": {},
+                    "data_quality": {},
+                    "telegram_push": {},
+                    "model_calls": {},
+                },
+            ),
+        )
+
+    payload = client_api.fetch_ops_overview(
+        "http://localhost:8000",
+        lookback_hours=12,
+        opener=opener,
+    )
+
+    assert calls["url"] == "http://localhost:8000/ops/overview?lookback_hours=12"
+    assert payload["lookback_hours"] == 12
+
+
 def test_format_health_outputs_dependency_statuses() -> None:
     text = client_api.format_health(
         {
@@ -121,6 +150,52 @@ def test_format_health_outputs_dependency_statuses() -> None:
     assert "数据库：正常" in text
     assert "Redis：失败（redis down）" in text
     assert "不构成投资建议" in text
+
+
+def test_format_ops_overview_outputs_runtime_summary() -> None:
+    text = client_api.format_ops_overview(
+        {
+            "generated_at": "2026-05-03T09:30:00Z",
+            "lookback_hours": 24,
+            "radar": {
+                "latest_scan_id": 7,
+                "latest_scan_status": "success",
+                "latest_scan_age_seconds": 330,
+                "is_latest_scan_stale": False,
+                "recent_scan_count": 8,
+                "recent_scan_failure_count": 1,
+                "recent_scan_failure_rate": 0.125,
+            },
+            "provider_fetch": {
+                "total_count": 6,
+                "unhealthy_count": 1,
+                "latest_status": "failure",
+            },
+            "data_quality": {
+                "total_count": 6,
+                "unhealthy_count": 2,
+                "latest_status": "degraded",
+            },
+            "telegram_push": {
+                "total_count": 3,
+                "unhealthy_count": 0,
+                "latest_status": "sent",
+            },
+            "model_calls": {
+                "total_count": 2,
+                "unhealthy_count": 1,
+                "latest_status": "fallback",
+            },
+        },
+    )
+
+    assert "运行状态" in text
+    assert "统计窗口：最近 24 小时" in text
+    assert "雷达扫描：#7 成功 | 新鲜度：6 分钟 | 正常" in text
+    assert "扫描失败率：12.5% (1/8)" in text
+    assert "Provider：异常=1 / 总数=6 / 最新=失败" in text
+    assert "模型调用：异常=1 / 总数=2 / 最新=降级切换" in text
+    assert "只读取已有运行记录" in text
 
 
 def test_format_radar_overview_uses_backend_priority_counts() -> None:

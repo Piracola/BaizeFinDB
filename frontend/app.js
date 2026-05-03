@@ -38,6 +38,7 @@ const elements = {
   commandRunButton: document.querySelector("#command-run-button"),
   lastUpdated: document.querySelector("#last-updated"),
   readyStatus: document.querySelector("#ready-status"),
+  opsOverview: document.querySelector("#ops-overview"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
   lifecycleCounts: document.querySelector("#lifecycle-counts"),
@@ -88,11 +89,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function refreshAll() {
   setButtonsBusy(true);
-  showMessage("info", "正在刷新 API 状态、雷达总览和信号列表。");
+  showMessage("info", "正在刷新 API 状态、运行状态、雷达总览和信号列表。");
 
   const isReady = await loadReadyStatus();
   if (isReady) {
     await Promise.all([
+      loadOpsOverview(),
       loadOverview(),
       loadSignals(),
       loadPortfolio(),
@@ -118,7 +120,17 @@ async function loadReadyStatus() {
     return response.ok;
   } catch (error) {
     elements.readyStatus.innerHTML = emptyState(`无法连接 API：${formatError(error)}`);
+    renderOpsUnavailable("无法连接 API。");
     return false;
+  }
+}
+
+async function loadOpsOverview() {
+  try {
+    const overview = await fetchJson("/ops/overview?lookback_hours=24");
+    renderOpsOverview(overview);
+  } catch (error) {
+    renderOpsUnavailable(`运行状态暂不可用：${formatError(error)}`);
   }
 }
 
@@ -208,6 +220,7 @@ async function loadPeriodicReport(period, options = {}) {
 }
 
 function renderRadarUnavailable(reason) {
+  renderOpsUnavailable("依赖服务恢复后再读取运行状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
   elements.marketSentiment.innerHTML = emptyState("暂无市场情绪摘要。");
@@ -425,12 +438,14 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
   const [name] = command.split(/\s+/);
   const commands = {
+    ops: () => scrollToPanel("status-panel"),
+    status: () => scrollToPanel("status-panel"),
     radar: refreshAll,
     refresh: refreshAll,
     scan: runRadarScan,
@@ -454,7 +469,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -510,6 +525,61 @@ function renderReadyStatus(ok, payload) {
       `;
     })
     .join("");
+}
+
+function renderOpsOverview(overview) {
+  const radar = overview?.radar || {};
+  const providerFetch = overview?.provider_fetch || {};
+  const dataQuality = overview?.data_quality || {};
+  const telegramPush = overview?.telegram_push || {};
+  const modelCalls = overview?.model_calls || {};
+  const cards = [
+    {
+      name: "扫描新鲜度",
+      status: radar.is_latest_scan_stale ? "fail" : "ok",
+      value:
+        radar.latest_scan_age_seconds === null || radar.latest_scan_age_seconds === undefined
+          ? "暂无"
+          : formatDuration(radar.latest_scan_age_seconds),
+      detail: radar.is_latest_scan_stale ? "扫描可能停滞" : "扫描节奏正常",
+    },
+    {
+      name: "扫描失败率",
+      status: Number(radar.recent_scan_failure_count || 0) > 0 ? "fail" : "ok",
+      value: formatRate(radar.recent_scan_failure_rate),
+      detail: `近 24h ${radar.recent_scan_count ?? 0} 次 / 失败 ${radar.recent_scan_failure_count ?? 0}`,
+    },
+    opsCountCard("Provider", providerFetch),
+    opsCountCard("数据质量", dataQuality),
+    opsCountCard("推送", telegramPush),
+    opsCountCard("模型", modelCalls),
+  ];
+  elements.opsOverview.innerHTML = cards
+    .map((card) => {
+      return `
+        <article class="status-card ${card.status === "ok" ? "status-ok" : "status-fail"}">
+          <strong>${escapeHtml(card.name)}</strong>
+          <div>${escapeHtml(card.value)}</div>
+          <div class="muted">${escapeHtml(card.detail)}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderOpsUnavailable(reason) {
+  elements.opsOverview.innerHTML = emptyState(reason);
+}
+
+function opsCountCard(name, summary) {
+  const unhealthyCount = Number(summary?.unhealthy_count ?? 0);
+  const totalCount = Number(summary?.total_count ?? 0);
+  return {
+    name,
+    status: unhealthyCount > 0 ? "fail" : "ok",
+    value: `异常 ${unhealthyCount}`,
+    detail: `近 24h ${totalCount} 条 / 最新 ${label(summary?.latest_status)}`,
+  };
 }
 
 function renderPriorityCounts(counts) {
@@ -1027,6 +1097,12 @@ function label(value) {
     running: "运行中",
     success: "成功",
     failure: "失败",
+    failed: "失败",
+    degraded: "降级",
+    fallback: "降级切换",
+    sent: "已发送",
+    preview: "预览",
+    skipped: "跳过",
     no_data: "暂无数据",
     candidate: "候选",
     approved: "已通过",
@@ -1180,6 +1256,32 @@ function formatScore(value) {
   }
 
   return score.toFixed(2);
+}
+
+function formatRate(value) {
+  const rate = Number(value);
+  if (Number.isNaN(rate)) {
+    return "-";
+  }
+
+  return `${(rate * 100).toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+function formatDuration(value) {
+  const seconds = Number(value);
+  if (Number.isNaN(seconds)) {
+    return "-";
+  }
+
+  if (seconds < 60) {
+    return `${Math.max(0, Math.round(seconds))} 秒`;
+  }
+
+  if (seconds < 3600) {
+    return `${Math.round(seconds / 60)} 分钟`;
+  }
+
+  return `${(seconds / 3600).toFixed(1).replace(/\.0$/, "")} 小时`;
 }
 
 function formatDate(value) {
