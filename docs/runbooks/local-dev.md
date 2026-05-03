@@ -1,0 +1,275 @@
+# 本地开发 Runbook
+
+这份文档用于把一台新机器或一个新克隆仓库跑到可开发状态，并说明常见调试动作。默认环境是 Windows + PowerShell + Docker Desktop Linux engine。
+
+## 1. 前置要求
+
+| 工具 | 要求 | 验证命令 |
+| --- | --- | --- |
+| Python | 3.12.x | `python --version` |
+| uv | 已安装 | `uv --version` |
+| Docker Desktop | Linux engine running | `docker version` |
+| Git | 已安装 | `git --version` |
+
+Docker Desktop 需要启用 Linux engine。验证输出里应看到：
+
+```text
+Context: desktop-linux
+Server: Docker Desktop
+OS/Arch: linux/amd64
+```
+
+## 2. 首次启动
+
+在仓库根目录执行：
+
+```powershell
+uv python install 3.12
+uv sync --dev
+Copy-Item .env.example .env
+docker compose up -d postgres redis
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
+
+启动后检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/health/ready
+```
+
+期望：
+
+```json
+{
+  "status": "ready",
+  "service": "BaizeFinDB",
+  "checks": {
+    "database": {"status": "ok"},
+    "redis": {"status": "ok"}
+  }
+}
+```
+
+## 3. 日常开发启动顺序
+
+推荐每次开发按这个顺序：
+
+```powershell
+docker compose up -d postgres redis
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
+
+另开一个 PowerShell 跑质量检查：
+
+```powershell
+uv run pytest
+uv run ruff check .
+uv run alembic heads
+uv run alembic upgrade head --sql
+```
+
+## 4. 数据采集到雷达扫描
+
+### 4.1 验证 AKShare 接口，不写数据库
+
+```powershell
+uv run python infra/scripts/verify_akshare_minimal.py
+```
+
+只验证某个接口：
+
+```powershell
+uv run python infra/scripts/verify_akshare_minimal.py --endpoint stock_zh_a_spot_em
+```
+
+### 4.2 采集最小 AKShare 数据并写入数据库
+
+```powershell
+uv run python infra/scripts/collect_akshare_minimal.py
+```
+
+也可以走 API：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/minimal
+```
+
+### 4.3 基于最新快照运行雷达扫描
+
+```powershell
+uv run python infra/scripts/run_radar_scan.py
+```
+
+也可以走 API：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/scans/run
+```
+
+### 4.4 查看扫描结果
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/radar/scans/latest
+Invoke-RestMethod http://127.0.0.1:8000/radar/overview
+Invoke-RestMethod http://127.0.0.1:8000/radar/signals
+```
+
+## 5. Celery Worker / Beat
+
+当前 Celery 已有配置壳，Redis 用作 broker/result。需要调试后台任务时再启动：
+
+```powershell
+uv run celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO
+uv run celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
+```
+
+如果只是手动采集和扫描，可以先不用 Celery，直接跑 `infra/scripts` 或 API。
+
+## 6. 数据库操作
+
+### 6.1 查看容器状态
+
+```powershell
+docker compose ps
+```
+
+期望 `postgres` 和 `redis` 都是 `healthy`。
+
+### 6.2 进入 PostgreSQL
+
+```powershell
+docker compose exec postgres psql -U baizefindb -d baizefindb
+```
+
+常用 SQL：
+
+```sql
+\dt
+select * from alembic_version;
+select id, endpoint, status, row_count, created_at from provider_fetch_logs order by id desc limit 10;
+select id, status, started_at, finished_at from radar_scan_batches order by id desc limit 10;
+```
+
+### 6.3 重置本地数据库
+
+会删除本地 Docker volume 内的数据，只在开发环境使用：
+
+```powershell
+docker compose down -v
+docker compose up -d postgres redis
+uv run alembic upgrade head
+```
+
+## 7. Redis 操作
+
+进入 Redis：
+
+```powershell
+docker compose exec redis redis-cli
+```
+
+清空本地 Redis：
+
+```powershell
+docker compose exec redis redis-cli FLUSHALL
+```
+
+## 8. 常见故障
+
+### Docker Desktop 卡在 starting
+
+先确认虚拟化已启用、Docker Desktop 是 Linux engine。然后重启 Docker Desktop。恢复后验证：
+
+```powershell
+docker desktop status
+docker desktop engine ls
+docker version
+```
+
+### 5432 或 6379 端口被占用
+
+查看占用：
+
+```powershell
+Get-NetTCPConnection -LocalPort 5432,6379 -State Listen
+```
+
+如果本机已有 PostgreSQL/Redis，建议先停掉本机服务，保持项目使用 Docker Compose 的固定端口。
+
+### `/health` 正常但 `/health/ready` 不正常
+
+含义：
+
+- API 进程能启动。
+- PostgreSQL 或 Redis 至少一个依赖不可用。
+
+排查顺序：
+
+```powershell
+docker compose ps
+docker compose logs --tail=80 postgres
+docker compose logs --tail=80 redis
+uv run alembic heads
+uv run alembic upgrade head
+```
+
+### AKShare 采集失败
+
+AKShare 接口可能受网络、节假日、字段变更影响。先跑不写库验证：
+
+```powershell
+uv run python infra/scripts/verify_akshare_minimal.py
+```
+
+如果单个接口失败，Provider 采集应记录 `failure` 和数据质量标签，不应该拖垮主服务。
+
+## 9. 开发完成前检查
+
+每次提交前至少跑：
+
+```powershell
+uv run pytest
+uv run ruff check .
+uv run alembic heads
+uv run alembic upgrade head --sql
+```
+
+涉及数据库变更时额外检查：
+
+- 新模型是否有迁移。
+- 迁移是否能从空库执行。
+- 回滚方案是否清楚，至少能通过本地 `docker compose down -v` 重建。
+
+涉及公开分享、报告、Telegram、Web 输出时额外检查：
+
+- 是否复用 `share-preview` 或同等级审查。
+- 是否隐藏原始 URL、域名、原文摘录、内部证据细节。
+- 是否避免强买卖、保证收益、诱导交易语言。
+
+### 9.1 模块阶段完成后的 git 版本管理
+
+后续 AI 协作默认策略：模块设计或开发阶段完成后，AI 自动做 git commit，不再每次向用户确认；但不自动 push。
+
+不要求无边界的零散编辑都提交；但即使是小的模块化更新，只要形成明确阶段边界，也必须同步更新相关开发文档并提交 git commit。执行顺序：
+
+1. 先跑对应质量检查，例如 `uv run pytest`、`uv run ruff check .`、`uv run alembic heads`、`uv run alembic upgrade head --sql`，按本次模块实际影响选择。
+2. 再查看 `git status`，确认只包含本模块相关变更。
+3. 检查 staged 文件，确认没有误提交 `.env`、密钥、个人数据、原始付费数据、持仓截图、报告导出等敏感文件。
+4. 如发现未识别的脏文件或疑似用户手工改动，不能自动纳入提交；要隔离并说明。
+5. 按模块边界提交独立 git commit，不把多个无关模块混成一个大提交。
+
+commit message 要能看懂模块和动作，例如：
+
+- `docs(prd): refine radar mvp`
+- `feat(radar): add scan scheduler`
+- `test(radar): cover p1 continuity`
+- `docs(dev): add git workflow`
+
+文档、迁移、测试和代码要随模块一起提交；如果只完成设计文档，也要提交文档版本。
+
+大模块按阶段拆成多个 commit：设计文档 commit、数据模型/迁移 commit、业务实现 commit、测试/文档 commit。
+
+这是长期开发约束，适用于后续 AI 协作。

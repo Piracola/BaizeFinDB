@@ -4,6 +4,14 @@
 
 当前状态详见 [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)。
 
+## 开发文档
+
+- [开发文档导航](docs/README.md)
+- [本地开发 Runbook](docs/runbooks/local-dev.md)
+- [当前 API 文档](docs/api/current-api.md)
+- [当前数据模型说明](docs/specs/current-data-model.md)
+- [M5 A 股 5 分钟资金主线雷达 MVP PRD](docs/prd/m5-next-step.md)
+
 ## 当前包含
 
 - FastAPI 后端入口
@@ -49,7 +57,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5+ | 未开始 | Telegram、报告、Web、日报周报后置。 |
+| M5 | 未开始 | 下一阶段基线是 A 股 5 分钟资金主线雷达闭环；Telegram、Web、报告、持仓自选、日报周报和评分围绕雷达结果展开。 |
 
 ## 本地启动
 
@@ -78,6 +86,8 @@ uv run uvicorn app.main:app --reload
 - `http://127.0.0.1:8000/health/ready`
 
 如果 PostgreSQL / Redis 还没启动，`/health` 仍会正常，`/health/ready` 会显示依赖未就绪。
+
+更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
 ## 启动依赖服务
 
@@ -134,4 +144,6 @@ uv run alembic upgrade head --sql
 
 ## 开发边界
 
-当前已完成 M4 轻量审查层闭环：只基于已入库 AKShare 快照生成候选信号、总览、规则审查结果和脱源脱敏分享预览，连续 P1 只标记为快报候选；不接自动交易，不提供交易建议。Telegram、报告和 Web 仍未开始，进入前必须复用审查和分享预检。
+当前已完成 M4 轻量审查层闭环：只基于已入库 AKShare 快照生成候选信号、总览、规则审查结果和脱源脱敏分享预览，连续 P1 只标记为快报候选；不接自动交易，不提供交易建议。M5 的真实 MVP 是 A 股 5 分钟资金主线雷达，Telegram、Web、报告、持仓自选、日报周报和评分只消费雷达结果或向后端发命令。
+
+当前真实数据表与未来规划表的边界见 [docs/specs/current-data-model.md](docs/specs/current-data-model.md)。进入 M5 前先阅读 [docs/prd/m5-next-step.md](docs/prd/m5-next-step.md)，按雷达优先顺序推进，不再按 Telegram/报告/Web 三选一拆分下一阶段。

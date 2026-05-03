@@ -1,0 +1,181 @@
+# 当前数据模型说明
+
+本文档区分“当前已经实现的数据表”和“规划中的未来数据表”，避免后续开发时误把路线图当成现状。
+
+## 1. 当前真实数据表
+
+当前 Alembic head：`202604300004`。
+
+| 表 | 阶段 | 作用 |
+| --- | --- | --- |
+| `schema_health_checks` | M1 | 数据库连通和 schema 健康检查预留表 |
+| `market_snapshots` | M2 | 保存 Provider 标准化后的市场快照 |
+| `provider_fetch_logs` | M2 | 记录每次 Provider 拉取状态、错误、质量摘要 |
+| `data_quality_checks` | M2 | 记录数据质量检查结果 |
+| `radar_scan_batches` | M3 | 记录每次雷达扫描批次、状态、摘要、失败原因 |
+| `radar_signals` | M3 | 保存候选信号、优先级、生命周期、审查状态 |
+| `signal_evidences` | M3 | 保存信号证据链、置信度、新鲜度和分享策略 |
+| `radar_signal_reviews` | M4 | 保存单个雷达信号的审查结果和理由 |
+
+## 2. 当前关系
+
+```text
+market_snapshots
+  <- provider_fetch_logs.raw_snapshot_id
+  <- data_quality_checks.snapshot_id
+
+provider_fetch_logs
+  <- data_quality_checks.fetch_log_id
+
+radar_scan_batches
+  <- radar_signals.batch_id
+
+radar_signals
+  <- signal_evidences.signal_id
+  <- radar_signal_reviews.signal_id
+```
+
+## 3. 当前核心枚举
+
+### Provider
+
+| 枚举 | 值 |
+| --- | --- |
+| `ProviderStatus` | `success`、`failure` |
+| `DataQualityStatus` | `ok`、`degraded`、`failed` |
+
+### Radar
+
+| 枚举 | 值 |
+| --- | --- |
+| `RadarPriority` | `P0`、`P1`、`P2` |
+| `RadarScanStatus` | `running`、`success`、`no_data`、`failure` |
+| `RadarReviewStatus` | `candidate`、`approved`、`blocked`、`needs_human_review` |
+| `RadarSignalShareStatus` | `ready`、`blocked` |
+| `RadarLifecycleStage` | `ignition`、`developing`、`divergence`、`returning`、`climax`、`fading`、`extinguished` |
+
+## 4. 当前表职责边界
+
+### Provider 数据表
+
+Provider 表只回答：
+
+- 哪个数据源被拉取。
+- 哪个 endpoint 被拉取。
+- 拉取成功还是失败。
+- 数据新鲜度和置信度如何。
+- 标准化后保留了什么摘要和行数据。
+
+Provider 表不负责：
+
+- 直接生成 P0/P1/P2。
+- 决定是否推送。
+- 生成报告。
+
+### Radar 数据表
+
+Radar 表只回答：
+
+- 哪次扫描产生了哪些信号。
+- 每个信号属于哪个板块/概念/标的。
+- 信号优先级、生命周期、证据链是什么。
+- 当前审查状态是什么。
+
+Radar 表不负责：
+
+- 保存用户持仓。
+- 保存 Telegram 会话。
+- 保存报告正文。
+- 保存模型调用日志。
+
+### Governance 审查表
+
+审查表只回答：
+
+- 某个信号是否通过轻量规则审查。
+- 为什么通过、阻断或需要人工复核。
+- 使用了哪个审查版本。
+
+审查表不负责：
+
+- 发送消息。
+- 生成公开页面。
+- 保存完整 LLM prompt。
+
+## 5. 当前尚未实现但路线图中出现的表
+
+这些表出现在总文档规划里，但当前代码和迁移里还没有实现。开发前必须先写 PRD、模型和迁移。
+
+M5 的数据模型基线已经修正为 A 股 5 分钟资金主线雷达 MVP：
+
+- 雷达主数据共享，不按用户复制。
+- 持仓、自选、报告、Telegram 会话、导出和分享按用户隔离。
+- 持仓成本价和仓位比例可选。
+- 持仓/自选只影响个人优先级，不改变市场主线 P0/P1/P2。
+- PostgreSQL + Redis 是 MVP 数据底座；vector DB、pgvector、Qdrant 后置。
+
+| 规划表 | 所属未来阶段 | 预期用途 |
+| --- | --- | --- |
+| `users` | M5 | 单用户/白名单身份、个人数据隔离和入口绑定前置 |
+| `telegram_bindings` | M5 | Telegram 用户绑定、白名单和 allowed chat 管理 |
+| `instruments` | M5 | 标的主数据，用于个股异动回推和持仓/自选关联 |
+| `sectors` | M5 | 行业/板块主数据，用于资金主线聚合 |
+| `concepts` | M5 | 概念/主题主数据，用于资金主线聚合 |
+| `signal_lifecycle_events` | M5 | 更细粒度生命周期事件，和 P0/P1/P2 强度等级分离 |
+| `evidence_items` | M6+ | 更通用的证据对象 |
+| `portfolios` | M5 | 手动持仓；成本价、仓位比例可选 |
+| `watchlists` | M5 | 自选列表，只影响个人优先级 |
+| `focus_items` | M5 | 临时关注、备注和 free-chat 低风险数据修改 |
+| `reports` | M5 | quick/standard/deep 报告正文和元数据；deep 只手动触发 |
+| `report_exports` | M5+ | HTML/PDF/Markdown 导出记录，M5 可先只保留 Markdown/HTML |
+| `report_reviews` | M5 | 所有报告发布前审查 |
+| `model_call_logs` | M5+ | 模型调用日志；默认不保存完整 raw prompt，debug 模式才保存完整上下文 |
+| `agent_task_logs` | M5+ | Agent 任务日志、显式降级和 fallback 记录 |
+| `tool_call_logs` | M5+ | Telegram/Web/Agent 工具调用日志 |
+| `push_logs` | M5 | Telegram/其他渠道折叠推送记录 |
+| `audit_events` | M5 | 用户操作、二次确认和系统审计 |
+| `score_records` | M5 | 1d/3d/5d/10d 基础综合评分 |
+| `debug_cases` | M8+ | 调试案例库 |
+
+## 6. 新增数据表规则
+
+新增任何表之前，先回答：
+
+1. 这个表服务哪个阶段的闭环？
+2. 是否已有表能满足需求？
+3. 是否涉及公开分享或个人数据？
+4. 是否需要审计字段？
+5. 是否需要唯一约束或索引？
+6. 是否需要迁移旧数据？
+7. 是否会错误影响市场主线等级？
+8. 是否需要用户隔离或白名单限制？
+
+必须同步完成：
+
+- SQLAlchemy model。
+- Alembic migration。
+- 至少一个测试或迁移验证。
+- 文档更新。
+
+涉及持仓、自选、报告、推送、评分和分享的表，还必须检查：
+
+- 个人字段不得进入公开分享 payload。
+- 成本价、仓位比例必须可为空。
+- 用户维度只能影响个人优先级，不能覆盖雷达主数据等级。
+- 高风险操作需要二次确认和审计事件。
+
+## 7. 修改现有表规则
+
+修改现有表前先搜索引用：
+
+```powershell
+Select-String -Path backend\app\**\*.py,tests\**\*.py -Pattern "field_or_table_name"
+```
+
+重点检查：
+
+- Pydantic schema 是否同步。
+- API response 是否变化。
+- golden case 是否需要更新。
+- 分享脱敏是否受影响。
+- Alembic 是否能从空库执行。

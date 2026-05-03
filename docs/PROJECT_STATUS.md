@@ -1,6 +1,6 @@
 # BaizeFinDB Project Status
 
-更新日期：2026-04-30
+更新日期：2026-05-03
 
 ## 当前阶段
 
@@ -10,6 +10,27 @@
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
+下一阶段开发基线已修正为 **A 股 5 分钟资金主线雷达 MVP**。Telegram、Web、报告、持仓自选、日报周报和评分都围绕雷达结果展开，不再按 Telegram / 报告 / Web 三选一推进。
+
+当前长期开发规范：
+
+- 后续 AI 协作默认在模块设计或开发阶段完成后自动做 git commit，不再每次向用户确认；不自动 push。
+- 即使是小的模块化更新，只要形成明确阶段边界，也要同步更新相关开发文档并提交 git commit。
+- 提交前先跑对应质量检查，再查看 `git status`，并检查 staged 文件，确认没有误提交 `.env`、密钥、个人数据、原始付费数据、持仓截图、报告导出等敏感文件。
+- commit 仍按模块边界拆分，不把多个无关模块混成一个大提交。
+- commit message 要能看懂模块和动作，例如 `docs(prd): refine radar mvp`、`feat(radar): add scan scheduler`、`test(radar): cover p1 continuity`、`docs(dev): add git workflow`。
+- 文档、迁移、测试和代码随模块一起提交；只完成设计文档时，也要提交文档版本。
+- 大模块拆成设计文档、数据模型/迁移、业务实现、测试/文档等多个 commit。
+- 发现未识别的脏文件或疑似用户手工改动时，不能自动纳入提交，要隔离并说明。
+
+## 开发文档入口
+
+- [开发文档导航](README.md)
+- [本地开发 Runbook](runbooks/local-dev.md)
+- [当前 API 文档](api/current-api.md)
+- [当前数据模型说明](specs/current-data-model.md)
+- [M5 A 股 5 分钟资金主线雷达 MVP PRD](prd/m5-next-step.md)
+
 ## 已完成
 
 | 阶段 | 状态 | 内容 |
@@ -18,7 +39,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5+ Telegram / 报告 / Web | 未开始 | 进入前必须复用 M4 审查和分享预检，不提前接自动交易或强买卖口径。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 未开始 | 先补雷达主线闭环、持仓自选、折叠推送、quick/standard 报告、Web 四页、日报周报和基础评分；Telegram/Web/报告只消费后端结果。 |
 
 ## 当前可用 API
 
@@ -50,6 +71,8 @@ Radar：
 
 ## 当前数据表
 
+以下为当前已经由 Alembic 迁移创建的真实数据表。路线图中的未来表请不要当成已实现能力，详情见 [specs/current-data-model.md](specs/current-data-model.md)。
+
 - `schema_health_checks`
 - `market_snapshots`
 - `provider_fetch_logs`
@@ -62,9 +85,12 @@ Radar：
 ## 当前规则能力
 
 - 基于板块/概念涨幅、上涨家数、下跌家数、联动宽度生成 P0/P1/P2 候选信号。
+- M5 规则基线要求板块/主题/概念权重大于单票异动；单票异动优先用于反推板块/概念/风险。
+- 主线 P0 不能只由新闻触发，必须有资金、板块联动或市场情绪确认；风险 P0 可由重大公告、监管或黑天鹅单独触发。
 - 基于涨幅和联动宽度初判生命周期：`ignition`、`developing`、`climax`。
+- 强度等级和生命周期必须分开处理，AI 只能解释、补证据和提示分歧，不能覆盖规则定级。
 - 根据同一板块/概念的历史信号记录连续性。
-- 30 分钟内连续 3 次 P1 会标记为 `quick_report_candidate`。
+- 当前实现为 30 分钟窗口内连续 3 次 P1 会标记为 `quick_report_candidate`；M5 设计基线里的 2-3 次触发口径还需要后续实现和测试确认。
 - 前后扫描走弱会记录生命周期转移，例如 `climax_to_divergence`。
 - 总览 API 基于最新扫描生成当前活跃信号、P0/P1/P2 聚合和按板块/概念去重视图。
 - 雷达扫描 summary、信号 metrics 和 evidence details 会携带 Provider 数据质量摘要。
@@ -100,8 +126,15 @@ uv run uvicorn app.main:app --reload
 
 ## 下一步
 
-建议进入 **M5 最小入口或报告小闭环**，但范围继续保持轻量：
+建议进入 **M5 A 股 5 分钟资金主线雷达 MVP**，范围继续保持轻量：
 
-- Telegram / 报告 / Web 三者选一个最小闭环先做，不并行铺大面。
-- 所有发布类输出都先走审查和分享预检。
+- 先巩固后端雷达计算、5 分钟调度、状态记录、P0/P1/P2 规则、生命周期和 P2 7 天观察。
+- 补手动持仓/自选；成本价和仓位比例可选，只影响个人优先级，不改变市场主线等级。
+- Telegram 推送按 P0/P1/P2 折叠汇总；P0 快速提醒后后台生成 standard report，P1 连续触发生成 quick report 候选。
+- Web MVP 页面顺序为雷达总览、信号详情、持仓/自选、报告列表。
+- 报告分 quick/standard/deep；自动最多 quick/standard，deep 只手动触发。
+- 加入日报、周报和 1d/3d/5d/10d 基础综合评分。
+- 所有发布类输出都先走审查和分享预检，公开分享默认脱敏脱源。
 - 继续补交易诱导词正反例，按真实误报再调规则。
+
+M5 可执行拆分见 [prd/m5-next-step.md](prd/m5-next-step.md)。当前建议按雷达优先顺序推进，不再把 Telegram、报告、Web 作为并列备选入口。
