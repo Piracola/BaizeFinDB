@@ -86,7 +86,7 @@ Provider 表只回答：
 - 数据新鲜度和置信度如何。
 - 标准化后保留了什么摘要和行数据。
 - `market_snapshots` 当前也可承载轻量风险事件快照，例如 `risk_events`、`announcement_events`、`regulatory_events`、`black_swan_events`；普通 `news_flash` 不会被雷达主线规则直接升为 P0。
-- Tushare `stock_basic`、`anns_d` 和 `stock_company` 当前会复用 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks` 写入证券主数据、公告快照、公司信息快照、抓取日志和质量记录。公告 `url` 只允许留在内部 Provider 快照中，不能进入公开分享 payload。
+- Tushare `stock_basic`、`anns_d` 和 `stock_company` 当前会复用 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks` 写入证券主数据、公告快照、公司信息快照、抓取日志和质量记录。`anns_d` 快照中的明显重大风险公告标题可被后续雷达扫描映射为 risk P0；普通公告不会生成信号。公告 `url` 只允许留在内部 Provider 快照中，不能进入公开分享 payload。
 
 Provider 表不负责：
 

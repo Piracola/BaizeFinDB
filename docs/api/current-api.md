@@ -228,7 +228,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/sto
 
 ### `POST /providers/tushare/fetch/announcements`
 
-用途：手动触发 Tushare `anns_d` 公告抓取，写入 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`。该接口不进入 Celery 5 分钟调度，也不会直接生成风险 P0；后续需要在真实样例稳定后再接风险事件映射。
+用途：手动触发 Tushare `anns_d` 公告抓取，写入 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`。该接口不进入 Celery 5 分钟调度，也不会在抓取阶段直接生成风险 P0；后续运行雷达扫描时，明显重大风险公告标题会按 risk P0 候选映射，普通公告不会生成信号。
 
 ```powershell
 Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/announcements?ann_date=20260503"

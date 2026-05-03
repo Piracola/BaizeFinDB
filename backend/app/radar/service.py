@@ -38,6 +38,7 @@ RISK_EVENT_SOURCE_ENDPOINTS = (
     "regulatory_events",
     "black_swan_events",
 )
+TUSHARE_ANNOUNCEMENT_SOURCE_ENDPOINTS = ("anns_d",)
 SENTIMENT_SOURCE_ENDPOINTS = (
     "stock_zt_pool_em",
     "stock_zt_pool_dtgc_em",
@@ -46,12 +47,34 @@ SENTIMENT_SOURCE_ENDPOINTS = (
 RADAR_SOURCE_ENDPOINTS = (
     MARKET_MAINLINE_SOURCE_ENDPOINTS
     + RISK_EVENT_SOURCE_ENDPOINTS
+    + TUSHARE_ANNOUNCEMENT_SOURCE_ENDPOINTS
     + SENTIMENT_SOURCE_ENDPOINTS
 )
 RADAR_SOURCE_PROVIDER_NAMES = ("akshare", "manual")
 MAX_SIGNALS_PER_SCAN = 20
 P2_OBSERVATION_WINDOW_DAYS = 7
 MAX_ERROR_MESSAGE_LENGTH = 300
+MAJOR_RISK_ANNOUNCEMENT_KEYWORDS = (
+    "立案调查",
+    "行政处罚事先告知",
+    "重大违法",
+    "退市风险",
+    "终止上市",
+    "暂停上市",
+    "强制退市",
+    "无法表示意见",
+    "被实施退市风险警示",
+    "重大诉讼",
+    "债务逾期",
+    "资金占用",
+    "违规担保",
+)
+CRITICAL_RISK_ANNOUNCEMENT_KEYWORDS = (
+    "终止上市",
+    "强制退市",
+    "重大违法",
+    "无法表示意见",
+)
 
 
 @dataclass(frozen=True)
@@ -283,7 +306,7 @@ async def _load_latest_source_snapshots(session: AsyncSession) -> list[MarketSna
         statement = (
             select(MarketSnapshot)
             .where(
-                MarketSnapshot.provider_name.in_(RADAR_SOURCE_PROVIDER_NAMES),
+                MarketSnapshot.provider_name.in_(_source_provider_names(endpoint)),
                 MarketSnapshot.endpoint == endpoint,
             )
             .order_by(desc(MarketSnapshot.collected_at), desc(MarketSnapshot.id))
@@ -294,6 +317,13 @@ async def _load_latest_source_snapshots(session: AsyncSession) -> list[MarketSna
             snapshots.append(snapshot)
 
     return snapshots
+
+
+def _source_provider_names(endpoint: str) -> tuple[str, ...]:
+    if endpoint in TUSHARE_ANNOUNCEMENT_SOURCE_ENDPOINTS:
+        return ("tushare",)
+
+    return RADAR_SOURCE_PROVIDER_NAMES
 
 
 async def _load_snapshot_quality_summaries(
@@ -729,6 +759,40 @@ def _risk_row_metrics(row: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _announcement_risk_row_metrics(row: dict[str, object]) -> dict[str, object]:
+    title = _text(row.get("title") or row.get("announcement_title"), "")
+    matched_keywords = [
+        keyword for keyword in MAJOR_RISK_ANNOUNCEMENT_KEYWORDS if keyword in title
+    ]
+    critical_matched = any(
+        keyword in title for keyword in CRITICAL_RISK_ANNOUNCEMENT_KEYWORDS
+    )
+
+    base_metrics = {
+        "source_label": "tushare:anns_d",
+        "announcement_title": title,
+        "announcement_keywords": matched_keywords,
+        "ts_code": _text(row.get("ts_code"), ""),
+        "stock_name": _text(row.get("name"), ""),
+        "ann_date": _text(row.get("ann_date"), ""),
+    }
+
+    if not matched_keywords:
+        return {
+            **base_metrics,
+            "risk_event_type": "",
+            "severity": "",
+            "severity_score": 0.0,
+        }
+
+    return {
+        **base_metrics,
+        "risk_event_type": "major_announcement",
+        "severity": "critical" if critical_matched else "major",
+        "severity_score": 0.92 if critical_matched else 0.88,
+    }
+
+
 def _classify_snapshot_row(
     snapshot: MarketSnapshot,
     row: dict[str, object],
@@ -737,6 +801,10 @@ def _classify_snapshot_row(
 ) -> tuple[dict[str, object], RadarRuleResult | None]:
     if _is_risk_event_snapshot(snapshot):
         metrics = _risk_row_metrics(row)
+        return metrics, classify_risk_event(metrics)
+
+    if _is_tushare_announcement_snapshot(snapshot):
+        metrics = _announcement_risk_row_metrics(row)
         return metrics, classify_risk_event(metrics)
 
     if _is_market_mainline_snapshot(snapshot):
@@ -750,7 +818,7 @@ def _classify_snapshot_row(
 
 
 def _candidate_subject_name(snapshot: MarketSnapshot, row: dict[str, object]) -> str:
-    if _is_risk_event_snapshot(snapshot):
+    if _is_risk_source_snapshot(snapshot):
         return _text(
             row.get("event_name")
             or row.get("announcement_title")
@@ -767,6 +835,7 @@ def _candidate_subject_code(row: dict[str, object]) -> str | None:
         row.get("sector_code")
         or row.get("event_id")
         or row.get("announcement_id")
+        or row.get("ts_code")
         or row.get("symbol")
     )
 
@@ -862,12 +931,23 @@ def _is_risk_event_snapshot(snapshot: MarketSnapshot) -> bool:
     return snapshot.endpoint in RISK_EVENT_SOURCE_ENDPOINTS
 
 
+def _is_tushare_announcement_snapshot(snapshot: MarketSnapshot) -> bool:
+    return (
+        snapshot.provider_name == "tushare"
+        and snapshot.endpoint in TUSHARE_ANNOUNCEMENT_SOURCE_ENDPOINTS
+    )
+
+
+def _is_risk_source_snapshot(snapshot: MarketSnapshot) -> bool:
+    return _is_risk_event_snapshot(snapshot) or _is_tushare_announcement_snapshot(snapshot)
+
+
 def _is_sentiment_snapshot(snapshot: MarketSnapshot) -> bool:
     return snapshot.endpoint in SENTIMENT_SOURCE_ENDPOINTS
 
 
 def _is_risk_event_candidate(candidate: SignalCandidate) -> bool:
-    return _is_risk_event_snapshot(candidate.snapshot)
+    return _is_risk_source_snapshot(candidate.snapshot)
 
 
 def _market_sentiment_summary(snapshots: list[MarketSnapshot]) -> dict[str, object]:

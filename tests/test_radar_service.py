@@ -181,6 +181,63 @@ async def test_radar_scan_generates_risk_p0_from_major_event_snapshot(
 
 
 @pytest.mark.asyncio
+async def test_radar_scan_maps_major_tushare_announcement_to_risk_p0(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        session.add(
+            MarketSnapshot(
+                provider_name="tushare",
+                endpoint="anns_d",
+                market="A_SHARE",
+                snapshot_type="announcements",
+                source_time=None,
+                collected_at=datetime.now(UTC),
+                row_count=2,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "ann_date": "20260503",
+                        "ts_code": "000001.SZ",
+                        "name": "风险样例",
+                        "title": "关于收到中国证监会立案调查通知书的公告",
+                        "url": "https://example.invalid/internal-only",
+                    },
+                    {
+                        "ann_date": "20260503",
+                        "ts_code": "000002.SZ",
+                        "name": "普通样例",
+                        "title": "董事会决议公告",
+                    },
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+
+        scan = await run_radar_scan(session)
+        detail = await get_radar_signal_detail(session, scan.signals[0].id)
+
+    assert scan.status == RadarScanStatus.SUCCESS
+    assert scan.summary["candidate_count"] == 1
+    assert scan.summary["priority_counts"]["P0"] == 1
+    assert scan.summary["source_endpoints"] == ["anns_d"]
+    assert scan.signals[0].priority == RadarPriority.P0
+    assert scan.signals[0].subject_type == "announcements"
+    assert scan.signals[0].subject_code == "000001.SZ"
+    assert scan.signals[0].subject_name == "关于收到中国证监会立案调查通知书的公告"
+    assert scan.signals[0].metrics["risk_event_type"] == "major_announcement"
+    assert scan.signals[0].metrics["source_label"] == "tushare:anns_d"
+    assert "立案调查" in scan.signals[0].metrics["announcement_keywords"]
+    assert "risk_event_type_major_announcement" in scan.signals[0].metrics["rule_reasons"]
+
+    assert detail is not None
+    assert detail.evidences[0].evidence_type == "risk_event"
+    assert detail.evidences[0].source_name == "tushare"
+    assert detail.evidences[0].public_share_policy == "internal_summary_only"
+
+
+@pytest.mark.asyncio
 async def test_radar_scan_carries_limit_pool_sentiment_into_mainline_signal(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
