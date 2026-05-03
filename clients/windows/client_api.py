@@ -541,6 +541,7 @@ def format_ops_overview(payload: Mapping[str, Any]) -> str:
             f"({_int_text(radar.get('recent_scan_failure_count'))}/"
             f"{_int_text(radar.get('recent_scan_count'))})"
         ),
+        _ops_server_text(_mapping(payload.get("server"))),
         _ops_count_text("Provider", _mapping(payload.get("provider_fetch"))),
         _ops_count_text("数据质量", _mapping(payload.get("data_quality"))),
         _ops_count_text("Telegram 推送", _mapping(payload.get("telegram_push"))),
@@ -1010,6 +1011,29 @@ def _ops_alerts_text(alerts: Sequence[Any]) -> str:
     return " / ".join(
         _text(_mapping(alert).get("message"), "未返回告警说明") for alert in alerts
     )
+
+
+def _ops_server_text(server: Mapping[str, Any]) -> str:
+    disk_error = _text(server.get("disk_error"), "")
+    if disk_error:
+        disk_text = "磁盘检查失败"
+    else:
+        disk_text = f"磁盘可用={_percent_text(server.get('disk_free_percent'))}"
+
+    return (
+        "服务端："
+        f"运行={_duration_text(server.get('process_uptime_seconds'))} / "
+        f"{disk_text}"
+    )
+
+
+def _percent_text(value: Any) -> str:
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        return "-"
+
+    return f"{percent:.1f}".rstrip("0").rstrip(".") + "%"
 
 
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:

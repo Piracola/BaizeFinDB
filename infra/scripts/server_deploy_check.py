@@ -21,6 +21,7 @@ M5_SMOKE_ENDPOINTS = (
         "/ops/overview",
         (
             "generated_at",
+            "server",
             "radar",
             "provider_fetch",
             "data_quality",

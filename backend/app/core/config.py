@@ -52,6 +52,13 @@ class Settings(BaseSettings):
         default=False,
         alias="MODEL_AUDIT_STORE_RAW_PROMPT",
     )
+    ops_disk_check_path: str = Field(default=".", alias="OPS_DISK_CHECK_PATH")
+    ops_disk_free_percent_alert_threshold: float = Field(
+        default=10.0,
+        ge=0,
+        le=100,
+        alias="OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD",
+    )
 
     @property
     def effective_celery_broker_url(self) -> str:

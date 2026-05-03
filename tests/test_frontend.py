@@ -44,6 +44,8 @@ def test_frontend_assets_are_served() -> None:
     assert "loadOpsOverview" in js_response.text
     assert "/ops/overview" in js_response.text
     assert "formatOpsAlerts" in js_response.text
+    assert "formatOpsServerDetail" in js_response.text
+    assert "disk_free_percent" in js_response.text
     assert "loadTushareStatus" in js_response.text
     assert "/providers/tushare/status" in js_response.text
     assert "renderTushareStatus" in js_response.text

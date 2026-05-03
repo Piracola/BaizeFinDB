@@ -273,7 +273,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":11,"message":{"message_id":11,"chat":{"id":1001},"text":"/id"}}'
 ```
 
-本地 preview `/ops` 会返回最近运行状态、扫描失败率、Provider、数据质量、推送、模型调用和告警摘要：
+本地 preview `/ops` 会返回服务端运行时、磁盘空间、最近运行状态、扫描失败率、Provider、数据质量、推送、模型调用和告警摘要：
 
 ```powershell
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
@@ -487,13 +487,13 @@ uv run alembic upgrade head
 
 ### 查看最近运行状态
 
-本地或服务器 API 启动后，可以用只读运维接口查看最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要：
+本地或服务器 API 启动后，可以用只读运维接口查看服务端进程、磁盘空间、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要：
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 ```
 
-该接口只聚合已有记录，不会触发采集、扫描、推送或模型调用。
+该接口只聚合已有记录和 API 进程运行信息，不会触发采集、扫描、推送或模型调用。磁盘空间检查默认读取当前工作目录，可通过 `OPS_DISK_CHECK_PATH` 和 `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD` 调整。
 
 ### AKShare 采集失败
 

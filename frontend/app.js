@@ -549,6 +549,7 @@ function renderReadyStatus(ok, payload) {
 
 function renderOpsOverview(overview) {
   const radar = overview?.radar || {};
+  const server = overview?.server || {};
   const providerFetch = overview?.provider_fetch || {};
   const dataQuality = overview?.data_quality || {};
   const telegramPush = overview?.telegram_push || {};
@@ -576,6 +577,12 @@ function renderOpsOverview(overview) {
       value: `${alerts.length} 条`,
       detail: formatOpsAlerts(alerts),
     },
+    {
+      name: "服务端",
+      status: server.is_disk_space_low || server.disk_error ? "fail" : "ok",
+      value: formatOpsServerDisk(server),
+      detail: formatOpsServerDetail(server),
+    },
     opsCountCard("Provider", providerFetch),
     opsCountCard("数据质量", dataQuality),
     opsCountCard("推送", telegramPush),
@@ -600,6 +607,29 @@ function formatOpsAlerts(alerts) {
   }
 
   return alerts.map((alert) => alert.message || alert.code || "未返回告警说明").join(" / ");
+}
+
+function formatOpsServerDisk(server) {
+  if (server.disk_error) {
+    return "磁盘检查失败";
+  }
+
+  const freePercent = Number(server.disk_free_percent);
+  if (Number.isNaN(freePercent)) {
+    return "未返回";
+  }
+
+  return `可用 ${freePercent.toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+function formatOpsServerDetail(server) {
+  if (server.disk_error) {
+    return server.disk_error;
+  }
+
+  return `运行 ${formatDuration(server.process_uptime_seconds)} / 可用 ${formatBytes(
+    server.disk_free_bytes,
+  )}/${formatBytes(server.disk_total_bytes)}`;
 }
 
 function renderOpsUnavailable(reason) {
@@ -1360,6 +1390,24 @@ function formatDuration(value) {
   }
 
   return `${(seconds / 3600).toFixed(1).replace(/\.0$/, "")} 小时`;
+}
+
+function formatBytes(value) {
+  const bytes = Number(value);
+  if (Number.isNaN(bytes)) {
+    return "-";
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let amount = Math.max(0, bytes);
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = amount >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${amount.toFixed(precision).replace(/\.0$/, "")} ${units[unitIndex]}`;
 }
 
 function formatDate(value) {

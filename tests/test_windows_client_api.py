@@ -190,6 +190,13 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
                 "recent_scan_failure_count": 1,
                 "recent_scan_failure_rate": 0.125,
             },
+            "server": {
+                "process_uptime_seconds": 7200,
+                "disk_free_percent": 42.5,
+                "disk_free_bytes": 4_194_304,
+                "disk_total_bytes": 10_485_760,
+                "is_disk_space_low": False,
+            },
             "provider_fetch": {
                 "total_count": 6,
                 "unhealthy_count": 1,
@@ -224,6 +231,7 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
     assert "统计窗口：最近 24 小时" in text
     assert "雷达扫描：#7 成功 | 新鲜度：6 分钟 | 正常" in text
     assert "扫描失败率：12.5% (1/8)" in text
+    assert "服务端：运行=2 小时 / 磁盘可用=42.5%" in text
     assert "Provider：异常=1 / 总数=6 / 最新=失败" in text
     assert "模型调用：异常=1 / 总数=2 / 最新=降级切换" in text
     assert "告警：Provider 拉取存在 1 条异常记录。" in text

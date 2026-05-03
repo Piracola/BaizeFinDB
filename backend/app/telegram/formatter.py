@@ -174,6 +174,7 @@ def format_ops_overview(overview: OpsOverviewRead) -> str:
             f"{_rate_label(radar.recent_scan_failure_rate)} "
             f"({radar.recent_scan_failure_count}/{radar.recent_scan_count})"
         ),
+        _ops_server_text(overview.server),
         _ops_count_text("Provider", overview.provider_fetch),
         _ops_count_text("数据质量", overview.data_quality),
         _ops_count_text("推送", overview.telegram_push),
@@ -539,6 +540,29 @@ def _ops_alerts_text(alerts: list[object]) -> str:
         return "暂无"
 
     return " / ".join(str(_field(alert, "message", "未返回告警说明")) for alert in alerts)
+
+
+def _ops_server_text(server: object) -> str:
+    disk_error = _field(server, "disk_error", None)
+    if disk_error:
+        disk_text = "磁盘检查失败"
+    else:
+        disk_text = f"磁盘可用 {_percent_label(_field(server, 'disk_free_percent', None))}"
+
+    return (
+        "服务端："
+        f"运行 {_duration_label(_field(server, 'process_uptime_seconds', None))} | "
+        f"{disk_text}"
+    )
+
+
+def _percent_label(value: object) -> str:
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        return "-"
+
+    return f"{percent:.1f}".rstrip("0").rstrip(".") + "%"
 
 
 def _rate_label(value: object) -> str:

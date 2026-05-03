@@ -1,3 +1,7 @@
+import os
+import platform
+import shutil
+import sys
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -9,10 +13,17 @@ from app.db.audit_models import ModelCallLog
 from app.db.provider_models import DataQualityCheck, ProviderFetchLog
 from app.db.push_models import PushLog
 from app.db.radar_models import RadarScanBatch
-from app.ops.schemas import OpsAlertRead, OpsCountSummary, OpsOverviewRead, OpsRadarSummary
+from app.ops.schemas import (
+    OpsAlertRead,
+    OpsCountSummary,
+    OpsOverviewRead,
+    OpsRadarSummary,
+    OpsServerSummary,
+)
 
 RADAR_STALE_INTERVAL_MULTIPLIER = 2
 RADAR_FAILURE_RATE_ALERT_THRESHOLD = 0.2
+PROCESS_STARTED_AT = datetime.now(UTC)
 
 
 async def get_ops_overview(
@@ -24,6 +35,13 @@ async def get_ops_overview(
     generated_at = _as_utc(now or datetime.now(UTC))
     since = generated_at - timedelta(hours=lookback_hours)
     settings = get_settings()
+    server = _server_summary(
+        now=generated_at,
+        disk_check_path=settings.ops_disk_check_path,
+        disk_free_percent_alert_threshold=(
+            settings.ops_disk_free_percent_alert_threshold
+        ),
+    )
     radar = await _radar_summary(
         session,
         since=since,
@@ -66,6 +84,7 @@ async def get_ops_overview(
     return OpsOverviewRead(
         generated_at=generated_at,
         lookback_hours=lookback_hours,
+        server=server,
         radar=radar,
         provider_fetch=provider_fetch,
         data_quality=data_quality,
@@ -77,6 +96,52 @@ async def get_ops_overview(
             data_quality=data_quality,
             telegram_push=telegram_push,
             model_calls=model_calls,
+            server=server,
+        ),
+    )
+
+
+def _server_summary(
+    *,
+    now: datetime,
+    disk_check_path: str,
+    disk_free_percent_alert_threshold: float,
+) -> OpsServerSummary:
+    disk_path = disk_check_path.strip() or "."
+    base_payload: dict[str, Any] = {
+        "process_id": os.getpid(),
+        "process_started_at": PROCESS_STARTED_AT,
+        "process_uptime_seconds": _seconds_between(PROCESS_STARTED_AT, now) or 0.0,
+        "python_version": sys.version.split()[0],
+        "platform": platform.platform(),
+        "disk_path": disk_path,
+    }
+
+    try:
+        usage = shutil.disk_usage(disk_path)
+    except OSError as exc:
+        return OpsServerSummary(
+            **base_payload,
+            is_disk_space_low=False,
+            disk_error=f"{exc.__class__.__name__}: {exc}",
+        )
+
+    total = int(usage.total)
+    used = int(usage.used)
+    free = int(usage.free)
+    free_percent = _percent(free, total)
+    used_percent = _percent(used, total)
+
+    return OpsServerSummary(
+        **base_payload,
+        disk_total_bytes=total,
+        disk_used_bytes=used,
+        disk_free_bytes=free,
+        disk_used_percent=used_percent,
+        disk_free_percent=free_percent,
+        is_disk_space_low=(
+            free_percent is not None
+            and free_percent <= disk_free_percent_alert_threshold
         ),
     )
 
@@ -158,6 +223,7 @@ def _ops_alerts(
     data_quality: OpsCountSummary,
     telegram_push: OpsCountSummary,
     model_calls: OpsCountSummary,
+    server: OpsServerSummary,
 ) -> list[OpsAlertRead]:
     alerts: list[OpsAlertRead] = []
 
@@ -194,6 +260,23 @@ def _ops_alerts(
     _append_unhealthy_alert(alerts, data_quality, "data_quality_unhealthy", "数据质量")
     _append_unhealthy_alert(alerts, telegram_push, "telegram_push_unhealthy", "Telegram 推送")
     _append_unhealthy_alert(alerts, model_calls, "model_calls_unhealthy", "模型调用")
+
+    if server.disk_error:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="server_disk_check_failed",
+                message="服务器磁盘空间检查失败。",
+            ),
+        )
+    elif server.is_disk_space_low:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="server_disk_space_low",
+                message="服务器磁盘可用空间偏低。",
+            ),
+        )
 
     return alerts
 
@@ -233,6 +316,13 @@ def _rate(numerator: int, denominator: int) -> float:
         return 0.0
 
     return round(numerator / denominator, 4)
+
+
+def _percent(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+
+    return round((numerator / denominator) * 100, 2)
 
 
 def _seconds_between(start: datetime | None, end: datetime | None) -> float | None:

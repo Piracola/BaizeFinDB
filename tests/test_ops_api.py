@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -15,6 +16,14 @@ from app.db.push_models import PushLog
 from app.db.radar_models import RadarScanBatch
 from app.db.session import get_db_session
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def stable_disk_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.ops.service.shutil.disk_usage",
+        lambda path: SimpleNamespace(total=1_000_000, used=400_000, free=600_000),
+    )
 
 
 @pytest_asyncio.fixture
@@ -202,6 +211,9 @@ async def test_ops_overview_summarizes_recent_runtime_signals(
     assert response.status_code == 200
     payload = response.json()
     assert payload["lookback_hours"] == 24
+    assert payload["server"]["process_id"] >= 0
+    assert payload["server"]["disk_free_percent"] == 60.0
+    assert payload["server"]["is_disk_space_low"] is False
     assert payload["radar"]["latest_scan_id"] == latest_scan_id
     assert payload["radar"]["latest_scan_status"] == "success"
     assert payload["radar"]["latest_scan_duration_seconds"] == 60.0
@@ -234,6 +246,7 @@ async def test_ops_overview_handles_empty_database(
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["server"]["disk_free_percent"] == 60.0
     assert payload["radar"]["latest_scan_id"] is None
     assert payload["radar"]["recent_scan_count"] == 0
     assert payload["radar"]["is_latest_scan_stale"] is True
@@ -248,6 +261,25 @@ async def test_ops_overview_handles_empty_database(
             "message": "尚未找到雷达扫描记录。",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_ops_overview_alerts_when_server_disk_space_is_low(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    monkeypatch.setattr(
+        "app.ops.service.shutil.disk_usage",
+        lambda path: SimpleNamespace(total=1_000_000, used=950_000, free=50_000),
+    )
+
+    response = await _get_ops_overview(session_factory, lookback_hours=1)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["server"]["disk_free_percent"] == 5.0
+    assert payload["server"]["is_disk_space_low"] is True
+    assert "server_disk_space_low" in [alert["code"] for alert in payload["alerts"]]
 
 
 async def _get_ops_overview(

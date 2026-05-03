@@ -32,9 +32,26 @@ class OpsAlertRead(BaseModel):
     message: str
 
 
+class OpsServerSummary(BaseModel):
+    process_id: int = Field(ge=0)
+    process_started_at: datetime
+    process_uptime_seconds: float = Field(ge=0)
+    python_version: str
+    platform: str
+    disk_path: str
+    disk_total_bytes: int | None = Field(default=None, ge=0)
+    disk_used_bytes: int | None = Field(default=None, ge=0)
+    disk_free_bytes: int | None = Field(default=None, ge=0)
+    disk_used_percent: float | None = Field(default=None, ge=0, le=100)
+    disk_free_percent: float | None = Field(default=None, ge=0, le=100)
+    is_disk_space_low: bool
+    disk_error: str | None = None
+
+
 class OpsOverviewRead(BaseModel):
     generated_at: datetime
     lookback_hours: int = Field(ge=1, le=168)
+    server: OpsServerSummary
     radar: OpsRadarSummary
     provider_fetch: OpsCountSummary
     data_quality: OpsCountSummary

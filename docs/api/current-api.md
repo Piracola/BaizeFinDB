@@ -99,15 +99,21 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 响应重点：
 
 - `radar`：最新扫描 ID、状态、开始/完成时间、耗时、最近扫描数、失败数、失败率、是否超过 2 个调度间隔未更新。
+- `server`：API 进程 ID、启动时间、运行时长、Python/平台摘要、磁盘检查路径、磁盘总量/已用/可用和可用空间比例。
 - `provider_fetch`：最近 Provider 拉取状态计数，`success` 以外计入 unhealthy。
 - `data_quality`：最近数据质量状态计数，`ok` 以外计入 unhealthy。
 - `telegram_push`：最近 Telegram 推送状态计数，`sent`、`preview`、`skipped` 视为健康。
 - `model_calls`：最近模型调用审计状态计数，`degraded`、`fallback` 等会计入 unhealthy。
-- `alerts`：根据扫描停滞、扫描失败率和各类 unhealthy 计数生成的只读告警摘要。
+- `alerts`：根据扫描停滞、扫描失败率、磁盘空间和各类 unhealthy 计数生成的只读告警摘要。
 
 查询参数：
 
 - `lookback_hours`：统计窗口，范围 1 到 168，默认 24。
+
+相关环境变量：
+
+- `OPS_DISK_CHECK_PATH`：磁盘空间检查路径，默认 `.`。
+- `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD`：磁盘可用空间告警阈值百分比，默认 `10`。
 
 ## 3. Provider API
 
@@ -777,7 +783,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/start`、`/help` | 查看命令说明和免责声明 |
 | `/id`、`/chatid` | 查看当前聊天 ID；未进入白名单时也允许返回这个 ID，便于绑定 |
 | `/health` | 查看 API、数据库、Redis 和最近一次雷达扫描摘要 |
-| `/ops` | 查看最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要 |
+| `/ops` | 查看服务端运行时、磁盘空间、最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要 |
 | `/tushare` | 查看 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取 |
 | `/radar` | 查看雷达总览：P0/P1/P2、生命周期分布、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
@@ -915,7 +921,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 ## 11. 接 Telegram / Web / 报告时的推荐用法
 
-- 状态面板：用 `GET /health/ready` 和 `GET /ops/overview`，展示依赖就绪、扫描新鲜度、失败率、数据质量、推送和模型调用摘要。
+- 状态面板：用 `GET /health/ready` 和 `GET /ops/overview`，展示依赖就绪、服务端磁盘摘要、扫描新鲜度、失败率、数据质量、推送和模型调用摘要。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
