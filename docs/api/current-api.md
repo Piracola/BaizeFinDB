@@ -446,7 +446,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?user_key=telegram-1001
 
 ### `POST /scores/signals/{signal_id}`
 
-用途：为单个雷达信号生成或刷新 1d/3d/5d/10d 综合评分记录。评分不是价格回测，也不是交易建议；当前 MVP 综合优先级、生命周期、审查状态、证据数量和连续触发信息。
+用途：为单个雷达信号生成或刷新 1d/3d/5d/10d 综合评分记录。评分不是价格回测，也不是交易建议；当前 MVP 综合优先级、生命周期、审查状态、证据数量、连续触发、Provider 数据质量和信号时效性。
 
 ```powershell
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/scores/signals/1
@@ -458,7 +458,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/scores/signals/1
 - `score_status`：`generated` 表示窗口已结束；`pending_window` 表示窗口尚未结束但可先记录当前综合评分。
 - `composite_score`：0 到 100 区间的综合分。
 - `components`：各维度评分。
-- `details`：评分版本、窗口结束时间和方法说明。
+- `details`：评分版本、窗口结束时间、方法、权重、评分档位和校准输入说明。
 
 ### `GET /scores/signals/{signal_id}`
 

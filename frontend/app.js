@@ -787,7 +787,7 @@ function renderScores(scoreRun) {
           })
           .join("")}
       </div>
-      <p class="summary">评分综合优先级、生命周期、审查、证据和连续性；不是价格回测或交易建议。</p>
+      <p class="summary">评分综合优先级、生命周期、审查、证据、连续性、数据质量和时效性；不是价格回测或交易建议。</p>
     </article>
   `;
 }

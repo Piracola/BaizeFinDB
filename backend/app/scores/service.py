@@ -8,7 +8,17 @@ from app.db.score_models import ScoreRecord
 from app.scores.schemas import ScoreRecordRead, ScoreRunRead, ScoreStatus
 
 SUPPORTED_SCORE_WINDOWS = (1, 3, 5, 10)
-SCORING_VERSION = "m5_composite_v1"
+SCORING_VERSION = "m5_composite_v2"
+SCORING_METHOD = "calibrated_composite_without_price_only_backtest"
+SCORING_WEIGHTS = {
+    "priority": 0.22,
+    "lifecycle": 0.16,
+    "review": 0.2,
+    "evidence": 0.16,
+    "continuity": 0.12,
+    "data_quality": 0.08,
+    "timeliness": 0.06,
+}
 
 
 async def generate_signal_scores(
@@ -24,15 +34,24 @@ async def generate_signal_scores(
     records: list[ScoreRecord] = []
     for window_days in SUPPORTED_SCORE_WINDOWS:
         score_status = _score_status(signal, window_days, evaluated_at)
-        components = _score_components(signal)
+        components = _score_components(signal, evaluated_at)
         composite_score = _composite_score(components)
         details = {
             "scoring_version": SCORING_VERSION,
             "window_days": window_days,
             "window_complete": score_status == ScoreStatus.GENERATED,
             "window_end": (_as_utc(signal.created_at) + timedelta(days=window_days)).isoformat(),
-            "method": "composite_without_price_only_backtest",
-            "note": "Score combines priority, lifecycle, review, evidence and continuity signals.",
+            "method": SCORING_METHOD,
+            "score_band": _score_band(composite_score),
+            "weights": dict(SCORING_WEIGHTS),
+            "calibration_inputs": {
+                "provider_quality_status": _provider_quality_status(signal.metrics),
+                "signal_age_hours": _signal_age_hours(signal.created_at, evaluated_at),
+            },
+            "note": (
+                "Score combines priority, lifecycle, review, evidence, continuity, "
+                "provider data quality and timeliness signals."
+            ),
         }
         record = await _upsert_score_record(
             session=session,
@@ -126,25 +145,22 @@ def _score_status(
     return ScoreStatus.PENDING_WINDOW
 
 
-def _score_components(signal: RadarSignal) -> dict[str, object]:
+def _score_components(signal: RadarSignal, evaluated_at: datetime) -> dict[str, object]:
     return {
         "priority": _priority_score(signal.priority),
         "lifecycle": _lifecycle_score(signal.lifecycle_stage),
         "review": _review_score(signal.review_status),
         "evidence": _evidence_score(signal.evidence_count),
         "continuity": _continuity_score(signal.metrics),
+        "data_quality": _data_quality_score(signal.metrics),
+        "timeliness": _timeliness_score(signal.created_at, evaluated_at),
     }
 
 
 def _composite_score(components: dict[str, object]) -> float:
-    weights = {
-        "priority": 0.25,
-        "lifecycle": 0.2,
-        "review": 0.25,
-        "evidence": 0.2,
-        "continuity": 0.1,
-    }
-    score = sum(float(components[name]) * weight for name, weight in weights.items())
+    score = sum(
+        float(components.get(name, 0)) * weight for name, weight in SCORING_WEIGHTS.items()
+    )
     return round(score, 2)
 
 
@@ -196,11 +212,92 @@ def _continuity_score(metrics: dict[str, object]) -> int:
     return base
 
 
+def _data_quality_score(metrics: dict[str, object]) -> int:
+    provider_quality = metrics.get("provider_quality")
+    if not isinstance(provider_quality, dict):
+        return 50
+
+    status_score = {
+        "ok": 82,
+        "degraded": 45,
+        "unknown": 50,
+        "failed": 0,
+    }.get(_provider_quality_status(metrics), 50)
+    confidence = _optional_float(provider_quality.get("confidence"))
+    confidence_score = status_score if confidence is None else round(_clamp(confidence, 0, 1) * 100)
+    score = round(status_score * 0.6 + confidence_score * 0.4)
+
+    missing_fields = provider_quality.get("missing_fields")
+    if isinstance(missing_fields, list):
+        score -= min(30, len(missing_fields) * 5)
+
+    return _int_clamp(score, 0, 100)
+
+
+def _timeliness_score(created_at: datetime, evaluated_at: datetime) -> int:
+    age_hours = _signal_age_hours(created_at, evaluated_at)
+    if age_hours <= 1:
+        return 90
+    if age_hours <= 6:
+        return 82
+    if age_hours <= 24:
+        return 70
+    if age_hours <= 72:
+        return 58
+    if age_hours <= 168:
+        return 45
+    if age_hours <= 240:
+        return 35
+    return 25
+
+
+def _score_band(composite_score: float) -> str:
+    if composite_score >= 75:
+        return "strong_attention"
+    if composite_score >= 60:
+        return "watch"
+    if composite_score >= 45:
+        return "weak_watch"
+    return "low_signal_quality"
+
+
+def _provider_quality_status(metrics: dict[str, object]) -> str:
+    provider_quality = metrics.get("provider_quality")
+    if not isinstance(provider_quality, dict):
+        return "unknown"
+
+    status = provider_quality.get("status")
+    return str(status).strip().lower() if status is not None else "unknown"
+
+
+def _signal_age_hours(created_at: datetime, evaluated_at: datetime) -> float:
+    elapsed = _as_utc(evaluated_at) - _as_utc(created_at)
+    return round(max(0.0, elapsed.total_seconds() / 3600), 2)
+
+
 def _int(value: object) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)
+
+
+def _int_clamp(value: int, minimum: int, maximum: int) -> int:
+    return min(max(value, minimum), maximum)
 
 
 def _as_utc(value: datetime) -> datetime:

@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.db.radar_models import RadarScanBatch, RadarSignal
 from app.db.session import get_db_session
 from app.main import create_app
+from app.scores.service import generate_signal_scores
 
 
 @pytest_asyncio.fixture
@@ -68,8 +69,14 @@ async def test_score_api_generates_four_window_composite_scores(
     assert payload["records"][1]["score_status"] == "pending_window"
     assert payload["records"][0]["composite_score"] > 70
     assert payload["records"][0]["components"]["priority"] == 85
-    assert payload["records"][0]["details"]["scoring_version"] == "m5_composite_v1"
-    assert payload["records"][0]["details"]["method"] == "composite_without_price_only_backtest"
+    assert payload["records"][0]["components"]["data_quality"] > 80
+    assert payload["records"][0]["details"]["scoring_version"] == "m5_composite_v2"
+    assert (
+        payload["records"][0]["details"]["method"]
+        == "calibrated_composite_without_price_only_backtest"
+    )
+    assert payload["records"][0]["details"]["score_band"] == "strong_attention"
+    assert "data_quality" in payload["records"][0]["details"]["weights"]
 
     assert duplicate_response.status_code == 200
     assert [record["id"] for record in duplicate_response.json()["records"]] == [
@@ -87,8 +94,72 @@ async def test_score_api_returns_404_for_missing_signal(client: AsyncClient) -> 
     assert response.status_code == 404
 
 
-async def _seed_signal(session_factory: async_sessionmaker[AsyncSession]) -> int:
+@pytest.mark.asyncio
+async def test_score_calibration_uses_data_quality_and_timeliness(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+    fresh_signal_id = await _seed_signal(
+        session_factory,
+        created_at=now - timedelta(hours=1),
+        provider_quality={"status": "ok", "confidence": 0.95, "missing_fields": []},
+    )
+    weak_signal_id = await _seed_signal(
+        session_factory,
+        priority="P2",
+        lifecycle_stage="fading",
+        review_status="needs_human_review",
+        evidence_count=0,
+        created_at=now - timedelta(days=12),
+        provider_quality={
+            "status": "failed",
+            "confidence": 0.0,
+            "missing_fields": ["pct_change", "rising_count"],
+        },
+        continuity={
+            "previous_signal_id": None,
+            "consecutive_p1_count": 0,
+            "quick_report_candidate": False,
+        },
+    )
+
+    async with session_factory() as session:
+        fresh_scores = await generate_signal_scores(session, fresh_signal_id, now=now)
+        weak_scores = await generate_signal_scores(session, weak_signal_id, now=now)
+
+    assert fresh_scores is not None
+    assert weak_scores is not None
+
+    fresh_record = fresh_scores.records[0]
+    weak_record = weak_scores.records[0]
+
+    assert fresh_record.components["data_quality"] > weak_record.components["data_quality"]
+    assert fresh_record.components["timeliness"] > weak_record.components["timeliness"]
+    assert fresh_record.composite_score > weak_record.composite_score
+    assert fresh_record.details["calibration_inputs"]["provider_quality_status"] == "ok"
+    assert weak_record.details["calibration_inputs"]["provider_quality_status"] == "failed"
+    assert weak_record.details["score_band"] == "low_signal_quality"
+
+
+async def _seed_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    priority: str = "P0",
+    lifecycle_stage: str = "developing",
+    review_status: str = "approved",
+    evidence_count: int = 2,
+    created_at: datetime | None = None,
+    provider_quality: dict[str, object] | None = None,
+    continuity: dict[str, object] | None = None,
+) -> int:
     now = datetime.now(UTC)
+    signal_created_at = created_at or now - timedelta(days=2)
+    quality = provider_quality or {"status": "ok", "confidence": 0.95, "missing_fields": []}
+    continuity_metrics = continuity or {
+        "previous_signal_id": 1,
+        "consecutive_p1_count": 3,
+        "quick_report_candidate": True,
+    }
     async with session_factory() as session:
         scan = RadarScanBatch(
             status="success",
@@ -102,24 +173,21 @@ async def _seed_signal(session_factory: async_sessionmaker[AsyncSession]) -> int
 
         signal = RadarSignal(
             batch_id=scan.id,
-            signal_key="akshare:test:score",
+            signal_key=f"akshare:test:score:{signal_created_at.timestamp()}:{priority}",
             subject_type="sector_concept",
             subject_code="GN001",
             subject_name="AI Applications",
-            priority="P0",
-            lifecycle_stage="developing",
-            review_status="approved",
-            title="P0 radar candidate",
+            priority=priority,
+            lifecycle_stage=lifecycle_stage,
+            review_status=review_status,
+            title=f"{priority} radar candidate",
             summary="Composite score seed.",
             metrics={
-                "continuity": {
-                    "previous_signal_id": 1,
-                    "consecutive_p1_count": 3,
-                    "quick_report_candidate": True,
-                },
+                "continuity": continuity_metrics,
+                "provider_quality": quality,
             },
-            evidence_count=2,
-            created_at=now - timedelta(days=2),
+            evidence_count=evidence_count,
+            created_at=signal_created_at,
         )
         session.add(signal)
         await session.commit()
