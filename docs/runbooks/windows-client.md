@@ -6,6 +6,7 @@
 
 - 查看 API 就绪状态：`GET /health/ready`。
 - 查看运行状态：`GET /ops/overview`。
+- 查看 Tushare 数据源状态：`GET /providers/tushare/status`，只返回 token 是否配置和端点实现状态，不返回 token 原文。
 - 查看雷达总览、优先级、生命周期分布、市场情绪摘要和个股回推证据：`GET /radar/overview`。
 - 查看信号列表：`GET /radar/signals`。
 - 查看持仓：`GET /portfolio/holdings`。
@@ -15,9 +16,10 @@
 - 生成并查看单信号 v2 综合评分明细：`POST /scores/signals/{signal_id}`。
 - 查看、绑定和禁用 Telegram chat：`GET/POST/PATCH /telegram/bindings`。
 - 打开现有 Web 面板：`/`。
-- P0/P1/P2、生命周期、市场情绪摘要、运行状态、审查状态和计数都来自后端 API，客户端不重新计算。
+- P0/P1/P2、生命周期、市场情绪摘要、运行状态、数据源状态、审查状态和计数都来自后端 API，客户端不重新计算。
 - 日报/周报和评分结果也来自后端，客户端不做本地评分或规则推断。
 - 不保存 token、secret、持仓截图或个人数据；Telegram Secret 输入框只用于本次 API header。
+- Tushare 状态视图只读取 Provider 配置状态，不触发真实抓取。
 - 不保存报告导出文件；报告正文继续在 Web/API 查看。
 - 不提供买卖建议、不接自动交易、不承诺收益。
 - 持仓/自选只作为个人提醒、展示排序和报告上下文，不改变市场雷达等级。
@@ -70,6 +72,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | --- | --- |
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
 | 运行状态 | 调用 `/ops/overview`，显示最近扫描、失败率、Provider、数据质量、推送和模型调用摘要。 |
+| 数据源状态 | 调用 `/providers/tushare/status`，显示 Tushare token 配置、手动抓取启用状态和已实现端点数；不触发真实抓取。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |

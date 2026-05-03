@@ -133,6 +133,30 @@ def test_fetch_ops_overview_uses_lookback_query() -> None:
     assert payload["lookback_hours"] == 12
 
 
+def test_fetch_tushare_status_uses_provider_status_endpoint() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        return FakeResponse(
+            json.dumps(
+                {
+                    "provider": "tushare",
+                    "status": "configured",
+                    "token_configured": True,
+                    "fetch_enabled": True,
+                    "endpoint_count": 3,
+                    "implemented_endpoint_count": 3,
+                },
+            ),
+        )
+
+    payload = client_api.fetch_tushare_status("http://localhost:8000", opener=opener)
+
+    assert calls["url"] == "http://localhost:8000/providers/tushare/status"
+    assert payload["provider"] == "tushare"
+
+
 def test_format_health_outputs_dependency_statuses() -> None:
     text = client_api.format_health(
         {
@@ -196,6 +220,28 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
     assert "Provider：异常=1 / 总数=6 / 最新=失败" in text
     assert "模型调用：异常=1 / 总数=2 / 最新=降级切换" in text
     assert "只读取已有运行记录" in text
+
+
+def test_format_tushare_status_outputs_read_only_provider_state() -> None:
+    text = client_api.format_tushare_status(
+        {
+            "provider": "tushare",
+            "status": "configured",
+            "token_configured": True,
+            "fetch_enabled": True,
+            "endpoint_count": 3,
+            "implemented_endpoint_count": 3,
+            "message": "Tushare fetch is enabled.",
+        },
+    )
+
+    assert "Tushare 状态" in text
+    assert "状态：已配置" in text
+    assert "Token：已配置" in text
+    assert "手动抓取：开启" in text
+    assert "已实现端点：3/3" in text
+    assert "不触发真实抓取" in text
+    assert "不构成投资建议" in text
 
 
 def test_format_radar_overview_uses_backend_priority_counts() -> None:

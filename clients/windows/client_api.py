@@ -67,6 +67,12 @@ DEPENDENCY_LABELS = {
     "unknown": "未知",
 }
 
+TUSHARE_STATUS_LABELS = {
+    "configured": "已配置",
+    "not_configured": "未配置",
+    "unknown": "未知",
+}
+
 PERIOD_LABELS = {
     "daily": "日报",
     "weekly": "周报",
@@ -283,6 +289,15 @@ def fetch_ops_overview(
         opener=opener,
     )
     return _expect_object(payload, "/ops/overview")
+
+
+def fetch_tushare_status(
+    base_url: str | None,
+    *,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(base_url, "/providers/tushare/status", opener=opener)
+    return _expect_object(payload, "/providers/tushare/status")
 
 
 def fetch_radar_overview(
@@ -539,6 +554,25 @@ def format_ops_overview(payload: Mapping[str, Any]) -> str:
             DISCLAIMER,
         ],
     )
+    return _trim_text("\n".join(lines))
+
+
+def format_tushare_status(payload: Mapping[str, Any]) -> str:
+    lines = [
+        "Tushare 状态",
+        f"状态：{_tushare_status_label(payload.get('status'))}",
+        f"Token：{_configured_label(payload.get('token_configured'))}",
+        f"手动抓取：{_enabled_label(payload.get('fetch_enabled'))}",
+        (
+            "已实现端点："
+            f"{_int_text(payload.get('implemented_endpoint_count'))}/"
+            f"{_int_text(payload.get('endpoint_count'))}"
+        ),
+        f"说明：{_text(payload.get('message'), '未返回状态说明')}",
+        "该视图只读取 Tushare Provider 配置状态，不触发真实抓取。",
+        "",
+        DISCLAIMER,
+    ]
     return _trim_text("\n".join(lines))
 
 
@@ -1084,6 +1118,10 @@ def _status_label(value: Any) -> str:
     return DEPENDENCY_LABELS.get(_text(value, "unknown"), _text(value, "unknown"))
 
 
+def _tushare_status_label(value: Any) -> str:
+    return TUSHARE_STATUS_LABELS.get(_text(value, "unknown"), _text(value, "unknown"))
+
+
 def _lifecycle_label(value: Any) -> str:
     return LIFECYCLE_LABELS.get(_text(value, ""), _text(value, "-"))
 
@@ -1171,6 +1209,10 @@ def _score_text(value: Any) -> str:
 
 def _enabled_label(value: Any) -> str:
     return "开启" if value is True else "关闭"
+
+
+def _configured_label(value: Any) -> str:
+    return "已配置" if value is True else "未配置"
 
 
 def _allowed_label(value: Any) -> str:
