@@ -29,6 +29,16 @@ M5_SMOKE_ENDPOINTS = (
         ),
     ),
     ("/providers/akshare/status", ("provider_name", "endpoints")),
+    (
+        "/providers/tushare/status",
+        (
+            "provider_name",
+            "token_configured",
+            "fetch_enabled",
+            "endpoint_count",
+            "implemented_endpoint_count",
+        ),
+    ),
     ("/radar/overview", ("priority_counts", "lifecycle_counts", "subject_count")),
     (
         "/telegram/status",
