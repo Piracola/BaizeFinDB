@@ -390,7 +390,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/from-signal `
 | --- | --- |
 | `user_key` | 单用户 MVP 隔离键，默认 `default` |
 
-`report_type` 当前只接受 `quick` 和 `standard`。`deep` 后续只能手动触发并二次确认。
+`report_type` 当前只接受 `quick` 和 `standard`。传入 `deep` 会返回 `422`，不会创建报告；`deep` 后续只能通过专门手动入口触发并二次确认。
 
 ### `GET /reports`
 

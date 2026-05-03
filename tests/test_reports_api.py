@@ -87,6 +87,27 @@ async def test_report_api_generates_quick_report_from_safe_signal(
 
 
 @pytest.mark.asyncio
+async def test_report_api_rejects_deep_report_from_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+
+    response = await client.post(
+        "/reports/from-signal",
+        json={"signal_id": signal_id, "report_type": "deep"},
+    )
+    list_response = await client.get("/reports")
+
+    assert response.status_code == 422
+    error_text = str(response.json()["detail"])
+    assert "report_type" in error_text
+    assert "deep" in error_text
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+@pytest.mark.asyncio
 async def test_report_api_marks_low_confidence_report_for_human_review(
     session_factory: async_sessionmaker[AsyncSession],
     client: AsyncClient,
