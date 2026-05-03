@@ -213,7 +213,7 @@ M5 完成时至少满足：
 - [x] P1 连续触发能进入 quick report / 快报候选。
 - [x] P2 默认保留 7 天观察。
 - [x] 强度等级和生命周期分开保存、分开展示。
-- [ ] Review Agent 只审查 P0/P1/risk/holding 相关候选和发布前报告。
+- [x] Review Agent 只审查 P0/P1/risk/holding 相关候选和发布前报告。
 - [x] P0 Telegram 快速提醒后能触发后台 standard report。
 - [x] Telegram 推送按 P0/P1/P2 折叠汇总。
 - [x] 支持手动持仓和自选，成本价和仓位比例可为空。

@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
 from app.db.session import get_db_session
-from app.governance.review import review_radar_signal
+from app.governance.review import ReviewContext, review_radar_signal
 from app.main import create_app
 from app.radar.schemas import RadarReviewStatus
 
@@ -43,9 +43,98 @@ async def test_governance_review_approves_safe_signal(
 
     assert review is not None
     assert review.review_status == RadarReviewStatus.APPROVED
+    assert "report_publication_review" in review.reasons
     assert "rule_review_passed" in review.reasons
+    assert review.details["review_context"] == "report_publication"
     assert signal is not None
     assert signal.review_status == RadarReviewStatus.APPROVED.value
+
+
+@pytest.mark.asyncio
+async def test_signal_candidate_review_scope_rejects_non_target_p2(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _create_signal(session, priority="P2")
+
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            review_response = await client.post(f"/radar/signals/{signal_id}/review")
+            reviews_response = await client.get(f"/radar/signals/{signal_id}/reviews")
+            detail_response = await client.get(f"/radar/signals/{signal_id}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert review_response.status_code == 409
+    assert review_response.json()["detail"]["message"] == (
+        "signal is outside M5 signal review scope"
+    )
+    assert review_response.json()["detail"]["reasons"] == ["not_m5_review_target"]
+
+    assert reviews_response.status_code == 200
+    assert reviews_response.json() == []
+    assert detail_response.status_code == 200
+    assert detail_response.json()["review_status"] == "candidate"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("signal_kwargs", "scope_reason"),
+    [
+        ({"priority": "P1", "quick_report_candidate": True}, "p1_quick_report_candidate"),
+        ({"priority": "P2", "subject_type": "risk_event"}, "risk_candidate"),
+        (
+            {"priority": "P2", "metrics_extra": {"holding_context": {"code": "600000"}}},
+            "holding_watchlist_related_candidate",
+        ),
+    ],
+)
+async def test_signal_candidate_review_scope_accepts_m5_targets(
+    session_factory: async_sessionmaker[AsyncSession],
+    signal_kwargs: dict[str, object],
+    scope_reason: str,
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _create_signal(session, **signal_kwargs)
+
+        review = await review_radar_signal(
+            session,
+            signal_id,
+            review_context=ReviewContext.SIGNAL_CANDIDATE,
+        )
+
+    assert review is not None
+    assert review.review_status == RadarReviewStatus.APPROVED
+    assert scope_reason in review.reasons
+    assert scope_reason in review.details["m5_review_scope_reasons"]
+
+
+@pytest.mark.asyncio
+async def test_report_publication_review_still_reviews_non_target_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _create_signal(session, priority="P2")
+
+        review = await review_radar_signal(
+            session,
+            signal_id,
+            review_context=ReviewContext.REPORT_PUBLICATION,
+        )
+
+    assert review is not None
+    assert review.review_status == RadarReviewStatus.APPROVED
+    assert "report_publication_review" in review.reasons
+    assert review.details["m5_review_scope_reasons"] == []
 
 
 @pytest.mark.asyncio
@@ -346,7 +435,12 @@ async def test_radar_review_api_blocks_signal_without_evidence(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     async with session_factory() as session:
-        signal_id = await _create_signal(session, evidence_count=1, with_evidence=False)
+        signal_id = await _create_signal(
+            session,
+            priority="P0",
+            evidence_count=1,
+            with_evidence=False,
+        )
 
     app = create_app()
 
@@ -378,7 +472,7 @@ async def test_radar_review_api_marks_low_confidence_for_human_review(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     async with session_factory() as session:
-        signal_id = await _create_signal(session, confidence=0.2)
+        signal_id = await _create_signal(session, priority="P0", confidence=0.2)
 
     app = create_app()
 
@@ -410,7 +504,7 @@ async def test_radar_review_api_lists_review_history_latest_first(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     async with session_factory() as session:
-        signal_id = await _create_signal(session)
+        signal_id = await _create_signal(session, priority="P0")
 
     app = create_app()
 
@@ -458,6 +552,7 @@ async def _create_signal(
     with_evidence: bool = True,
     quick_report_candidate: bool = False,
     provider_quality_status: str | None = None,
+    subject_type: str = "sector_concept",
     metrics_extra: dict[str, object] | None = None,
     evidence_details_extra: dict[str, object] | None = None,
     evidence_source_time: datetime | None = None,
@@ -499,7 +594,7 @@ async def _create_signal(
     signal = RadarSignal(
         batch_id=batch.id,
         signal_key=f"test:signal:{now.timestamp()}",
-        subject_type="sector_concept",
+        subject_type=subject_type,
         subject_code="GN001",
         subject_name="AI Applications",
         priority=priority,

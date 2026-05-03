@@ -8,7 +8,7 @@ from app.db.portfolio_models import UserProfile
 from app.db.push_models import PushLog
 from app.db.radar_models import RadarSignal
 from app.db.report_models import Report
-from app.governance.review import review_radar_signal
+from app.governance.review import ReviewContext, review_radar_signal
 from app.portfolio.schemas import DEFAULT_USER_KEY
 from app.portfolio.service import get_or_create_user
 from app.radar.schemas import RadarReviewStatus, RadarSignalDetail
@@ -86,7 +86,11 @@ async def _create_signal_report_for_user(
     details_update: dict[str, object] | None = None,
     commit: bool = True,
 ) -> ReportRead | None:
-    review = await review_radar_signal(session, signal_id)
+    review = await review_radar_signal(
+        session,
+        signal_id,
+        review_context=ReviewContext.REPORT_PUBLICATION,
+    )
     if review is None:
         return None
 

@@ -10,7 +10,7 @@
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、最近扫描状态、雷达总览、生命周期分布、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级或评分。
 
-M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、生命周期、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告预留约束、Web 核心页面顺序和公开分享脱敏。
+M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、生命周期、Review Agent 审查范围、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告预留约束、Web 核心页面顺序和公开分享脱敏。
 
 Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、生命周期分布、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
 
@@ -20,7 +20,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
 
-报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记；`deep` 已作为报告类型预留，但不会被 `/reports/from-signal` 自动或普通手动创建。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d v2 综合评分记录，已纳入 Provider 数据质量、信号时效性、评分档位和权重说明。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告、查看报告列表、生成日报/周报、查看单信号评分档位和组件明细，并维护 Telegram chat 绑定/白名单。
+报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记；报告发布前审查不受信号候选范围限制，确保发布前安全门始终执行；`deep` 已作为报告类型预留，但不会被 `/reports/from-signal` 自动或普通手动创建。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d v2 综合评分记录，已纳入 Provider 数据质量、信号时效性、评分档位和权重说明。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告、查看报告列表、生成日报/周报、查看单信号评分档位和组件明细，并维护 Telegram chat 绑定/白名单。
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
@@ -167,7 +167,7 @@ Windows 客户端：
 - 前后扫描走弱会记录生命周期转移，例如 `climax_to_divergence`。
 - 总览 API 基于最新扫描生成当前活跃信号、P0/P1/P2 聚合、生命周期分布、个股回推证据和按板块/概念去重视图。
 - 雷达扫描 summary、信号 metrics 和 evidence details 会携带 Provider 数据质量摘要。
-- 轻量审查层会拦截诱导交易语言、证据缺失、失败数据质量和低置信度证据；降级/未知数据质量、证据冲突、重复触发和来源过期会进入人工复核；P0 和连续 P1 快报候选会留下审查理由。
+- 轻量审查层会拦截诱导交易语言、证据缺失、失败数据质量和低置信度证据；降级/未知数据质量、证据冲突、重复触发和来源过期会进入人工复核；信号候选审查范围限制为 P0、连续 P1 快报、risk、holding/watchlist 相关候选，报告发布前审查始终执行。
 - 诱导交易语言规则已覆盖基础禁词、常见热词、空格/标点拆分变体，并允许“不要马上买入”“禁止满仓”这类安全警示反例。
 - `share-preview` 是内部预检接口，可以返回审查状态、阻断原因和脱敏记录。
 - `share-payload` 是公开分享 payload，只在通过审查且分享策略安全时返回；它隐藏原始 URL、域名、原文摘录、内部证据详情、原始枚举、精确置信度和来源时间。

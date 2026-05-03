@@ -4,6 +4,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,6 +88,36 @@ FORBIDDEN_TRADING_TERMS = (
     "翻倍票",
     "抄底加仓",
 )
+RISK_REVIEW_MARKERS = (
+    "risk",
+    "regulatory",
+    "announcement",
+    "black_swan",
+    "监管",
+    "公告",
+    "风险",
+    "黑天鹅",
+)
+PERSONAL_CONTEXT_REVIEW_MARKERS = (
+    "holding",
+    "holdings",
+    "watchlist",
+    "portfolio",
+    "持仓",
+    "自选",
+)
+
+
+class ReviewContext(StrEnum):
+    SIGNAL_CANDIDATE = "signal_candidate"
+    REPORT_PUBLICATION = "report_publication"
+
+
+class SignalReviewNotRequiredError(ValueError):
+    def __init__(self, signal_id: int, reasons: list[str]) -> None:
+        super().__init__("signal is outside M5 review scope")
+        self.signal_id = signal_id
+        self.reasons = reasons
 
 
 @dataclass(frozen=True)
@@ -99,21 +130,38 @@ class ReviewDecision:
 async def review_radar_signal(
     session: AsyncSession,
     signal_id: int,
+    *,
+    review_context: ReviewContext | str = ReviewContext.REPORT_PUBLICATION,
 ) -> RadarSignalReviewRead | None:
     signal = await session.get(RadarSignal, signal_id)
     if signal is None:
         return None
 
+    context = ReviewContext(review_context)
+    scope_reasons = m5_signal_review_scope_reasons(signal)
+    if context == ReviewContext.SIGNAL_CANDIDATE and not scope_reasons:
+        raise SignalReviewNotRequiredError(signal.id, ["not_m5_review_target"])
+
     evidences = await _load_signal_evidences(session, signal_id)
     decision = evaluate_radar_signal(signal, evidences)
+    review_reasons = _contextual_review_reasons(
+        context,
+        scope_reasons,
+        decision.reasons,
+    )
+    review_details = {
+        **decision.details,
+        "review_context": context.value,
+        "m5_review_scope_reasons": scope_reasons,
+    }
 
     review = RadarSignalReview(
         signal_id=signal.id,
         review_status=decision.review_status.value,
         reviewer=REVIEWER_NAME,
         rule_version=RULE_VERSION,
-        reasons=decision.reasons,
-        details=decision.details,
+        reasons=review_reasons,
+        details=review_details,
     )
     signal.review_status = decision.review_status.value
     session.add(review)
@@ -222,6 +270,59 @@ def evaluate_radar_signal(
     )
 
 
+def m5_signal_review_scope_reasons(signal: RadarSignal) -> list[str]:
+    reasons: list[str] = []
+
+    if signal.priority == "P0":
+        reasons.append("p0_candidate")
+
+    if signal.priority == "P1" and _is_quick_report_candidate(signal):
+        reasons.append("p1_quick_report_candidate")
+
+    if _is_risk_candidate(signal):
+        reasons.append("risk_candidate")
+
+    if _is_personal_context_candidate(signal):
+        reasons.append("holding_watchlist_related_candidate")
+
+    return _dedupe_reasons(reasons)
+
+
+def _contextual_review_reasons(
+    context: ReviewContext,
+    scope_reasons: list[str],
+    decision_reasons: list[str],
+) -> list[str]:
+    reasons: list[str] = []
+
+    if context == ReviewContext.REPORT_PUBLICATION:
+        reasons.append("report_publication_review")
+    else:
+        reasons.extend(scope_reasons)
+
+    reasons.extend(decision_reasons)
+    return _dedupe_reasons(reasons)
+
+
+def _is_quick_report_candidate(signal: RadarSignal) -> bool:
+    continuity = signal.metrics.get("continuity")
+    return isinstance(continuity, dict) and continuity.get("quick_report_candidate") is True
+
+
+def _is_risk_candidate(signal: RadarSignal) -> bool:
+    return _contains_review_marker(
+        signal.subject_type,
+        RISK_REVIEW_MARKERS,
+    ) or _mapping_contains_review_marker(signal.metrics, RISK_REVIEW_MARKERS)
+
+
+def _is_personal_context_candidate(signal: RadarSignal) -> bool:
+    return _contains_review_marker(
+        signal.subject_type,
+        PERSONAL_CONTEXT_REVIEW_MARKERS,
+    ) or _mapping_contains_review_marker(signal.metrics, PERSONAL_CONTEXT_REVIEW_MARKERS)
+
+
 async def _load_signal_evidences(
     session: AsyncSession,
     signal_id: int,
@@ -240,11 +341,42 @@ def _priority_reasons(signal: RadarSignal) -> list[str]:
     if signal.priority == "P0":
         reasons.append("high_priority_review")
 
-    continuity = signal.metrics.get("continuity")
-    if isinstance(continuity, dict) and continuity.get("quick_report_candidate") is True:
+    if _is_quick_report_candidate(signal):
         reasons.append("quick_report_review")
 
     return reasons
+
+
+def _mapping_contains_review_marker(
+    mapping: dict[str, object],
+    markers: tuple[str, ...],
+) -> bool:
+    for key, value in mapping.items():
+        if _contains_review_marker(key, markers) or _value_contains_review_marker(
+            value,
+            markers,
+        ):
+            return True
+
+    return False
+
+
+def _value_contains_review_marker(value: object, markers: tuple[str, ...]) -> bool:
+    if isinstance(value, dict):
+        return _mapping_contains_review_marker(value, markers)
+
+    if isinstance(value, list):
+        return any(_value_contains_review_marker(item, markers) for item in value)
+
+    if isinstance(value, str):
+        return _contains_review_marker(value, markers)
+
+    return False
+
+
+def _contains_review_marker(value: object, markers: tuple[str, ...]) -> bool:
+    normalized = str(value).strip().lower()
+    return any(marker in normalized for marker in markers)
 
 
 def _matched_forbidden_terms(

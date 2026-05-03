@@ -5,7 +5,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
-from app.governance.review import list_radar_signal_reviews, review_radar_signal
+from app.governance.review import (
+    ReviewContext,
+    SignalReviewNotRequiredError,
+    list_radar_signal_reviews,
+    review_radar_signal,
+)
 from app.governance.share import get_radar_signal_share_preview
 from app.radar.schemas import (
     RadarOverviewRead,
@@ -120,7 +125,19 @@ async def signal_detail(session: SessionDep, signal_id: int) -> RadarSignalDetai
 @router.post("/signals/{signal_id}/review", response_model=RadarSignalReviewRead)
 async def review_signal(session: SessionDep, signal_id: int) -> RadarSignalReviewRead:
     try:
-        review = await review_radar_signal(session, signal_id)
+        review = await review_radar_signal(
+            session,
+            signal_id,
+            review_context=ReviewContext.SIGNAL_CANDIDATE,
+        )
+    except SignalReviewNotRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "signal is outside M5 signal review scope",
+                "reasons": exc.reasons,
+            },
+        ) from exc
     except SQLAlchemyError as exc:
         raise _database_unavailable("reviewing radar signal", exc) from exc
 

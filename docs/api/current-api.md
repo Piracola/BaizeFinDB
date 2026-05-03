@@ -476,7 +476,7 @@ Invoke-RestMethod http://127.0.0.1:8000/scores/signals/1
 
 ### `POST /radar/signals/{signal_id}/review`
 
-用途：对单个信号执行轻量规则审查，并写入审查记录。
+用途：对 M5 范围内的单个信号执行轻量规则审查，并写入审查记录。信号候选审查只接受 P0、连续 P1 快报候选、risk 候选、holding/watchlist 相关候选；普通 P2 或非快报 P1 返回 `409` 且不写入审查记录。报告发布前审查由报告接口内部强制执行，不受这个候选范围限制。
 
 ```powershell
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/signals/1/review
@@ -492,6 +492,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/signals/1/review
 
 常见原因：
 
+- `not_m5_review_target`：信号不在 M5 候选审查范围内，返回 `409` 且不写入审查记录。
 - 诱导交易语言。
 - 证据缺失。
 - 低置信度证据。
