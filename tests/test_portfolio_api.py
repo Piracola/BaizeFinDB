@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
+from app.db.provider_models import MarketSnapshot
 from app.db.session import get_db_session
 from app.main import create_app
 
@@ -170,3 +172,84 @@ async def test_watchlist_crud(
     assert update_response.status_code == 200
     assert update_response.json()["alert_enabled"] is False
     assert delete_response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_portfolio_context_does_not_change_market_radar_overview(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        session.add(
+            MarketSnapshot(
+                provider_name="akshare",
+                endpoint="stock_board_concept_name_em",
+                market="A_SHARE",
+                snapshot_type="sector_concept",
+                source_time=None,
+                collected_at=datetime.now(UTC),
+                row_count=1,
+                raw_summary={"columns": []},
+                normalized_rows=[
+                    {
+                        "sector_code": "GN001",
+                        "sector_name": "AI Applications",
+                        "pct_change": 3.4,
+                        "turnover_rate": 3.1,
+                        "rising_count": 18,
+                        "falling_count": 8,
+                        "leading_stock": "Example AI",
+                        "leading_stock_pct_change": 7.5,
+                    }
+                ],
+                normalization_version="test",
+            )
+        )
+        await session.commit()
+
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            scan_response = await client.post("/radar/scans/run")
+            before_response = await client.get("/radar/overview")
+            holding_response = await client.post(
+                "/portfolio/holdings",
+                params={"user_key": "telegram-1001"},
+                json={
+                    "instrument_code": "600000",
+                    "instrument_name": "浦发银行",
+                    "market": "A_SHARE",
+                },
+            )
+            watchlist_response = await client.post(
+                "/portfolio/watchlist",
+                params={"user_key": "telegram-1001"},
+                json={
+                    "instrument_code": "SZ000001",
+                    "instrument_name": "平安银行",
+                    "market": "A_SHARE",
+                },
+            )
+            after_response = await client.get("/radar/overview")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert scan_response.status_code == 200
+    assert holding_response.status_code == 201
+    assert holding_response.json()["cost_price"] is None
+    assert holding_response.json()["position_ratio"] is None
+    assert watchlist_response.status_code == 201
+
+    before_overview = before_response.json()
+    after_overview = after_response.json()
+    assert before_overview["priority_counts"] == after_overview["priority_counts"]
+    assert before_overview["lifecycle_counts"] == after_overview["lifecycle_counts"]
+    assert before_overview["subject_count"] == after_overview["subject_count"]
+    assert before_overview["current_subjects"] == after_overview["current_subjects"]
