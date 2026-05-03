@@ -7,9 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.db.session import get_db_session
 from app.portfolio.schemas import DEFAULT_USER_KEY
+from app.telegram.binding_service import (
+    list_telegram_bindings,
+    telegram_binding_counts,
+    update_telegram_binding,
+    upsert_telegram_binding,
+)
 from app.telegram.client import TelegramClient
 from app.telegram.push_service import list_telegram_push_logs, send_latest_radar_push
 from app.telegram.schemas import (
+    TelegramBindingCreate,
+    TelegramBindingRead,
+    TelegramBindingUpdate,
     TelegramPushLogRead,
     TelegramPushRequest,
     TelegramPushRunRead,
@@ -37,8 +46,17 @@ TelegramSecretHeader = Annotated[
 
 
 @router.get("/status", response_model=TelegramStatusRead)
-async def status_read() -> TelegramStatusRead:
-    return telegram_status(get_settings())
+async def status_read(session: SessionDep) -> TelegramStatusRead:
+    try:
+        binding_count, active_binding_count = await telegram_binding_counts(session)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("reading Telegram binding status", exc) from exc
+
+    return telegram_status(
+        get_settings(),
+        binding_count=binding_count,
+        active_binding_count=active_binding_count,
+    )
 
 
 @router.post("/webhook", response_model=TelegramWebhookResponse)
@@ -89,6 +107,60 @@ async def push_logs(
         return await list_telegram_push_logs(session, user_key=user_key, limit=limit)
     except SQLAlchemyError as exc:
         raise _database_unavailable("reading Telegram push logs", exc) from exc
+
+
+@router.get("/bindings", response_model=list[TelegramBindingRead])
+async def bindings(
+    session: SessionDep,
+    secret_token: TelegramSecretHeader = None,
+    limit: LimitQuery = 50,
+) -> list[TelegramBindingRead]:
+    settings = get_settings()
+    _validate_secret(settings.telegram_webhook_secret, secret_token)
+
+    try:
+        return await list_telegram_bindings(session, limit=limit)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("reading Telegram bindings", exc) from exc
+
+
+@router.post("/bindings", response_model=TelegramBindingRead)
+async def bind_chat(
+    payload: TelegramBindingCreate,
+    session: SessionDep,
+    secret_token: TelegramSecretHeader = None,
+) -> TelegramBindingRead:
+    settings = get_settings()
+    _validate_secret(settings.telegram_webhook_secret, secret_token)
+
+    try:
+        return await upsert_telegram_binding(session, payload)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("upserting Telegram binding", exc) from exc
+
+
+@router.patch("/bindings/{chat_id}", response_model=TelegramBindingRead)
+async def patch_binding(
+    chat_id: int,
+    payload: TelegramBindingUpdate,
+    session: SessionDep,
+    secret_token: TelegramSecretHeader = None,
+) -> TelegramBindingRead:
+    settings = get_settings()
+    _validate_secret(settings.telegram_webhook_secret, secret_token)
+
+    try:
+        binding = await update_telegram_binding(session, chat_id, payload)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("updating Telegram binding", exc) from exc
+
+    if binding is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Telegram binding not found: {chat_id}",
+        )
+
+    return binding
 
 
 def _validate_secret(expected_secret_raw: str | None, secret_token: str | None) -> None:

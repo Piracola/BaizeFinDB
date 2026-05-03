@@ -4,7 +4,7 @@
 
 ## 1. 当前真实数据表
 
-当前 Alembic head：`202605030008`。
+当前 Alembic head：`202605030009`。
 
 | 表 | 阶段 | 作用 |
 | --- | --- | --- |
@@ -18,6 +18,7 @@
 | `reports` | M5 | quick/standard 模板报告，按用户隔离，生成前复用审查 |
 | `push_logs` | M5 | Telegram 折叠推送记录，按用户和渠道隔离 |
 | `score_records` | M5 | 1d/3d/5d/10d 综合评分记录 |
+| `telegram_bindings` | M5 | Telegram chat 与 `user_key` 的绑定、白名单和禁用状态 |
 | `radar_scan_batches` | M3 | 记录每次雷达扫描批次、状态、摘要、失败原因 |
 | `radar_signals` | M3 | 保存候选信号、优先级、生命周期、审查状态 |
 | `signal_evidences` | M3 | 保存信号证据链、置信度、新鲜度和分享策略 |
@@ -38,6 +39,7 @@ users
   <- watchlist_items.user_id
   <- reports.user_id
   <- push_logs.user_id
+  <- telegram_bindings.user_id
 
 radar_scan_batches
   <- radar_signals.batch_id
@@ -177,6 +179,20 @@ Score records 表不负责：
 - 只按涨跌幅评分；M5 当前评分综合优先级、生命周期、审查、证据和连续性。
 - 改写雷达 P0/P1/P2 或生命周期。
 
+### Telegram bindings 绑定表
+
+Telegram bindings 表只回答：
+
+- 哪个 Telegram `chat_id` 绑定到哪个内部 `user_key`。
+- 该 chat 当前是否允许使用 bot 和接收推送。
+- 绑定来源是手动 API 维护还是后续迁移/导入。
+
+Telegram bindings 表不负责：
+
+- 保存 Telegram bot token、webhook secret 或消息原文。
+- 修改雷达 P0/P1/P2、生命周期、报告状态或评分。
+- 替代 `TELEGRAM_ALLOWED_CHAT_IDS` 的硬安全门；如果环境白名单存在，环境白名单仍会先过滤。
+
 ## 5. 当前尚未实现但路线图中出现的表
 
 这些表出现在总文档规划里，但当前代码和迁移里还没有实现。开发前必须先写 PRD、模型和迁移。
@@ -191,7 +207,6 @@ M5 的数据模型基线已经修正为 A 股 5 分钟资金主线雷达 MVP：
 
 | 规划表 | 所属未来阶段 | 预期用途 |
 | --- | --- | --- |
-| `telegram_bindings` | M5 | Telegram 用户绑定、白名单和 allowed chat 管理 |
 | `instruments` | M5 | 标的主数据，用于个股异动回推和持仓/自选关联 |
 | `sectors` | M5 | 行业/板块主数据，用于资金主线聚合 |
 | `concepts` | M5 | 概念/主题主数据，用于资金主线聚合 |

@@ -9,6 +9,7 @@ from app.radar.schemas import RadarPriority, RadarReviewStatus, RadarSignalRead
 from app.radar.service import get_latest_radar_scan
 from app.reports.schemas import CreatableReportType
 from app.reports.service import ReportBlockedError, ensure_signal_report
+from app.telegram.binding_service import resolve_telegram_recipients
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import format_radar_push
 from app.telegram.schemas import (
@@ -36,7 +37,7 @@ async def send_latest_radar_push(
     if respect_enabled and not push_enabled and not dry_run:
         return _empty_push_result(push_enabled=push_enabled, dry_run=dry_run)
 
-    recipients = _recipient_chat_ids(settings, chat_ids)
+    recipients = await resolve_telegram_recipients(session, settings, chat_ids)
     if not recipients and not dry_run:
         return _empty_push_result(push_enabled=push_enabled, dry_run=dry_run)
 
@@ -240,24 +241,6 @@ def _included_push_signals(
         return reviewed_signals
 
     return []
-
-
-def _recipient_chat_ids(settings: Settings, chat_ids: list[int] | None) -> list[int]:
-    allowed_chat_ids = settings.telegram_allowed_chat_id_set
-    requested_chat_ids = [str(chat_id) for chat_id in chat_ids] if chat_ids else allowed_chat_ids
-    recipients: list[int] = []
-
-    for value in requested_chat_ids:
-        value = value.strip()
-        if allowed_chat_ids and value not in allowed_chat_ids:
-            continue
-
-        try:
-            recipients.append(int(value))
-        except ValueError:
-            continue
-
-    return sorted(set(recipients))
 
 
 async def _existing_successful_push_log(

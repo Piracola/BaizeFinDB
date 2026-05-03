@@ -30,6 +30,9 @@ GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
 GET  /telegram/status
 POST /telegram/webhook
+GET  /telegram/bindings
+POST /telegram/bindings
+PATCH /telegram/bindings/{chat_id}
 POST /telegram/push/latest
 GET  /telegram/push/logs
 ```
@@ -565,10 +568,20 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 {
   "bot_token_configured": false,
   "allowed_chat_count": 0,
+  "binding_count": 0,
+  "active_binding_count": 0,
   "webhook_secret_enabled": false,
   "push_enabled": false
 }
 ```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `allowed_chat_count` | `.env` 中 `TELEGRAM_ALLOWED_CHAT_IDS` 的数量；配置后仍作为硬过滤 |
+| `binding_count` | 数据库 `telegram_bindings` 记录总数 |
+| `active_binding_count` | 当前允许的绑定数量 |
 
 ### `POST /telegram/webhook`
 
@@ -621,6 +634,48 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
 `/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令。
+
+### `GET /telegram/bindings`
+
+用途：查看当前数据库维护的 Telegram chat 绑定和白名单状态。配置 `TELEGRAM_WEBHOOK_SECRET` 后，请求必须携带同一个 Telegram secret header。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/telegram/bindings
+```
+
+返回字段包括：
+
+- `chat_id`：Telegram chat id。
+- `user_key`：绑定到的内部用户隔离键。
+- `display_name`：本地备注名。
+- `is_allowed`：是否允许 webhook 命令和推送。
+- `source`：绑定来源，当前手动 API 写入为 `manual`。
+
+### `POST /telegram/bindings`
+
+用途：新增或更新某个 chat 的绑定。未传 `user_key` 时默认使用 `telegram-<chat_id>`。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/bindings `
+  -ContentType "application/json" `
+  -Body '{"chat_id":1001,"user_key":"telegram-1001","display_name":"primary chat","is_allowed":true}'
+```
+
+绑定规则：
+
+- 如果 `.env` 没有配置 `TELEGRAM_ALLOWED_CHAT_IDS`，且数据库没有任何绑定，则本地开发保持开放模式。
+- 一旦数据库存在绑定，未绑定 chat 默认不再通过 webhook 授权。
+- 如果 `.env` 配置了 `TELEGRAM_ALLOWED_CHAT_IDS`，环境白名单仍先过滤；数据库绑定只能在环境白名单允许的范围内进一步允许或禁用。
+
+### `PATCH /telegram/bindings/{chat_id}`
+
+用途：更新某个 chat 的备注名或禁用状态。
+
+```powershell
+Invoke-RestMethod -Method Patch http://127.0.0.1:8000/telegram/bindings/1001 `
+  -ContentType "application/json" `
+  -Body '{"is_allowed":false}'
+```
 
 ### `POST /telegram/push/latest`
 

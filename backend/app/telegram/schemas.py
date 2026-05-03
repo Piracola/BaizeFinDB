@@ -29,6 +29,8 @@ class TelegramUpdate(BaseModel):
 class TelegramStatusRead(BaseModel):
     bot_token_configured: bool
     allowed_chat_count: int
+    binding_count: int = 0
+    active_binding_count: int = 0
     webhook_secret_enabled: bool
     push_enabled: bool
 
@@ -93,3 +95,26 @@ class TelegramPushLogRead(BaseModel):
     needs_human_review_signal_ids: list[int]
     delivery_details: dict[str, object]
     created_at: datetime
+
+
+class TelegramBindingCreate(BaseModel):
+    chat_id: int
+    user_key: str | None = Field(default=None, min_length=1, max_length=120)
+    display_name: str = Field(default="", max_length=160)
+    is_allowed: bool = True
+
+
+class TelegramBindingUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=160)
+    is_allowed: bool | None = None
+
+
+class TelegramBindingRead(BaseModel):
+    id: int
+    chat_id: int
+    user_key: str
+    display_name: str
+    is_allowed: bool
+    source: str
+    created_at: datetime
+    updated_at: datetime

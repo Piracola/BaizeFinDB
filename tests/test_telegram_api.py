@@ -85,6 +85,8 @@ async def test_telegram_status_does_not_leak_secrets(
     assert response.json() == {
         "bot_token_configured": True,
         "allowed_chat_count": 2,
+        "binding_count": 0,
+        "active_binding_count": 0,
         "webhook_secret_enabled": True,
         "push_enabled": False,
     }
@@ -150,6 +152,58 @@ async def test_telegram_webhook_secret_is_required_when_configured(
 
     assert forbidden_response.status_code == 403
     assert allowed_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_telegram_bindings_control_webhook_authorization(client: AsyncClient) -> None:
+    create_response = await client.post(
+        "/telegram/bindings",
+        json={
+            "chat_id": 1001,
+            "user_key": "telegram-1001",
+            "display_name": "primary chat",
+            "is_allowed": True,
+        },
+    )
+    status_response = await client.get("/telegram/status")
+    list_response = await client.get("/telegram/bindings")
+    allowed_response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+    unbound_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/help", chat_id=2002),
+    )
+    disabled_response = await client.patch(
+        "/telegram/bindings/1001",
+        json={"is_allowed": False},
+    )
+    blocked_response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+
+    assert create_response.status_code == 200
+    binding = create_response.json()
+    assert binding["chat_id"] == 1001
+    assert binding["user_key"] == "telegram-1001"
+    assert binding["is_allowed"] is True
+
+    assert status_response.status_code == 200
+    status_data = status_response.json()
+    assert status_data["binding_count"] == 1
+    assert status_data["active_binding_count"] == 1
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["chat_id"] == 1001
+
+    assert allowed_response.status_code == 200
+    assert allowed_response.json()["authorized"] is True
+
+    assert unbound_response.status_code == 200
+    assert unbound_response.json()["authorized"] is False
+    assert "白名单" in unbound_response.json()["preview"]
+
+    assert disabled_response.status_code == 200
+    assert disabled_response.json()["is_allowed"] is False
+
+    assert blocked_response.status_code == 200
+    assert blocked_response.json()["authorized"] is False
 
 
 @pytest.mark.asyncio

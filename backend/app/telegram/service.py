@@ -9,6 +9,7 @@ from app.radar.service import get_radar_overview, get_radar_signal_detail, list_
 from app.reports.schemas import PeriodicReportType
 from app.reports.service import generate_periodic_report, list_reports
 from app.scores.service import generate_signal_scores
+from app.telegram.binding_service import is_telegram_chat_authorized
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import (
     format_health,
@@ -37,10 +38,17 @@ from app.telegram.schemas import (
 SIGNALS_COMMAND_LIMIT = 10
 
 
-def telegram_status(settings: Settings) -> TelegramStatusRead:
+def telegram_status(
+    settings: Settings,
+    *,
+    binding_count: int = 0,
+    active_binding_count: int = 0,
+) -> TelegramStatusRead:
     return TelegramStatusRead(
         bot_token_configured=settings.telegram_bot_token_configured,
         allowed_chat_count=len(settings.telegram_allowed_chat_id_set),
+        binding_count=binding_count,
+        active_binding_count=active_binding_count,
         webhook_secret_enabled=settings.telegram_webhook_secret_enabled,
         push_enabled=settings.telegram_push_enabled,
     )
@@ -67,7 +75,7 @@ class TelegramCommandService:
             )
 
         chat_id = message.chat.id
-        if not self._is_authorized(chat_id):
+        if not await is_telegram_chat_authorized(session, self._settings, chat_id):
             return _preview_response(
                 accepted=False,
                 authorized=False,
@@ -93,10 +101,6 @@ class TelegramCommandService:
             text=response_text,
             accepted=True,
         )
-
-    def _is_authorized(self, chat_id: int) -> bool:
-        allowed_chat_ids = self._settings.telegram_allowed_chat_id_set
-        return not allowed_chat_ids or str(chat_id) in allowed_chat_ids
 
     async def _command_response(
         self,

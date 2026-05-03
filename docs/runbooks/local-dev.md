@@ -195,6 +195,18 @@ TELEGRAM_PUSH_ENABLED=false
 Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 ```
 
+维护本地 Telegram chat 绑定和白名单：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/bindings `
+  -ContentType "application/json" `
+  -Body '{"chat_id":1001,"user_key":"telegram-1001","display_name":"local preview","is_allowed":true}'
+
+Invoke-RestMethod http://127.0.0.1:8000/telegram/bindings
+```
+
+如果 `.env` 未配置 `TELEGRAM_ALLOWED_CHAT_IDS` 且数据库没有任何绑定，本地 webhook 仍保持开放模式；一旦存在绑定，未绑定 chat 默认会被拒绝。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，环境白名单仍是硬过滤。
+
 本地 preview `/help`：
 
 ```powershell

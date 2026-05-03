@@ -187,6 +187,32 @@ async def test_telegram_push_request_chat_ids_respect_whitelist(
 
 
 @pytest.mark.asyncio
+async def test_telegram_push_request_chat_ids_respect_db_bindings(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    await _seed_push_scan(session_factory)
+    await client.post(
+        "/telegram/bindings",
+        json={"chat_id": 1001, "is_allowed": True},
+    )
+    await client.post(
+        "/telegram/bindings",
+        json={"chat_id": 9999, "is_allowed": False},
+    )
+
+    response = await client.post(
+        "/telegram/push/latest",
+        json={"chat_ids": [1001, 2002, 9999], "dry_run": True},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["recipient_count"] == 1
+    assert [delivery["chat_id"] for delivery in data["deliveries"]] == [1001]
+
+
+@pytest.mark.asyncio
 async def test_telegram_push_generates_standard_report_for_p0(
     session_factory: async_sessionmaker[AsyncSession],
     client: AsyncClient,
