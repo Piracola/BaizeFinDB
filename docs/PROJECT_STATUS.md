@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前已完成 **M4 轻量审查层闭环**。
+当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
 项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、个股回推证据、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
@@ -26,7 +26,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
-下一阶段开发基线已修正为 **A 股 5 分钟资金主线雷达 MVP**。Telegram、Web、报告、持仓自选、日报周报和评分都围绕雷达结果展开，不再按 Telegram / 报告 / Web 三选一推进。
+下一阶段开发基线切换为 **M5 生产化验证和真实数据增强**。核心是让现有雷达闭环在 Docker / Linux 服务器上可持续运行、可观测、可恢复，并逐步接入更稳定的真实公告、监管、情绪和后续评分校准数据源。
 
 当前长期开发规范：
 
@@ -57,7 +57,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台（含个股回推证据、报告、日报/周报、评分明细展示和 Telegram 绑定管理）、Telegram Bot MVP（含个股回推证据和评分明细展示）、Windows 客户端 MVP（含个股回推证据、报告、日报/周报、评分明细展示和 Telegram 绑定管理）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补生产化部署。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 验收项完成 | 静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check 已接入。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查和只读 M5 smoke check）、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/scripts/postgres_restore.py` PostgreSQL 恢复脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -203,15 +203,10 @@ uv run uvicorn app.main:app --reload
 
 ## 下一步
 
-建议进入 **M5 A 股 5 分钟资金主线雷达 MVP**，范围继续保持轻量：
+建议进入 **生产化验证和真实数据增强**，范围继续保持轻量：
 
-- 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则和生命周期。
-- 将持仓/自选接入 Telegram/Web 展示和报告上下文；继续保持只影响个人优先级，不改变市场主线等级。
-- Telegram 推送已能按 P0/P1/P2 折叠汇总、过滤 blocked、记录 `push_logs`，并在 P0 推送后为对应聊天用户生成 standard report。
-- Web MVP 已改为雷达终端工作台外壳，具备左侧模块导航、顶部命令栏、F-key 操作条、雷达总览、个股回推证据、信号详情、持仓/自选维护、报告列表、日报/周报、单信号评分明细和 Telegram 绑定管理。
-- 报告分 quick/standard/deep；自动最多 quick/standard，deep 只手动触发；日报/周报汇总 API 已有最小生成能力。
-- 1d/3d/5d/10d v2 综合评分已能按信号生成，并已接入 Telegram、Windows 与 Web 展示评分档位和组件明细；评分包含优先级、生命周期、审查、证据、连续性、数据质量和时效性，仍不是价格回测或交易建议。
-- 所有发布类输出都先走审查和分享预检，公开分享默认脱敏脱源。
-- 继续补交易诱导词正反例，按真实误报再调规则。
-
-M5 可执行拆分见 [prd/m5-next-step.md](prd/m5-next-step.md)。当前建议按雷达优先顺序推进，不再把 Telegram、报告、Web 作为并列备选入口。
+- 用 Docker / Linux runbook 跑通 API、worker、beat、迁移和只读 M5 smoke check。
+- 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
+- 增加运行可观测性：扫描耗时、失败率、推送结果、模型降级和数据质量趋势。
+- 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
+- Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。
