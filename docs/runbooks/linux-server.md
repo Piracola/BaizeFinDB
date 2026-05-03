@@ -11,6 +11,7 @@
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
 | `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态和 API 健康检查。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
+| `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
@@ -81,6 +82,14 @@ uv run python infra/scripts/postgres_backup.py
 ```powershell
 uv run python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql
 ```
+
+从备份恢复 PostgreSQL：
+
+```powershell
+uv run python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confirm-restore
+```
+
+恢复会覆盖目标数据库当前状态；执行前先确认当前 compose project、目标数据库和备份文件路径。
 
 Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。
 

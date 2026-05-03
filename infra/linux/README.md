@@ -12,6 +12,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, and API health. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
+| `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
 
@@ -227,6 +228,22 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T postgr
 `backups/` is ignored by git. Also back up `.env` through a secure server-side
 secret process, not through git.
 
+## Restore
+
+Restoring is destructive for the target database state. Verify the compose
+project, database name, and backup path before running it.
+
+```bash
+python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confirm-restore
+```
+
+The helper runs:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T postgres \
+  psql -v ON_ERROR_STOP=1 -U baizefindb -d baizefindb
+```
+
 ## Upgrade
 
 ```bash
@@ -249,5 +266,5 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api work
 ```
 
 If a migration changed data or schema, restore from the pre-upgrade database backup
-or use a tested downgrade plan. Do not improvise destructive database commands on
-the server.
+with `infra/scripts/postgres_restore.py` or use a tested downgrade plan. Do not
+improvise destructive database commands on the server.

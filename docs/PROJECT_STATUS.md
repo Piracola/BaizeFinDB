@@ -12,7 +12,7 @@ Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康�
 
 Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d 综合评分，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
 
-Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性。该状态只代表部署骨架完成，不代表完整生产部署完成。
+Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。
 
@@ -54,7 +54,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
 | M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示和 Telegram 绑定管理）、Telegram Bot MVP、Windows 客户端 MVP（含报告、日报/周报、评分展示和 Telegram 绑定管理）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补生产化部署。 |
-| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查）、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
+| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查）、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/scripts/postgres_restore.py` PostgreSQL 恢复脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
 
