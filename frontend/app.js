@@ -19,13 +19,17 @@ const elements = {
   watchlistForm: document.querySelector("#watchlist-form"),
   holdingsList: document.querySelector("#holdings-list"),
   watchlistList: document.querySelector("#watchlist-list"),
+  reportsList: document.querySelector("#reports-list"),
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   elements.refreshButton.addEventListener("click", refreshAll);
   elements.runScanButton.addEventListener("click", runRadarScan);
   elements.fetchAkshareButton.addEventListener("click", fetchMinimalAkshare);
-  elements.portfolioUserKey.addEventListener("change", loadPortfolio);
+  elements.portfolioUserKey.addEventListener("change", () => {
+    loadPortfolio();
+    loadReports();
+  });
   elements.holdingForm.addEventListener("submit", addHolding);
   elements.watchlistForm.addEventListener("submit", addWatchlistItem);
   refreshAll();
@@ -37,7 +41,7 @@ async function refreshAll() {
 
   const isReady = await loadReadyStatus();
   if (isReady) {
-    await Promise.all([loadOverview(), loadSignals(), loadPortfolio()]);
+    await Promise.all([loadOverview(), loadSignals(), loadPortfolio(), loadReports()]);
     showMessage("info", "刷新完成。");
   } else {
     renderRadarUnavailable("API 依赖未就绪。确认 PostgreSQL、Redis 和迁移状态后再刷新。");
@@ -97,6 +101,15 @@ async function loadPortfolio() {
   }
 }
 
+async function loadReports() {
+  try {
+    const reports = await fetchJson(`/reports${portfolioQuery()}`);
+    renderReports(reports);
+  } catch (error) {
+    elements.reportsList.innerHTML = emptyState(`报告列表暂不可用：${formatError(error)}`);
+  }
+}
+
 function renderRadarUnavailable(reason) {
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.latestScan.innerHTML = emptyState("依赖服务恢复后，先触发采集或运行雷达扫描。");
@@ -104,6 +117,7 @@ function renderRadarUnavailable(reason) {
   elements.signalsList.innerHTML = emptyState("暂无信号列表。");
   elements.holdingsList.innerHTML = emptyState("依赖服务恢复后再读取持仓。");
   elements.watchlistList.innerHTML = emptyState("依赖服务恢复后再读取自选。");
+  elements.reportsList.innerHTML = emptyState("依赖服务恢复后再读取报告。");
 }
 
 async function loadSignalDetail(signalId) {
@@ -207,6 +221,29 @@ async function deletePortfolioItem(path, labelText) {
     await loadPortfolio();
   } catch (error) {
     showMessage("error", `删除${labelText}失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function createReport(reportType) {
+  if (!state.selectedSignalId) {
+    showMessage("error", "请先选择一个信号。");
+    return;
+  }
+
+  setButtonsBusy(true);
+  showMessage("info", `正在生成 ${reportType} report。`);
+
+  try {
+    const report = await postJson(`/reports/from-signal${portfolioQuery()}`, {
+      signal_id: Number(state.selectedSignalId),
+      report_type: reportType,
+    });
+    showMessage("info", `报告已生成：#${report.id} ${report.title}`);
+    await loadReports();
+  } catch (error) {
+    showMessage("error", `生成报告失败：${formatError(error)}`);
   } finally {
     setButtonsBusy(false);
   }
@@ -352,6 +389,10 @@ function renderSignalDetail(detail) {
       </div>
       <h3>${escapeHtml(detail.title || detail.subject_name)}</h3>
       <p class="summary">${escapeHtml(detail.summary || "暂无摘要。")}</p>
+      <div class="report-actions">
+        <button type="button" data-report-type="quick">生成 Quick Report</button>
+        <button type="button" data-report-type="standard">生成 Standard Report</button>
+      </div>
     </article>
     <div class="detail-grid">
       <div class="kv"><span>信号 ID</span>${escapeHtml(detail.id)}</div>
@@ -389,6 +430,9 @@ function renderSignalDetail(detail) {
   `;
 
   document.querySelector("#metrics-json").textContent = JSON.stringify(detail.metrics || {}, null, 2);
+  elements.signalDetail.querySelectorAll("[data-report-type]").forEach((button) => {
+    button.addEventListener("click", () => createReport(button.dataset.reportType));
+  });
 }
 
 function renderHoldings(holdings) {
@@ -449,6 +493,33 @@ function renderWatchlistItems(items) {
   elements.watchlistList.querySelectorAll("[data-watchlist-id]").forEach((button) => {
     button.addEventListener("click", () => deleteWatchlistItem(button.dataset.watchlistId));
   });
+}
+
+function renderReports(reports) {
+  if (!Array.isArray(reports) || reports.length === 0) {
+    elements.reportsList.innerHTML = emptyState("暂无报告。选择信号后可生成 quick 或 standard report。");
+    return;
+  }
+
+  elements.reportsList.innerHTML = reports
+    .map((report) => {
+      return `
+        <article class="report-card">
+          <div class="meta-row">
+            <span class="badge">${escapeHtml(report.report_type)}</span>
+            <span class="badge">${escapeHtml(label(report.status))}</span>
+            <span class="badge">${escapeHtml(report.suggestion_label)}</span>
+          </div>
+          <h3>#${escapeHtml(report.id)} ${escapeHtml(report.title)}</h3>
+          <p class="summary">${escapeHtml(report.summary)}</p>
+          <details>
+            <summary>查看正文</summary>
+            <pre>${escapeHtml(report.body_markdown)}</pre>
+          </details>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 async function fetchJson(path, options = {}) {
@@ -527,6 +598,7 @@ function label(value) {
     approved: "已通过",
     blocked: "已阻断",
     needs_human_review: "需人工复核",
+    generated: "已生成",
     ignition: "点火",
     developing: "发酵",
     divergence: "分歧",

@@ -18,7 +18,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 面板已能维护和展示这些个人数据。这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2。
 
-报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记。
+报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记。静态 Web 面板已能从信号详情生成报告并查看报告列表。
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
@@ -53,7 +53,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP；后续继续补折叠推送、日报周报和基础评分。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP 与 Web 报告视图；后续继续补折叠推送、日报周报和基础评分。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -184,7 +184,7 @@ uv run uvicorn app.main:app --reload
 - 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则、生命周期和 P2 7 天观察。
 - 将持仓/自选接入 Telegram/Web 展示和报告上下文；继续保持只影响个人优先级，不改变市场主线等级。
 - Telegram 推送按 P0/P1/P2 折叠汇总；P0 快速提醒后后台生成 standard report，P1 连续触发生成 quick report 候选。
-- Web MVP 已具备雷达总览、信号详情、持仓/自选维护；后续补报告列表。
+- Web MVP 已具备雷达总览、信号详情、持仓/自选维护和报告列表。
 - 报告分 quick/standard/deep；自动最多 quick/standard，deep 只手动触发。
 - 加入日报、周报和 1d/3d/5d/10d 基础综合评分。
 - 所有发布类输出都先走审查和分享预检，公开分享默认脱敏脱源。

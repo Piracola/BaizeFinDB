@@ -154,6 +154,10 @@ h3 {
   grid-column: 1 / -1;
 }
 
+.reports-panel {
+  grid-column: 1 / -1;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -181,6 +185,7 @@ h3 {
 .detail-card,
 .evidence-card,
 .portfolio-card,
+.report-card,
 .compact-form {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -232,7 +237,8 @@ h3 {
 .subject-list,
 .signal-list,
 .evidence-list,
-.portfolio-list {
+.portfolio-list,
+.report-list {
   display: grid;
   gap: 10px;
 }
@@ -253,7 +259,8 @@ h3 {
 .signal-card h3,
 .subject-card h3,
 .detail-card h3,
-.portfolio-card h3 {
+.portfolio-card h3,
+.report-card h3 {
   margin: 0;
   font-size: 15px;
 }
@@ -288,6 +295,23 @@ h3 {
 
 .span-2 {
   grid-column: span 2;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+details {
+  margin-top: 10px;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-weight: 700;
 }
 
 .meta-row {
