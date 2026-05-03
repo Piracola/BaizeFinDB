@@ -10,6 +10,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
+| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, and API health. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
 
@@ -73,6 +74,12 @@ docker compose config
 docker compose -f docker-compose.yml -f docker-compose.server.yml config
 ```
 
+Or run the bundled preflight:
+
+```bash
+python infra/scripts/server_deploy_check.py --strict-env
+```
+
 Build the API image:
 
 ```bash
@@ -120,6 +127,12 @@ curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
 `/health/ready` should only return ready when PostgreSQL and Redis are reachable.
+
+The same checks can be run through the bundled preflight:
+
+```bash
+python infra/scripts/server_deploy_check.py --check-containers --check-api
+```
 
 ## Telegram Webhook
 

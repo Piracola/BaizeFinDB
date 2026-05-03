@@ -9,6 +9,7 @@
 | `Dockerfile` | 生产取向的 FastAPI API 镜像，启动 `uvicorn app.main:app --host 0.0.0.0 --port 8000`。 |
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
+| `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态和 API 健康检查。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
@@ -48,6 +49,18 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml config
 
 ```powershell
 docker build -t baizefindb-api:dev .
+```
+
+运行服务器部署预检：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py
+```
+
+服务已经启动后，可以追加容器和 API 检查：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
 Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。
