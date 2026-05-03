@@ -97,11 +97,15 @@ async def test_radar_api_runs_scan_and_reads_signals(
     assert scan_detail_response.json()["id"] == run_response.json()["id"]
 
     assert overview_response.status_code == 200
-    assert overview_response.json()["latest_scan"]["id"] == run_response.json()["id"]
-    assert overview_response.json()["priority_counts"] == {"P0": 0, "P1": 1, "P2": 0}
-    assert overview_response.json()["lifecycle_counts"]["ignition"] == 1
-    assert overview_response.json()["subject_count"] == 1
-    assert overview_response.json()["current_subjects"][0]["subject_name"] == "AI Applications"
+    overview_payload = overview_response.json()
+    assert overview_payload["latest_scan"]["id"] == run_response.json()["id"]
+    assert overview_payload["priority_counts"] == {"P0": 0, "P1": 1, "P2": 0}
+    assert overview_payload["lifecycle_counts"]["ignition"] == 1
+    assert overview_payload["subject_count"] == 1
+    assert overview_payload["current_subjects"][0]["subject_name"] == "AI Applications"
+    backtrace = overview_payload["stock_backtrace_evidences"][0]
+    assert backtrace["stock_name"] == "Example AI"
+    assert backtrace["subject_name"] == "AI Applications"
 
     assert signals_response.status_code == 200
     assert signals_response.json()[0]["subject_name"] == "AI Applications"

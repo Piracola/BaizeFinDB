@@ -20,6 +20,7 @@ TELEGRAM_BINDING_PREVIEW_LIMIT = 20
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
+STOCK_BACKTRACE_PREVIEW_LIMIT = 5
 
 JsonObject = dict[str, Any]
 JsonPayload = JsonObject | list[Any]
@@ -495,6 +496,7 @@ def format_health(payload: Mapping[str, Any]) -> str:
 def format_radar_overview(overview: Mapping[str, Any]) -> str:
     counts = _mapping(overview.get("priority_counts"))
     lifecycle_counts = _mapping(overview.get("lifecycle_counts"))
+    stock_backtrace_evidences = _sequence(overview.get("stock_backtrace_evidences"))
     latest_scan = _mapping(overview.get("latest_scan"))
     current_subjects = _sequence(overview.get("current_subjects"))
     lines = [
@@ -506,6 +508,7 @@ def format_radar_overview(overview: Mapping[str, Any]) -> str:
             f"P2={_int_text(counts.get('P2'))}"
         ),
         f"后端生命周期分布：{_lifecycle_counts_text(lifecycle_counts)}",
+        f"后端个股回推：{_stock_backtrace_text(stock_backtrace_evidences)}",
         f"当前主题：{_int_text(overview.get('subject_count'))} 个",
     ]
 
@@ -846,6 +849,27 @@ def _lifecycle_counts_text(counts: Mapping[str, Any]) -> str:
     return " / ".join(parts) if parts else "暂无"
 
 
+def _stock_backtrace_text(evidences: Sequence[Any]) -> str:
+    if not evidences:
+        return "暂无"
+
+    parts = []
+    for evidence in evidences[:STOCK_BACKTRACE_PREVIEW_LIMIT]:
+        evidence_map = _mapping(evidence)
+        parts.append(
+            (
+                f"{_text(evidence_map.get('stock_name'), '未命名个股')} "
+                f"{_signed_percent(evidence_map.get('stock_pct_change'))} -> "
+                f"{_text(evidence_map.get('subject_name'), '未命名主题')}"
+            ),
+        )
+
+    if len(evidences) > STOCK_BACKTRACE_PREVIEW_LIMIT:
+        parts.append(f"等 {len(evidences)} 条")
+
+    return " / ".join(parts)
+
+
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:
     if not bindings:
         return _trim_text(
@@ -991,6 +1015,16 @@ def _number_text(value: Any) -> str:
         return "未填"
 
     return str(value)
+
+
+def _signed_percent(value: Any) -> str:
+    try:
+        number_value = float(value)
+    except (TypeError, ValueError):
+        return "-"
+
+    sign = "+" if number_value > 0 else ""
+    return f"{sign}{number_value:g}%"
 
 
 def _ratio_text(value: Any) -> str:

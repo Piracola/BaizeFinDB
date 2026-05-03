@@ -19,6 +19,7 @@ from app.radar.schemas import (
     RadarScanStatus,
     RadarSignalDetail,
     RadarSignalRead,
+    RadarStockBacktraceEvidenceRead,
     RadarSubjectOverviewRead,
     SignalEvidenceRead,
 )
@@ -191,6 +192,7 @@ async def get_radar_overview(
             )
             for signal in active_signals
         ],
+        stock_backtrace_evidences=_stock_backtrace_evidences(current_signals)[:limit],
         priority_counts=_signal_priority_counts(current_signals),
         lifecycle_counts=_signal_lifecycle_counts(current_signals),
         subject_count=len(current_signals),
@@ -831,6 +833,44 @@ def _signal_lifecycle_counts(signals: list[RadarSignalRead]) -> dict[str, int]:
     return counts
 
 
+def _stock_backtrace_evidences(
+    signals: list[RadarSignalRead],
+) -> list[RadarStockBacktraceEvidenceRead]:
+    evidences: list[RadarStockBacktraceEvidenceRead] = []
+
+    for signal in signals:
+        stock_name = _optional_text(signal.metrics.get("leading_stock"))
+        stock_pct_change = _float(signal.metrics.get("leading_stock_pct_change"))
+        if stock_name is None or stock_pct_change <= 0:
+            continue
+
+        evidences.append(
+            RadarStockBacktraceEvidenceRead(
+                signal_id=signal.id,
+                subject_type=signal.subject_type,
+                subject_code=signal.subject_code,
+                subject_name=signal.subject_name,
+                priority=signal.priority,
+                lifecycle_stage=signal.lifecycle_stage,
+                stock_name=stock_name,
+                stock_pct_change=stock_pct_change,
+                evidence_label=(
+                    f"{stock_name} +{stock_pct_change:g}% -> {signal.subject_name}"
+                ),
+                source_snapshot_id=_optional_int(signal.metrics.get("source_snapshot_id")),
+            )
+        )
+
+    return sorted(
+        evidences,
+        key=lambda evidence: (
+            _priority_sort_rank(evidence.priority),
+            -evidence.stock_pct_change,
+            evidence.subject_name,
+        ),
+    )
+
+
 def _snapshot_quality_summary(
     snapshot: MarketSnapshot,
     snapshot_quality_check: DataQualityCheck | None,
@@ -951,3 +991,21 @@ def _int(value: object) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _priority_sort_rank(priority: RadarPriority | str) -> int:
+    return {
+        RadarPriority.P0.value: 0,
+        RadarPriority.P1.value: 1,
+        RadarPriority.P2.value: 2,
+    }.get(str(getattr(priority, "value", priority)), 99)

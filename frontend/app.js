@@ -42,6 +42,7 @@ const elements = {
   priorityCounts: document.querySelector("#priority-counts"),
   lifecycleCounts: document.querySelector("#lifecycle-counts"),
   latestScan: document.querySelector("#latest-scan"),
+  stockBacktraceEvidences: document.querySelector("#stock-backtrace-evidences"),
   currentSubjects: document.querySelector("#current-subjects"),
   signalsList: document.querySelector("#signals-list"),
   signalDetail: document.querySelector("#signal-detail"),
@@ -126,11 +127,13 @@ async function loadOverview() {
     renderPriorityCounts(overview.priority_counts || {});
     renderLifecycleCounts(overview.lifecycle_counts || {});
     renderLatestScan(overview.latest_scan);
+    renderStockBacktraceEvidences(overview.stock_backtrace_evidences || []);
     renderCurrentSubjects(overview.current_subjects || []);
   } catch (error) {
     elements.priorityCounts.innerHTML = emptyState(`雷达总览暂不可用：${formatError(error)}`);
     elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
     elements.latestScan.innerHTML = emptyState("确认数据库迁移和依赖服务后再刷新。");
+    elements.stockBacktraceEvidences.innerHTML = emptyState("暂无个股回推证据。");
     elements.currentSubjects.innerHTML = emptyState("暂无当前主题。可先触发采集，再运行雷达扫描。");
   }
 }
@@ -204,6 +207,7 @@ function renderRadarUnavailable(reason) {
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
   elements.latestScan.innerHTML = emptyState("依赖服务恢复后，先触发采集或运行雷达扫描。");
+  elements.stockBacktraceEvidences.innerHTML = emptyState("暂无个股回推证据。");
   elements.currentSubjects.innerHTML = emptyState("暂无当前主题。");
   elements.signalsList.innerHTML = emptyState("暂无信号列表。");
   elements.holdingsList.innerHTML = emptyState("依赖服务恢复后再读取持仓。");
@@ -556,6 +560,30 @@ function renderLatestScan(scan) {
         : ""
     }
   `;
+}
+
+function renderStockBacktraceEvidences(evidences) {
+  if (!Array.isArray(evidences) || evidences.length === 0) {
+    elements.stockBacktraceEvidences.innerHTML = emptyState("暂无个股回推证据。");
+    return;
+  }
+
+  elements.stockBacktraceEvidences.innerHTML = evidences
+    .map((evidence) => {
+      return `
+        <article class="backtrace-card">
+          <div class="meta-row">
+            <span class="badge ${priorityBadgeClass(evidence.priority)}">${escapeHtml(evidence.priority || "-")}</span>
+            <span class="badge">${escapeHtml(label(evidence.lifecycle_stage))}</span>
+            <span class="badge">${escapeHtml(label(evidence.subject_type))}</span>
+          </div>
+          <h3>${escapeHtml(evidence.stock_name || "未命名个股")} ${escapeHtml(formatSignedPercent(evidence.stock_pct_change))}</h3>
+          <p class="summary">反推主题：${escapeHtml(evidence.subject_name || "未命名主题")}</p>
+          <p class="muted">${escapeHtml(evidence.evidence_label || "后端雷达指标派生")}</p>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function renderCurrentSubjects(subjects) {
@@ -1089,6 +1117,18 @@ function formatOptionalNumber(value) {
   }
 
   return Number(value).toString();
+}
+
+function formatSignedPercent(value) {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) {
+    return "-";
+  }
+
+  const text = Number.isInteger(numberValue)
+    ? String(numberValue)
+    : numberValue.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return `${numberValue > 0 ? "+" : ""}${text}%`;
 }
 
 function formatScore(value) {

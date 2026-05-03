@@ -285,6 +285,7 @@ h3 {
 
 .status-card,
 .priority-card,
+.backtrace-card,
 .subject-card,
 .signal-card,
 .detail-card,
@@ -341,6 +342,7 @@ h3 {
 }
 
 .subject-list,
+.backtrace-list,
 .signal-list,
 .evidence-list,
 .portfolio-list,
@@ -350,6 +352,7 @@ h3 {
 }
 
 .subject-card,
+.backtrace-card,
 .signal-card,
 .portfolio-card,
 .report-card {
@@ -364,6 +367,7 @@ h3 {
 }
 
 .signal-card h3,
+.backtrace-card h3,
 .subject-card h3,
 .detail-card h3,
 .portfolio-card h3,

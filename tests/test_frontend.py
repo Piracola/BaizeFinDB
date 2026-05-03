@@ -19,6 +19,7 @@ def test_frontend_index_returns_static_page() -> None:
     assert "Telegram 绑定 / 白名单" in response.text
     assert "daily / score" in response.text
     assert "lifecycle-counts" in response.text
+    assert "stock-backtrace-evidences" in response.text
 
 
 def test_frontend_assets_are_served() -> None:
@@ -38,6 +39,8 @@ def test_frontend_assets_are_served() -> None:
     assert "data_quality" in js_response.text
     assert "renderLifecycleCounts" in js_response.text
     assert "lifecycle_counts" in js_response.text
+    assert "renderStockBacktraceEvidences" in js_response.text
+    assert "stock_backtrace_evidences" in js_response.text
     assert "loadTelegramBindings" in js_response.text
     assert "saveTelegramBinding" in js_response.text
     assert "executeCommand" in js_response.text
@@ -52,3 +55,4 @@ def test_frontend_assets_are_served() -> None:
     assert "score-grid" in css_response.text
     assert "score-components" in css_response.text
     assert "lifecycle-grid" in css_response.text
+    assert "backtrace-list" in css_response.text

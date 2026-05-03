@@ -19,6 +19,7 @@ PORTFOLIO_PREVIEW_LIMIT = 8
 REPORT_PREVIEW_LIMIT = 5
 EVIDENCE_PREVIEW_LIMIT = 3
 PUSH_PREVIEW_LIMIT_PER_PRIORITY = 5
+STOCK_BACKTRACE_PREVIEW_LIMIT = 3
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 
 LIFECYCLE_LABELS = {
@@ -153,10 +154,14 @@ def format_health(
 
 def format_radar_overview(overview: RadarOverviewRead) -> str:
     counts = overview.priority_counts
+    stock_backtrace_text = _stock_backtrace_text(
+        getattr(overview, "stock_backtrace_evidences", []),
+    )
     lines = [
         "雷达总览",
         f"P0：{counts.get('P0', 0)} / P1：{counts.get('P1', 0)} / P2：{counts.get('P2', 0)}",
         f"生命周期：{_lifecycle_counts_text(overview.lifecycle_counts)}",
+        f"个股回推：{stock_backtrace_text}",
         f"当前主题：{overview.subject_count} 个",
     ]
 
@@ -397,6 +402,24 @@ def _lifecycle_counts_text(counts: dict[str, int]) -> str:
     return " / ".join(parts) if parts else "暂无"
 
 
+def _stock_backtrace_text(evidences: list[object]) -> str:
+    if not evidences:
+        return "暂无"
+
+    parts = [
+        (
+            f"{_field(evidence, 'stock_name', '未命名个股')} "
+            f"{_signed_percent(_field(evidence, 'stock_pct_change', None))} -> "
+            f"{_field(evidence, 'subject_name', '未命名主题')}"
+        )
+        for evidence in evidences[:STOCK_BACKTRACE_PREVIEW_LIMIT]
+    ]
+    if len(evidences) > STOCK_BACKTRACE_PREVIEW_LIMIT:
+        parts.append(f"等 {len(evidences)} 条")
+
+    return " / ".join(parts)
+
+
 def format_scores(score_run: ScoreRunRead) -> str:
     if not score_run.records:
         return _trim_message(
@@ -574,6 +597,24 @@ def _score_value(value: object) -> str:
         return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return _value(value)
+
+
+def _signed_percent(value: object) -> str:
+    try:
+        number_value = float(value)
+    except (TypeError, ValueError):
+        return "-"
+
+    sign = "+" if number_value > 0 else ""
+    text = f"{number_value:g}"
+    return f"{sign}{text}%"
+
+
+def _field(value: object, name: str, default: object) -> object:
+    if isinstance(value, dict):
+        return value.get(name, default)
+
+    return getattr(value, name, default)
 
 
 def _value(value: object) -> str:

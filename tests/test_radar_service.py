@@ -405,6 +405,12 @@ async def test_radar_overview_dedupes_subjects_and_counts_priorities(
     assert overview.priority_counts == {"P0": 1, "P1": 0, "P2": 1}
     assert overview.lifecycle_counts["developing"] == 1
     assert overview.lifecycle_counts["ignition"] == 1
+    stock_backtrace_names = [
+        evidence.stock_name for evidence in overview.stock_backtrace_evidences
+    ]
+    assert stock_backtrace_names == ["Example AI", "Example Cloud"]
+    assert overview.stock_backtrace_evidences[0].stock_pct_change == 9.2
+    assert overview.stock_backtrace_evidences[0].subject_name == "AI Applications"
 
     ai_subjects = [
         subject for subject in overview.current_subjects if subject.subject_code == "GN001"
@@ -418,6 +424,10 @@ async def test_radar_overview_dedupes_subjects_and_counts_priorities(
     assert limited_overview.priority_counts == {"P0": 1, "P1": 0, "P2": 1}
     assert limited_overview.lifecycle_counts["developing"] == 1
     assert limited_overview.lifecycle_counts["ignition"] == 1
+    limited_backtrace_subjects = [
+        evidence.subject_name for evidence in limited_overview.stock_backtrace_evidences
+    ]
+    assert limited_backtrace_subjects == ["AI Applications"]
 
 
 @pytest.mark.asyncio
@@ -492,6 +502,7 @@ async def test_radar_overview_uses_latest_scan_only(
     assert overview.subject_count == 0
     assert overview.priority_counts == {"P0": 0, "P1": 0, "P2": 0}
     assert all(count == 0 for count in overview.lifecycle_counts.values())
+    assert overview.stock_backtrace_evidences == []
 
 
 @pytest.mark.asyncio

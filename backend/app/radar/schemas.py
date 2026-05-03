@@ -138,6 +138,19 @@ class RadarSubjectOverviewRead(BaseModel):
     latest_signal: RadarSignalRead
 
 
+class RadarStockBacktraceEvidenceRead(BaseModel):
+    signal_id: int
+    subject_type: str
+    subject_code: str | None = None
+    subject_name: str
+    priority: RadarPriority
+    lifecycle_stage: RadarLifecycleStage
+    stock_name: str
+    stock_pct_change: float
+    evidence_label: str
+    source_snapshot_id: int | None = None
+
+
 class RadarScanRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -156,6 +169,7 @@ class RadarOverviewRead(BaseModel):
     latest_scan: RadarScanRead | None = None
     active_signals: list[RadarSignalRead] = Field(default_factory=list)
     current_subjects: list[RadarSubjectOverviewRead] = Field(default_factory=list)
+    stock_backtrace_evidences: list[RadarStockBacktraceEvidenceRead] = Field(default_factory=list)
     priority_counts: dict[str, int]
     lifecycle_counts: dict[str, int]
     subject_count: int

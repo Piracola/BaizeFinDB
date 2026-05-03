@@ -6,11 +6,11 @@
 
 当前已完成 **M4 轻量审查层闭环**。
 
-项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
+项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、个股回推证据、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
-Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、最近扫描状态、雷达总览、生命周期分布、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级或评分。
+Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、最近扫描状态、雷达总览、生命周期分布、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级或评分。
 
-Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、生命周期分布、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
+Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、生命周期分布、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
@@ -53,7 +53,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分明细展示和 Telegram 绑定管理）、Telegram Bot MVP（含评分明细展示）、Windows 客户端 MVP（含报告、日报/周报、评分明细展示和 Telegram 绑定管理）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补生产化部署。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台（含个股回推证据、报告、日报/周报、评分明细展示和 Telegram 绑定管理）、Telegram Bot MVP（含个股回推证据和评分明细展示）、Windows 客户端 MVP（含个股回推证据、报告、日报/周报、评分明细展示和 Telegram 绑定管理）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补生产化部署。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查）、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/scripts/postgres_restore.py` PostgreSQL 恢复脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -163,7 +163,7 @@ Windows 客户端：
 - 当前实现为默认 30 分钟窗口内连续 3 次 P1 会标记为 `quick_report_candidate`；触发次数和窗口可通过环境变量调参。
 - P2 默认保留 7 天观察：`/radar/overview` 和 `/radar/signals` 默认隐藏超出观察窗口的 P2；历史排查可在信号列表使用 `include_expired_p2=true`。
 - 前后扫描走弱会记录生命周期转移，例如 `climax_to_divergence`。
-- 总览 API 基于最新扫描生成当前活跃信号、P0/P1/P2 聚合、生命周期分布和按板块/概念去重视图。
+- 总览 API 基于最新扫描生成当前活跃信号、P0/P1/P2 聚合、生命周期分布、个股回推证据和按板块/概念去重视图。
 - 雷达扫描 summary、信号 metrics 和 evidence details 会携带 Provider 数据质量摘要。
 - 轻量审查层会拦截诱导交易语言、证据缺失、失败数据质量和低置信度证据；降级/未知数据质量、证据冲突、重复触发和来源过期会进入人工复核；P0 和连续 P1 快报候选会留下审查理由。
 - 诱导交易语言规则已覆盖基础禁词、常见热词、空格/标点拆分变体，并允许“不要马上买入”“禁止满仓”这类安全警示反例。
@@ -203,7 +203,7 @@ uv run uvicorn app.main:app --reload
 - 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则和生命周期。
 - 将持仓/自选接入 Telegram/Web 展示和报告上下文；继续保持只影响个人优先级，不改变市场主线等级。
 - Telegram 推送已能按 P0/P1/P2 折叠汇总、过滤 blocked、记录 `push_logs`，并在 P0 推送后为对应聊天用户生成 standard report。
-- Web MVP 已改为雷达终端工作台外壳，具备左侧模块导航、顶部命令栏、F-key 操作条、雷达总览、信号详情、持仓/自选维护、报告列表、日报/周报、单信号评分明细和 Telegram 绑定管理。
+- Web MVP 已改为雷达终端工作台外壳，具备左侧模块导航、顶部命令栏、F-key 操作条、雷达总览、个股回推证据、信号详情、持仓/自选维护、报告列表、日报/周报、单信号评分明细和 Telegram 绑定管理。
 - 报告分 quick/standard/deep；自动最多 quick/standard，deep 只手动触发；日报/周报汇总 API 已有最小生成能力。
 - 1d/3d/5d/10d v2 综合评分已能按信号生成，并已接入 Telegram、Windows 与 Web 展示评分档位和组件明细；评分包含优先级、生命周期、审查、证据、连续性、数据质量和时效性，仍不是价格回测或交易建议。
 - 所有发布类输出都先走审查和分享预检，公开分享默认脱敏脱源。

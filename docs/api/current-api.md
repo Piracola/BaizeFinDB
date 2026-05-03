@@ -235,7 +235,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/scans/1
 
 ### `GET /radar/overview`
 
-用途：查看当前雷达总览、活跃信号、优先级聚合、生命周期分布和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
+用途：查看当前雷达总览、活跃信号、优先级聚合、生命周期分布、个股回推证据和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
@@ -246,6 +246,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 - `latest_scan`
 - `active_signals`
 - `current_subjects`
+- `stock_backtrace_evidences`：从后端信号 metrics 派生的领涨个股、涨幅和反推主题，不由前端重算。
 - `priority_counts`
 - `lifecycle_counts`
 - `subject_count`
@@ -733,7 +734,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 ## 11. 接 Telegram / Web / 报告时的推荐用法
 
-- 首页/总览：用 `GET /radar/overview`。
+- 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
