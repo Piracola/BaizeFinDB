@@ -469,6 +469,8 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/radar` | 查看雷达总览：P0/P1/P2、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
 | `/signal <id>` | 查看单个信号复盘、生命周期、审查状态和证据摘要 |
+| `/holding`、`/holdings` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的手动持仓 |
+| `/watchlist` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的自选关注 |
 
 本地不配置 `TELEGRAM_BOT_TOKEN` 时，接口返回 `preview`，不会调用 Telegram Bot API：
 
@@ -499,6 +501,8 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 ```
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
+
+`/holding` 和 `/watchlist` 只读取 Portfolio API 维护的个人数据，不改变市场级雷达等级，不输出交易指令。
 
 ## 8. 错误码约定
 

@@ -4,11 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.redis import check_redis
 from app.db.session import check_database
+from app.portfolio.service import list_holdings, list_watchlist_items
 from app.radar.service import get_radar_overview, get_radar_signal_detail, list_radar_signals
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import (
     format_health,
     format_help,
+    format_holdings,
     format_invalid_signal_id,
     format_no_text,
     format_radar_overview,
@@ -17,6 +19,7 @@ from app.telegram.formatter import (
     format_signals,
     format_unauthorized,
     format_unknown_command,
+    format_watchlist_items,
 )
 from app.telegram.schemas import (
     TelegramStatusRead,
@@ -75,7 +78,7 @@ class TelegramCommandService:
             )
 
         command, arguments = _parse_command(text)
-        response_text = await self._command_response(session, command, arguments)
+        response_text = await self._command_response(session, chat_id, command, arguments)
         return await self._deliver(
             chat_id=chat_id,
             command=command,
@@ -90,6 +93,7 @@ class TelegramCommandService:
     async def _command_response(
         self,
         session: AsyncSession,
+        chat_id: int,
         command: str,
         arguments: list[str],
     ) -> str:
@@ -115,6 +119,14 @@ class TelegramCommandService:
 
             if command == "/signal":
                 return await self._signal_detail_response(session, arguments)
+
+            if command in {"/holding", "/holdings"}:
+                holdings = await list_holdings(session, user_key=_telegram_user_key(chat_id))
+                return format_holdings(holdings)
+
+            if command == "/watchlist":
+                items = await list_watchlist_items(session, user_key=_telegram_user_key(chat_id))
+                return format_watchlist_items(items)
         except SQLAlchemyError:
             return "数据库暂不可用，稍后再观察和复盘。"
 
@@ -181,6 +193,10 @@ def _parse_command(text: str) -> tuple[str, list[str]]:
     parts = text.split()
     command = parts[0].split("@", maxsplit=1)[0].lower()
     return command, parts[1:]
+
+
+def _telegram_user_key(chat_id: int) -> str:
+    return f"telegram-{chat_id}"
 
 
 def _preview_response(

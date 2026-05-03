@@ -208,6 +208,21 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/deleteWebh
 
 Telegram 输出只用于关注、观察、风险和复盘；P0/P1/P2、生命周期和审查状态都来自后端服务结果。
 
+Telegram 个人数据命令：
+
+- `/holding` 读取 `user_key=telegram-<chat_id>` 的持仓。
+- `/watchlist` 读取 `user_key=telegram-<chat_id>` 的自选关注。
+
+本地 preview 示例：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":4,"message":{"message_id":4,"chat":{"id":1001},"text":"/holding"}}'
+```
+
+如果要让这个命令看到数据，请先用 Portfolio API 创建 `user_key=telegram-1001` 的持仓或自选。
+
 ## 6. Celery Worker / Beat
 
 当前 Celery 用 Redis 作为 broker/result。Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 调整：

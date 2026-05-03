@@ -13,7 +13,13 @@ from app.db.base import Base
 from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
 from app.db.session import get_db_session
 from app.main import create_app
-from app.telegram.formatter import format_radar_overview, format_signal_detail, format_signals
+from app.telegram.formatter import (
+    format_holdings,
+    format_radar_overview,
+    format_signal_detail,
+    format_signals,
+    format_watchlist_items,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -95,6 +101,8 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert data["delivery"] == "preview"
     assert data["sent"] is False
     assert "可用命令" in data["preview"]
+    assert "/holding" in data["preview"]
+    assert "/watchlist" in data["preview"]
     assert "不构成投资建议" in data["preview"]
     for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
         assert forbidden not in data["preview"]
@@ -198,6 +206,68 @@ async def test_telegram_signals_and_signal_detail_commands(
     assert "证据 1：市场快照" in signal_preview
 
 
+@pytest.mark.asyncio
+async def test_telegram_portfolio_commands_use_chat_user_key(client: AsyncClient) -> None:
+    await client.post(
+        "/portfolio/holdings",
+        params={"user_key": "telegram-1001"},
+        json={
+            "instrument_code": "600000",
+            "instrument_name": "浦发银行",
+            "market": "A_SHARE",
+            "note": "核心观察仓",
+            "cost_price": 10.25,
+            "position_ratio": 0.2,
+        },
+    )
+    await client.post(
+        "/portfolio/holdings",
+        params={"user_key": "telegram-2002"},
+        json={
+            "instrument_code": "000001",
+            "instrument_name": "上证指数",
+            "market": "A_SHARE",
+        },
+    )
+    await client.post(
+        "/portfolio/watchlist",
+        params={"user_key": "telegram-1001"},
+        json={
+            "instrument_code": "SZ000001",
+            "instrument_name": "平安银行",
+            "market": "A_SHARE",
+            "note": "观察风险变化",
+        },
+    )
+
+    holding_response = await client.post("/telegram/webhook", json=_telegram_update("/holding"))
+    watchlist_response = await client.post("/telegram/webhook", json=_telegram_update("/watchlist"))
+    empty_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/holding", chat_id=3003),
+    )
+
+    assert holding_response.status_code == 200
+    holding_preview = holding_response.json()["preview"]
+    assert "手动持仓" in holding_preview
+    assert "浦发银行" in holding_preview
+    assert "仓位：20%" in holding_preview
+    assert "上证指数" not in holding_preview
+
+    assert watchlist_response.status_code == 200
+    watchlist_preview = watchlist_response.json()["preview"]
+    assert "自选关注" in watchlist_preview
+    assert "平安银行" in watchlist_preview
+    assert "不改变市场雷达等级" in watchlist_preview
+
+    assert empty_response.status_code == 200
+    assert "暂未维护持仓" in empty_response.json()["preview"]
+
+    for preview in (holding_preview, watchlist_preview):
+        for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
+            assert forbidden not in preview
+
+
 def test_telegram_formatter_accepts_enum_value_strings() -> None:
     signal = SimpleNamespace(
         id=7,
@@ -227,12 +297,16 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     signals_preview = format_signals([signal])
     signal_preview = format_signal_detail(signal)
     overview_preview = format_radar_overview(overview)
+    holdings_preview = format_holdings([])
+    watchlist_preview = format_watchlist_items([])
 
     assert "生命周期：发展观察" in signals_preview
     assert "审查：候选待审" in signals_preview
     assert "生命周期：发展观察" in signal_preview
     assert "审查状态：候选待审" in signal_preview
     assert "最新扫描：#3 完成" in overview_preview
+    assert "暂未维护持仓" in holdings_preview
+    assert "暂未维护自选" in watchlist_preview
 
 
 def _telegram_update(text: str, chat_id: int = 1001) -> dict[str, object]:

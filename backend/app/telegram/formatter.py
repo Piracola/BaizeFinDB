@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.portfolio.schemas import HoldingRead, WatchlistItemRead
 from app.radar.schemas import (
     RadarLifecycleStage,
     RadarOverviewRead,
@@ -11,6 +12,7 @@ from app.radar.schemas import (
 
 MAX_MESSAGE_LENGTH = 3500
 SIGNALS_PREVIEW_LIMIT = 5
+PORTFOLIO_PREVIEW_LIMIT = 8
 EVIDENCE_PREVIEW_LIMIT = 3
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 
@@ -60,6 +62,8 @@ def format_help() -> str:
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
+                "/holding - 查看当前聊天绑定的手动持仓",
+                "/watchlist - 查看当前聊天绑定的自选关注",
                 "",
                 DISCLAIMER,
             ],
@@ -172,6 +176,88 @@ def format_signal_detail(signal: RadarSignalDetail) -> str:
     return _trim_message("\n".join(lines))
 
 
+def format_holdings(holdings: list[HoldingRead]) -> str:
+    if not holdings:
+        return _trim_message(
+            "\n".join(
+                [
+                    "手动持仓",
+                    "当前聊天暂未维护持仓。",
+                    "持仓只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["手动持仓", f"共 {len(holdings)} 条"]
+    for holding in holdings[:PORTFOLIO_PREVIEW_LIMIT]:
+        details = [
+            f"市场：{holding.market}",
+            f"仓位：{_ratio_label(holding.position_ratio)}",
+            f"提醒：{_enabled_label(holding.alert_enabled)}",
+        ]
+        if holding.cost_price is not None:
+            details.append(f"成本：{holding.cost_price:g}")
+
+        lines.append(
+            f"- #{holding.id} {holding.instrument_code} {holding.instrument_name} | "
+            + " | ".join(details),
+        )
+        if holding.note:
+            lines.append(f"  备注：{holding.note}")
+
+    if len(holdings) > PORTFOLIO_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(holdings) - PORTFOLIO_PREVIEW_LIMIT} 条更多持仓。")
+
+    lines.extend(
+        [
+            "持仓只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_message("\n".join(lines))
+
+
+def format_watchlist_items(items: list[WatchlistItemRead]) -> str:
+    if not items:
+        return _trim_message(
+            "\n".join(
+                [
+                    "自选关注",
+                    "当前聊天暂未维护自选。",
+                    "自选只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["自选关注", f"共 {len(items)} 条"]
+    for item in items[:PORTFOLIO_PREVIEW_LIMIT]:
+        lines.append(
+            (
+                f"- #{item.id} {item.instrument_code} {item.instrument_name} | "
+                f"市场：{item.market} | 提醒：{_enabled_label(item.alert_enabled)}"
+            ),
+        )
+        if item.note:
+            lines.append(f"  备注：{item.note}")
+
+    if len(items) > PORTFOLIO_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(items) - PORTFOLIO_PREVIEW_LIMIT} 条更多自选。")
+
+    lines.extend(
+        [
+            "自选只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_message("\n".join(lines))
+
+
 def format_unauthorized() -> str:
     return "当前聊天未在 MVP 白名单中，已拒绝处理。"
 
@@ -210,6 +296,17 @@ def _review_label(value: RadarReviewStatus | str) -> str:
 
 def _scan_status_label(value: RadarScanStatus | str) -> str:
     return SCAN_STATUS_LABELS.get(value, _value(value))
+
+
+def _enabled_label(value: bool) -> str:
+    return "开启" if value else "关闭"
+
+
+def _ratio_label(value: float | None) -> str:
+    if value is None:
+        return "未填"
+
+    return f"{value:.0%}"
 
 
 def _value(value: object) -> str:
