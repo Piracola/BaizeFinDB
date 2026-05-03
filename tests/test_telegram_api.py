@@ -16,6 +16,7 @@ from app.main import create_app
 from app.telegram.formatter import (
     format_holdings,
     format_radar_overview,
+    format_reports,
     format_signal_detail,
     format_signals,
     format_watchlist_items,
@@ -103,6 +104,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "可用命令" in data["preview"]
     assert "/holding" in data["preview"]
     assert "/watchlist" in data["preview"]
+    assert "/reports" in data["preview"]
     assert "不构成投资建议" in data["preview"]
     for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
         assert forbidden not in data["preview"]
@@ -268,6 +270,35 @@ async def test_telegram_portfolio_commands_use_chat_user_key(client: AsyncClient
             assert forbidden not in preview
 
 
+@pytest.mark.asyncio
+async def test_telegram_reports_command_uses_chat_user_key(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+    await client.post(
+        "/reports/from-signal",
+        params={"user_key": "telegram-1001"},
+        json={"signal_id": signal_id, "report_type": "quick"},
+    )
+
+    reports_response = await client.post("/telegram/webhook", json=_telegram_update("/reports"))
+    empty_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/reports", chat_id=2002),
+    )
+
+    assert reports_response.status_code == 200
+    reports_preview = reports_response.json()["preview"]
+    assert "报告列表" in reports_preview
+    assert "Quick Report" in reports_preview
+    assert "继续观察" in reports_preview
+    assert "不构成投资建议" in reports_preview
+
+    assert empty_response.status_code == 200
+    assert "暂未生成报告" in empty_response.json()["preview"]
+
+
 def test_telegram_formatter_accepts_enum_value_strings() -> None:
     signal = SimpleNamespace(
         id=7,
@@ -299,6 +330,7 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     overview_preview = format_radar_overview(overview)
     holdings_preview = format_holdings([])
     watchlist_preview = format_watchlist_items([])
+    reports_preview = format_reports([])
 
     assert "生命周期：发展观察" in signals_preview
     assert "审查：候选待审" in signals_preview
@@ -307,6 +339,7 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     assert "最新扫描：#3 完成" in overview_preview
     assert "暂未维护持仓" in holdings_preview
     assert "暂未维护自选" in watchlist_preview
+    assert "暂未生成报告" in reports_preview
 
 
 def _telegram_update(text: str, chat_id: int = 1001) -> dict[str, object]:

@@ -6,6 +6,7 @@ from app.core.redis import check_redis
 from app.db.session import check_database
 from app.portfolio.service import list_holdings, list_watchlist_items
 from app.radar.service import get_radar_overview, get_radar_signal_detail, list_radar_signals
+from app.reports.service import list_reports
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import (
     format_health,
@@ -14,6 +15,7 @@ from app.telegram.formatter import (
     format_invalid_signal_id,
     format_no_text,
     format_radar_overview,
+    format_reports,
     format_signal_detail,
     format_signal_not_found,
     format_signals,
@@ -127,6 +129,10 @@ class TelegramCommandService:
             if command == "/watchlist":
                 items = await list_watchlist_items(session, user_key=_telegram_user_key(chat_id))
                 return format_watchlist_items(items)
+
+            if command == "/reports":
+                reports = await list_reports(session, user_key=_telegram_user_key(chat_id))
+                return format_reports(reports)
         except SQLAlchemyError:
             return "数据库暂不可用，稍后再观察和复盘。"
 

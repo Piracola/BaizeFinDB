@@ -45,7 +45,7 @@
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
 - Telegram Bot MVP Webhook 模块：只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
-- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`
 - Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集和雷达扫描
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
@@ -137,6 +137,7 @@ TELEGRAM_WEBHOOK_SECRET=
 - `TELEGRAM_ALLOWED_CHAT_IDS` 可填逗号分隔的 chat id；配置后只有白名单 chat 会被处理。
 - `TELEGRAM_WEBHOOK_SECRET` 配置后，Webhook 必须携带 `X-Telegram-Bot-Api-Secret-Token`。
 - `/holding` 和 `/watchlist` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的个人持仓/自选，只用于个人提醒和复盘上下文。
+- `/reports` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的报告列表。
 
 本地 preview 示例：
 

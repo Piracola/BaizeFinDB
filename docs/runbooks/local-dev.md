@@ -228,6 +228,7 @@ Telegram 个人数据命令：
 
 - `/holding` 读取 `user_key=telegram-<chat_id>` 的持仓。
 - `/watchlist` 读取 `user_key=telegram-<chat_id>` 的自选关注。
+- `/reports` 读取 `user_key=telegram-<chat_id>` 的报告列表。
 
 本地 preview 示例：
 
@@ -238,6 +239,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
 ```
 
 如果要让这个命令看到数据，请先用 Portfolio API 创建 `user_key=telegram-1001` 的持仓或自选。
+如果要让 `/reports` 看到数据，请先用 Reports API 创建 `user_key=telegram-1001` 的报告。
 
 ## 6. Celery Worker / Beat
 

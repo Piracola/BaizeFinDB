@@ -9,10 +9,12 @@ from app.radar.schemas import (
     RadarSignalDetail,
     RadarSignalRead,
 )
+from app.reports.schemas import ReportRead
 
 MAX_MESSAGE_LENGTH = 3500
 SIGNALS_PREVIEW_LIMIT = 5
 PORTFOLIO_PREVIEW_LIMIT = 8
+REPORT_PREVIEW_LIMIT = 5
 EVIDENCE_PREVIEW_LIMIT = 3
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 
@@ -64,6 +66,7 @@ def format_help() -> str:
                 "/signal <id> - 查看单个信号复盘",
                 "/holding - 查看当前聊天绑定的手动持仓",
                 "/watchlist - 查看当前聊天绑定的自选关注",
+                "/reports - 查看当前聊天绑定的报告列表",
                 "",
                 DISCLAIMER,
             ],
@@ -255,6 +258,39 @@ def format_watchlist_items(items: list[WatchlistItemRead]) -> str:
             DISCLAIMER,
         ],
     )
+    return _trim_message("\n".join(lines))
+
+
+def format_reports(reports: list[ReportRead]) -> str:
+    if not reports:
+        return _trim_message(
+            "\n".join(
+                [
+                    "报告列表",
+                    "当前聊天暂未生成报告。",
+                    "报告只用于关注、观察、风险和复盘，不构成投资建议。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["报告列表", f"共 {len(reports)} 份"]
+    for report in reports[:REPORT_PREVIEW_LIMIT]:
+        lines.extend(
+            [
+                (
+                    f"- #{report.id} [{report.report_type.value}] {report.title} | "
+                    f"状态：{report.status.value} | 标签：{report.suggestion_label.value}"
+                ),
+                f"  {report.summary}",
+            ],
+        )
+
+    if len(reports) > REPORT_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(reports) - REPORT_PREVIEW_LIMIT} 份更多报告。")
+
+    lines.extend(["报告正文请在 Web/API 中查看。", "", DISCLAIMER])
     return _trim_message("\n".join(lines))
 
 
