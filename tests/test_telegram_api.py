@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -106,6 +106,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert data["sent"] is False
     assert "可用命令" in data["preview"]
     assert "/id" in data["preview"]
+    assert "/ops" in data["preview"]
     assert "/holding" in data["preview"]
     assert "/watchlist" in data["preview"]
     assert "/reports" in data["preview"]
@@ -269,6 +270,48 @@ async def test_telegram_health_command_reports_latest_scan(
     assert "最近扫描：#" in preview
     assert "完成，信号 1 条" in preview
     assert "开始时间：" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_ops_command_reports_runtime_overview(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add_all(
+            [
+                RadarScanBatch(
+                    status="success",
+                    started_at=now - timedelta(minutes=5),
+                    finished_at=now - timedelta(minutes=4),
+                    source_snapshot_ids=[],
+                    summary={"signal_count": 1},
+                ),
+                RadarScanBatch(
+                    status="failure",
+                    started_at=now - timedelta(minutes=10),
+                    finished_at=now - timedelta(minutes=9),
+                    source_snapshot_ids=[],
+                    summary={"error_type": "ProviderError"},
+                    error_message="provider down",
+                ),
+            ],
+        )
+        await session.commit()
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/ops"))
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "运行状态" in preview
+    assert "统计窗口：最近 24 小时" in preview
+    assert "雷达扫描：#" in preview
+    assert "成功 | 新鲜度：" in preview
+    assert "扫描失败率：50% (1/2)" in preview
+    assert "Provider：异常 0 / 总数 0 / 最新 暂无" in preview
+    assert "该视图只读取已有运行记录" in preview
+    assert "不构成投资建议" in preview
 
 
 @pytest.mark.asyncio

@@ -46,9 +46,9 @@
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
-- Telegram Bot MVP Webhook 模块：只消费健康检查、雷达、报告和评分后端结果，`/radar` 会展示后端市场情绪摘要，不重新计算 P0/P1/P2 或评分
+- Telegram Bot MVP Webhook 模块：只消费健康检查、运行状态、雷达、报告和评分后端结果，`/ops` 展示后端运行状态摘要，`/radar` 展示后端市场情绪摘要，不重新计算 P0/P1/P2 或评分
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
-- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/score` 展示后端 v2 评分档位和组件明细
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/ops`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/score` 展示后端 v2 评分档位和组件明细
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
@@ -149,6 +149,7 @@ TELEGRAM_PUSH_ENABLED=false
 - P0 信号完成折叠推送后，会为对应 `user_key=telegram-<chat_id>` 自动生成一份 `standard` report；重复推送同一扫描不会重复生成。
 - `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤。
 - `/health` 返回 API、数据库、Redis 和最近一次雷达扫描摘要。
+- `/ops` 返回最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要。
 - `/holding` 和 `/watchlist` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的个人持仓/自选，只用于个人提醒和复盘上下文。
 - `/reports` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的报告列表。
 - `/score <id>` 触发后端评分并展示 1d/3d/5d/10d 综合评分、评分档位和组件明细；Telegram 不做本地评分。

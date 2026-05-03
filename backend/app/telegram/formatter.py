@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.ops.schemas import OpsOverviewRead
 from app.portfolio.schemas import HoldingRead, WatchlistItemRead
 from app.radar.schemas import (
     RadarLifecycleStage,
@@ -103,6 +104,7 @@ def format_help() -> str:
                 "/help - 查看命令说明",
                 "/id - 查看当前聊天 ID，用于绑定白名单",
                 "/health - 查看 API、数据库、Redis 和最近扫描状态",
+                "/ops - 查看最近运行状态、失败率和降级摘要",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
@@ -149,6 +151,35 @@ def format_health(
             lines.append(f"扫描错误：{latest_scan.error_message}")
 
     lines.extend(["", DISCLAIMER])
+    return _trim_message("\n".join(lines))
+
+
+def format_ops_overview(overview: OpsOverviewRead) -> str:
+    radar = overview.radar
+    latest_scan_id = radar.latest_scan_id
+    latest_scan_ref = f"#{latest_scan_id}" if latest_scan_id is not None else "暂无"
+    lines = [
+        "运行状态",
+        f"统计窗口：最近 {overview.lookback_hours} 小时",
+        (
+            "雷达扫描："
+            f"{latest_scan_ref} {_ops_status_label(radar.latest_scan_status)} | "
+            f"新鲜度：{_duration_label(radar.latest_scan_age_seconds)} | "
+            f"{_stale_label(radar.is_latest_scan_stale)}"
+        ),
+        (
+            "扫描失败率："
+            f"{_rate_label(radar.recent_scan_failure_rate)} "
+            f"({radar.recent_scan_failure_count}/{radar.recent_scan_count})"
+        ),
+        _ops_count_text("Provider", overview.provider_fetch),
+        _ops_count_text("数据质量", overview.data_quality),
+        _ops_count_text("推送", overview.telegram_push),
+        _ops_count_text("模型", overview.model_calls),
+        "该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。",
+        "",
+        DISCLAIMER,
+    ]
     return _trim_message("\n".join(lines))
 
 
@@ -456,6 +487,60 @@ def _sentiment_bias_label(value: object) -> str:
         "unknown": "未知",
     }
     return labels.get(_value(value), _value(value))
+
+
+def _ops_count_text(name: str, summary: object) -> str:
+    return (
+        f"{name}："
+        f"异常 {_field(summary, 'unhealthy_count', 0)} / "
+        f"总数 {_field(summary, 'total_count', 0)} / "
+        f"最新 {_ops_status_label(_field(summary, 'latest_status', None))}"
+    )
+
+
+def _ops_status_label(value: object) -> str:
+    labels = {
+        "success": "成功",
+        "failure": "失败",
+        "ok": "正常",
+        "degraded": "降级",
+        "failed": "失败",
+        "fallback": "降级切换",
+        "sent": "已发送",
+        "preview": "预览",
+        "skipped": "跳过",
+        "running": "运行中",
+        "no_data": "暂无数据",
+    }
+    raw_value = _value(value) if value is not None else "unknown"
+    return labels.get(raw_value, "暂无" if value is None else raw_value)
+
+
+def _rate_label(value: object) -> str:
+    try:
+        rate = float(value)
+    except (TypeError, ValueError):
+        return "-"
+
+    return f"{rate * 100:.1f}".rstrip("0").rstrip(".") + "%"
+
+
+def _duration_label(value: object) -> str:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return "暂无"
+
+    if seconds < 60:
+        return f"{max(0, round(seconds))} 秒"
+    if seconds < 3600:
+        return f"{round(seconds / 60)} 分钟"
+
+    return f"{seconds / 3600:.1f}".rstrip("0").rstrip(".") + " 小时"
+
+
+def _stale_label(value: bool) -> str:
+    return "可能停滞" if value else "正常"
 
 
 def format_scores(score_run: ScoreRunRead) -> str:

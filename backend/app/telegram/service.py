@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.redis import check_redis
 from app.db.session import check_database
+from app.ops.service import get_ops_overview
 from app.portfolio.service import list_holdings, list_watchlist_items
 from app.radar.service import (
     get_latest_radar_scan,
@@ -24,6 +25,7 @@ from app.telegram.formatter import (
     format_invalid_score_signal_id,
     format_invalid_signal_id,
     format_no_text,
+    format_ops_overview,
     format_periodic_report,
     format_radar_overview,
     format_reports,
@@ -138,6 +140,10 @@ class TelegramCommandService:
                     },
                     latest_scan=latest_scan,
                 )
+
+            if command == "/ops":
+                overview = await get_ops_overview(session, lookback_hours=24)
+                return format_ops_overview(overview)
 
             if command == "/radar":
                 overview = await get_radar_overview(session, limit=50)

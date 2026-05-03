@@ -235,6 +235,14 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":11,"message":{"message_id":11,"chat":{"id":1001},"text":"/id"}}'
 ```
 
+本地 preview `/ops` 会返回最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":11,"message":{"message_id":11,"chat":{"id":1001},"text":"/ops"}}'
+```
+
 本地 preview `/radar`：
 
 ```powershell
