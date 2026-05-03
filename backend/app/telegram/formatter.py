@@ -5,6 +5,7 @@ from app.radar.schemas import (
     RadarLifecycleStage,
     RadarOverviewRead,
     RadarReviewStatus,
+    RadarScanRead,
     RadarScanStatus,
     RadarSignalDetail,
     RadarSignalRead,
@@ -90,7 +91,7 @@ def format_help() -> str:
                 "可用命令：",
                 "/help - 查看命令说明",
                 "/id - 查看当前聊天 ID，用于绑定白名单",
-                "/health - 查看 API、数据库、Redis 状态",
+                "/health - 查看 API、数据库、Redis 和最近扫描状态",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
@@ -107,21 +108,37 @@ def format_help() -> str:
     )
 
 
-def format_health(checks: dict[str, dict[str, str]]) -> str:
+def format_health(
+    checks: dict[str, dict[str, str]],
+    latest_scan: RadarScanRead | None = None,
+) -> str:
     database = _check_label(checks.get("database", {}))
     redis = _check_label(checks.get("redis", {}))
-    return _trim_message(
-        "\n".join(
+    lines = [
+        "健康状态",
+        "API：正常",
+        f"数据库：{database}",
+        f"Redis：{redis}",
+    ]
+
+    if latest_scan is None:
+        lines.append("最近扫描：暂无")
+    else:
+        lines.extend(
             [
-                "健康状态",
-                "API：正常",
-                f"数据库：{database}",
-                f"Redis：{redis}",
-                "",
-                DISCLAIMER,
+                (
+                    "最近扫描："
+                    f"#{latest_scan.id} {_scan_status_label(latest_scan.status)}，"
+                    f"信号 {len(latest_scan.signals)} 条"
+                ),
+                f"开始时间：{_format_time(latest_scan.started_at)}",
             ],
-        ),
-    )
+        )
+        if latest_scan.error_message:
+            lines.append(f"扫描错误：{latest_scan.error_message}")
+
+    lines.extend(["", DISCLAIMER])
+    return _trim_message("\n".join(lines))
 
 
 def format_radar_overview(overview: RadarOverviewRead) -> str:

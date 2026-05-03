@@ -595,7 +595,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | --- | --- |
 | `/start`、`/help` | 查看命令说明和免责声明 |
 | `/id`、`/chatid` | 查看当前聊天 ID；未进入白名单时也允许返回这个 ID，便于绑定 |
-| `/health` | 查看 API、数据库、Redis 简要状态 |
+| `/health` | 查看 API、数据库、Redis 和最近一次雷达扫描摘要 |
 | `/radar` | 查看雷达总览：P0/P1/P2、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
 | `/signal <id>` | 查看单个信号复盘、生命周期、审查状态和证据摘要 |

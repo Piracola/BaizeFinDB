@@ -246,6 +246,29 @@ async def test_telegram_health_command_reports_dependency_status(
     assert "API：正常" in preview
     assert "数据库：正常" in preview
     assert "Redis：正常" in preview
+    assert "最近扫描：暂无" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_health_command_reports_latest_scan(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    async def ok_check() -> dict[str, str]:
+        return {"status": "ok"}
+
+    monkeypatch.setattr("app.telegram.service.check_database", ok_check)
+    monkeypatch.setattr("app.telegram.service.check_redis", ok_check)
+    await _seed_signal(session_factory)
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/health"))
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "最近扫描：#" in preview
+    assert "完成，信号 1 条" in preview
+    assert "开始时间：" in preview
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,12 @@ from app.core.config import Settings
 from app.core.redis import check_redis
 from app.db.session import check_database
 from app.portfolio.service import list_holdings, list_watchlist_items
-from app.radar.service import get_radar_overview, get_radar_signal_detail, list_radar_signals
+from app.radar.service import (
+    get_latest_radar_scan,
+    get_radar_overview,
+    get_radar_signal_detail,
+    list_radar_signals,
+)
 from app.reports.schemas import PeriodicReportType
 from app.reports.service import generate_periodic_report, list_reports
 from app.scores.service import generate_signal_scores
@@ -125,11 +130,13 @@ class TelegramCommandService:
                 return format_help()
 
             if command == "/health":
+                latest_scan = await get_latest_radar_scan(session)
                 return format_health(
                     {
                         "database": await check_database(),
                         "redis": await check_redis(),
                     },
+                    latest_scan=latest_scan,
                 )
 
             if command == "/radar":
