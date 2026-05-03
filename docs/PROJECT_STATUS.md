@@ -18,7 +18,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能维护和展示这些个人数据。这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2。
 
-报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告并查看报告列表。
+报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d 综合评分记录。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告并查看报告列表。
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
@@ -53,7 +53,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP（含报告摘要）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、Web 报告视图、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补基础评分。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP（含报告摘要）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d 综合评分、Web 报告视图、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补 UI 消费和评分校准。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -88,6 +88,11 @@ Reports：
 - `GET /reports`
 - `GET /reports/{report_id}`
 - `GET /reports/periodic`
+
+Scores：
+
+- `POST /scores/signals/{signal_id}`
+- `GET /scores/signals/{signal_id}`
 
 Radar：
 
@@ -135,6 +140,7 @@ Windows 客户端：
 - `watchlist_items`
 - `reports`
 - `push_logs`
+- `score_records`
 - `radar_scan_batches`
 - `radar_signals`
 - `radar_signal_reviews`
@@ -191,7 +197,7 @@ uv run uvicorn app.main:app --reload
 - Telegram 推送已能按 P0/P1/P2 折叠汇总、过滤 blocked、记录 `push_logs`，并在 P0 推送后为对应聊天用户生成 standard report。
 - Web MVP 已改为雷达终端工作台外壳，具备左侧模块导航、顶部命令栏、F-key 操作条、雷达总览、信号详情、持仓/自选维护和报告列表。
 - 报告分 quick/standard/deep；自动最多 quick/standard，deep 只手动触发；日报/周报汇总 API 已有最小生成能力。
-- 加入 1d/3d/5d/10d 基础综合评分。
+- 1d/3d/5d/10d 基础综合评分已能按信号生成，后续继续校准评分权重并接入 Web/Telegram/Windows 展示。
 - 所有发布类输出都先走审查和分享预检，公开分享默认脱敏脱源。
 - 继续补交易诱导词正反例，按真实误报再调规则。
 

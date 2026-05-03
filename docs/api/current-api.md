@@ -23,6 +23,8 @@ POST /portfolio/watchlist
 POST /reports/from-signal
 GET  /reports
 GET  /reports/periodic
+POST /scores/signals/{signal_id}
+GET  /scores/signals/{signal_id}
 POST /radar/signals/{signal_id}/review
 GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
@@ -435,7 +437,35 @@ Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?user_key=telegram-1001
 - `push_count`：当前 `user_key` 在周期内记录的 Telegram 推送数量。
 - `body_markdown`：日报/周报正文摘要，不包含原始证据摘录、URL、域名、持仓成本或交易指令。
 
-## 7. Governance / 分享安全 API
+## 7. Scores / 评分 API
+
+### `POST /scores/signals/{signal_id}`
+
+用途：为单个雷达信号生成或刷新 1d/3d/5d/10d 综合评分记录。评分不是价格回测，也不是交易建议；当前 MVP 综合优先级、生命周期、审查状态、证据数量和连续触发信息。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/scores/signals/1
+```
+
+响应返回四个窗口：
+
+- `window_days`：1、3、5、10。
+- `score_status`：`generated` 表示窗口已结束；`pending_window` 表示窗口尚未结束但可先记录当前综合评分。
+- `composite_score`：0 到 100 区间的综合分。
+- `components`：各维度评分。
+- `details`：评分版本、窗口结束时间和方法说明。
+
+### `GET /scores/signals/{signal_id}`
+
+用途：查看某个信号已经生成过的评分记录。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/scores/signals/1
+```
+
+如果信号不存在，返回 `404`。如果信号存在但尚未评分，返回空 `records`。
+
+## 8. Governance / 分享安全 API
 
 ### `POST /radar/signals/{signal_id}/review`
 
@@ -517,7 +547,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 - 精确置信度。
 - 来源时间。
 
-## 8. Telegram Bot API
+## 9. Telegram Bot API
 
 Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期或审查状态。
 
@@ -628,7 +658,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 返回字段包括推送来源批次、投递状态、折叠后的正文、包含/过滤/人工复核信号 id 和非敏感投递元数据。返回内容不得包含 Telegram token、webhook secret、原始证据摘录、原始 URL 或来源域名。
 
-## 9. 错误码约定
+## 10. 错误码约定
 
 | 错误码 | 常见原因 | 调用方处理 |
 | --- | --- | --- |
@@ -639,7 +669,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 | `403` | Telegram webhook secret 不匹配 | 检查 `TELEGRAM_WEBHOOK_SECRET` 和请求 header |
 | `503` | PostgreSQL 或 Redis 不可用 | 检查 Docker、迁移和 `/health/ready` |
 
-## 10. 接 Telegram / Web / 报告时的推荐用法
+## 11. 接 Telegram / Web / 报告时的推荐用法
 
 - 首页/总览：用 `GET /radar/overview`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。

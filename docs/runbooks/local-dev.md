@@ -169,6 +169,13 @@ Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?period=daily"
 Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?period=weekly&user_key=telegram-1001"
 ```
 
+生成信号评分：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/scores/signals/1
+Invoke-RestMethod http://127.0.0.1:8000/scores/signals/1
+```
+
 ## 5. Telegram Bot MVP 本地调试
 
 `.env` 支持这些 Telegram 可选配置：

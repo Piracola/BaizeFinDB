@@ -18,6 +18,7 @@ from app.db.radar_models import (  # noqa: F401
     SignalEvidence,
 )
 from app.db.report_models import Report  # noqa: F401
+from app.db.score_models import ScoreRecord  # noqa: F401
 
 config = context.config
 
