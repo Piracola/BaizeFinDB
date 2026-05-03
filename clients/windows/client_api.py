@@ -66,6 +66,30 @@ SCORE_STATUS_LABELS = {
     "generated": "已生成",
     "pending_window": "窗口未结束",
 }
+SCORE_BAND_LABELS = {
+    "strong_attention": "强关注",
+    "watch": "观察",
+    "weak_watch": "弱观察",
+    "low_signal_quality": "低质量",
+}
+SCORE_COMPONENT_LABELS = {
+    "priority": "优先级",
+    "lifecycle": "生命周期",
+    "review": "审查",
+    "evidence": "证据",
+    "continuity": "连续性",
+    "data_quality": "数据质量",
+    "timeliness": "时效性",
+}
+SCORE_COMPONENT_ORDER = (
+    "priority",
+    "lifecycle",
+    "review",
+    "evidence",
+    "continuity",
+    "data_quality",
+    "timeliness",
+)
 
 
 class BaizeApiError(RuntimeError):
@@ -767,13 +791,20 @@ def format_scores(score_run: Mapping[str, Any]) -> str:
     for record in records:
         record_map = _mapping(record)
         status = _text(record_map.get("score_status"), "")
+        details = _mapping(record_map.get("details"))
+        score_band = _text(details.get("score_band"), "")
+        band_label = SCORE_BAND_LABELS.get(score_band, score_band)
+        band_suffix = f" / {band_label}" if band_label else ""
         lines.append(
             (
                 f"- {_int_text(record_map.get('window_days'))}d："
                 f"{_score_text(record_map.get('composite_score'))} "
-                f"（{SCORE_STATUS_LABELS.get(status, _text(status, '-'))}）"
+                f"（{SCORE_STATUS_LABELS.get(status, _text(status, '-'))}{band_suffix}）"
             ),
         )
+        component_text = _score_components_text(record_map.get("components"))
+        if component_text:
+            lines.append(f"  组件：{component_text}")
 
     lines.extend(
         [
@@ -783,6 +814,16 @@ def format_scores(score_run: Mapping[str, Any]) -> str:
         ],
     )
     return _trim_text("\n".join(lines))
+
+
+def _score_components_text(value: Any) -> str:
+    components = _mapping(value)
+    parts = [
+        f"{SCORE_COMPONENT_LABELS.get(name, name)}={_score_text(components[name])}"
+        for name in SCORE_COMPONENT_ORDER
+        if name in components
+    ]
+    return " / ".join(parts)
 
 
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:

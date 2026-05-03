@@ -11,7 +11,7 @@
 - 查看自选：`GET /portfolio/watchlist`。
 - 查看报告摘要：`GET /reports`。
 - 查看日报/周报汇总：`GET /reports/periodic`。
-- 生成并查看单信号综合评分：`POST /scores/signals/{signal_id}`。
+- 生成并查看单信号 v2 综合评分明细：`POST /scores/signals/{signal_id}`。
 - 查看、绑定和禁用 Telegram chat：`GET/POST/PATCH /telegram/bindings`。
 - 打开现有 Web 面板：`/`。
 - P0/P1/P2、生命周期、审查状态和计数都来自后端 API，客户端不重新计算。
@@ -75,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 查看报告 | 调用 `/reports`，按 User Key 显示 quick/standard 报告摘要。 |
 | 查看日报 | 调用 `/reports/periodic?period=daily`，按 User Key 显示周期汇总。 |
 | 查看周报 | 调用 `/reports/periodic?period=weekly`，按 User Key 显示周期汇总。 |
-| 生成评分 | 读取窗口里的 Signal ID，调用 `/scores/signals/{signal_id}` 生成并显示 1d/3d/5d/10d 综合评分。 |
+| 生成评分 | 读取窗口里的 Signal ID，调用 `/scores/signals/{signal_id}` 生成并显示 1d/3d/5d/10d 综合评分、评分档位和组件明细。 |
 | 查看绑定 | 调用 `/telegram/bindings` 显示当前 Telegram chat 绑定和允许/禁用状态。 |
 | 绑定 Chat | 读取 Telegram Chat ID 和 User Key，调用 `/telegram/bindings` 新增或启用绑定。 |
 | 禁用 Chat | 读取 Telegram Chat ID，调用 `/telegram/bindings/{chat_id}` 禁用该 chat。 |

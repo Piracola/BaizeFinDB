@@ -1,6 +1,6 @@
 # BaizeFinDB Windows Client MVP
 
-这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号综合评分，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。
+这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。
 
 它不是安装包，也不会打包成 exe。后续如果需要桌面分发，可以在这个目录基础上再做打包、签名和自动更新。
 
@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 - 客户端只消费后端 API：`/health/ready`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
 - Telegram 绑定管理调用 `/telegram/bindings`；服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
 - P0/P1/P2、生命周期、审查状态和雷达计数均来自后端，客户端不重新计算。
-- 日报/周报和综合评分也来自后端；客户端只负责触发、读取和展示。
+- 日报/周报和综合评分也来自后端；客户端只负责触发、读取和展示评分窗口、档位和组件明细。
 - 客户端不保存 token、secret、持仓截图或个人数据；Telegram Secret 只在当前进程内用于请求 header。
 - 客户端不提供买卖建议、不接自动交易、不承诺收益。
 - 持仓/自选只作为个人提醒、展示排序和报告上下文，不改变市场雷达等级。

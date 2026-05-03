@@ -382,11 +382,22 @@ def test_format_scores_lists_score_windows_without_trading_instruction() -> None
                     "window_days": 1,
                     "score_status": "pending_window",
                     "composite_score": 82.5,
+                    "components": {
+                        "priority": 85,
+                        "lifecycle": 78,
+                        "review": 82,
+                        "evidence": 85,
+                        "continuity": 82,
+                        "data_quality": 87,
+                        "timeliness": 58,
+                    },
+                    "details": {"score_band": "strong_attention"},
                 },
                 {
                     "window_days": 3,
                     "score_status": "generated",
                     "composite_score": 76,
+                    "details": {"score_band": "watch"},
                 },
             ],
         },
@@ -395,7 +406,12 @@ def test_format_scores_lists_score_windows_without_trading_instruction() -> None
     assert "信号 #7 综合评分" in text
     assert "1d：82.50" in text
     assert "窗口未结束" in text
+    assert "强关注" in text
+    assert "组件：优先级=85.00" in text
+    assert "数据质量=87.00" in text
+    assert "时效性=58.00" in text
     assert "3d：76.00" in text
+    assert "观察" in text
     assert "不是价格回测或交易建议" in text
     assert "买入" not in text
 
