@@ -10,6 +10,7 @@
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
 | `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
+| `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，用退出码区分阻塞状态。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
@@ -69,6 +70,18 @@ uv run python infra/scripts/server_deploy_check.py --check-containers --check-ap
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
+```
+
+服务启动后做短窗口运行采样，默认连续读取 `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness` 三次。`blocked` 或接口读取失败会返回失败退出码；普通 `warning` 只记录为告警，除非加 `--fail-on-warning`：
+
+```powershell
+uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
+```
+
+更严格的部署验收可以把 warning 也视为失败：
+
+```powershell
+uv run python infra/scripts/server_runtime_check.py --samples 5 --interval-seconds 60 --fail-on-warning
 ```
 
 验证 Tushare `stock_basic` token 和字段稳定性，不写数据库：
@@ -140,6 +153,14 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 ```
 
 重点看 `status` 和 `checks`。`ready` 表示核心运行条件满足，`warning` 表示可运行但有警告，`blocked` 表示至少一个关键检查失败。
+
+需要把一段时间的运行状态保存为验收记录时，使用运行采样脚本：
+
+```powershell
+uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
+```
+
+该脚本只读，不触发采集、扫描、推送或模型调用；它基于 `/health/ready` 和 `/ops/readiness` 判断阻塞状态，并汇总 `/ops/overview` 的资源摘要、alerts 以及 `/ops/history` 的 failure summary。
 
 ## Secrets 边界
 

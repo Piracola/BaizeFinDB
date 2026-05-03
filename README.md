@@ -77,7 +77,7 @@
 - Alembic 迁移框架
 - Celery Worker / Beat 调度入口
 - Docker Compose 的 PostgreSQL / Redis 配置
-- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、部署预检脚本、只读 M5 smoke check（含 `/ops/overview` 和 Tushare 状态契约）、PostgreSQL 备份/恢复脚本、systemd 示例和 nginx HTTPS 反代示例
+- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、部署预检脚本、只读 M5 smoke check（含 `/ops/overview` 和 Tushare 状态契约）、运行采样验证脚本、PostgreSQL 备份/恢复脚本、systemd 示例和 nginx HTTPS 反代示例
 - pytest 冒烟测试
 
 ## 当前进度
@@ -124,7 +124,7 @@ uv run uvicorn app.main:app --reload
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
-Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、`/ops/readiness` 就绪自检契约、Tushare 状态契约和 `pg_dump` 可用性，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、`/ops/readiness` 就绪自检契约、Tushare 状态契约和 `pg_dump` 可用性，`infra/scripts/server_runtime_check.py` 可对运行中的 API 连续采样健康、OPS 和就绪状态并生成 JSON 报告，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
 
 ## Windows 客户端 MVP
 

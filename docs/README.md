@@ -22,8 +22,8 @@
 - 雷达等级由规则引擎判定，AI 只能解释、补证据、指出风险。
 - 板块/主题/概念权重大于单票异动；个股异动主要用于反推主线或风险。
 - 发布类输出必须复用 M4 审查和分享预检。
-- Linux 服务器部署目前只有骨架，包含 API 容器、Celery worker/beat、compose overlay、systemd 和 nginx 示例；不要把它当作完整生产部署。
-- `/ops/overview`、`/ops/history` 和 `/ops/readiness` 是当前只读运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检和告警摘要入口，可用于本地排障、服务器 smoke check 和后续监控接入。
+- Linux 服务器部署目前只有骨架，包含 API 容器、Celery worker/beat、compose overlay、systemd、nginx 示例、部署预检和运行采样脚本；不要把它当作完整生产部署。
+- `/ops/overview`、`/ops/history` 和 `/ops/readiness` 是当前只读运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检和告警摘要入口，可用于本地排障、服务器 smoke check、`server_runtime_check.py` 运行采样和后续监控接入。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取、失败记录、日志、快照查询和 `/providers/tushare/readiness` 只读准入自检；`anns_d` 重大风险公告可被雷达扫描映射为 risk P0。接入调度前必须再做真实 token 验证、字段漂移和误差样例。
 - Web、Windows 客户端、Telegram `/tushare` 和 `/tushare_ready` 只读展示 Tushare 配置状态和准入自检，不触发真实抓取，不泄露 token 原文。
 - Windows 客户端目前只是 MVP 源码运行版，不是安装包；只消费后端 API，不重新计算雷达等级、市场情绪、运行状态、数据源状态或评分。
