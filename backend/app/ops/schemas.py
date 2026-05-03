@@ -26,6 +26,12 @@ class OpsRadarSummary(BaseModel):
     status_counts: dict[str, int] = Field(default_factory=dict)
 
 
+class OpsAlertRead(BaseModel):
+    severity: str
+    code: str
+    message: str
+
+
 class OpsOverviewRead(BaseModel):
     generated_at: datetime
     lookback_hours: int = Field(ge=1, le=168)
@@ -34,3 +40,4 @@ class OpsOverviewRead(BaseModel):
     data_quality: OpsCountSummary
     telegram_push: OpsCountSummary
     model_calls: OpsCountSummary
+    alerts: list[OpsAlertRead] = Field(default_factory=list)

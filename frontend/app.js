@@ -553,6 +553,7 @@ function renderOpsOverview(overview) {
   const dataQuality = overview?.data_quality || {};
   const telegramPush = overview?.telegram_push || {};
   const modelCalls = overview?.model_calls || {};
+  const alerts = Array.isArray(overview?.alerts) ? overview.alerts : [];
   const cards = [
     {
       name: "扫描新鲜度",
@@ -568,6 +569,12 @@ function renderOpsOverview(overview) {
       status: Number(radar.recent_scan_failure_count || 0) > 0 ? "fail" : "ok",
       value: formatRate(radar.recent_scan_failure_rate),
       detail: `近 24h ${radar.recent_scan_count ?? 0} 次 / 失败 ${radar.recent_scan_failure_count ?? 0}`,
+    },
+    {
+      name: "告警",
+      status: alerts.length > 0 ? "fail" : "ok",
+      value: `${alerts.length} 条`,
+      detail: formatOpsAlerts(alerts),
     },
     opsCountCard("Provider", providerFetch),
     opsCountCard("数据质量", dataQuality),
@@ -585,6 +592,14 @@ function renderOpsOverview(overview) {
       `;
     })
     .join("");
+}
+
+function formatOpsAlerts(alerts) {
+  if (!alerts.length) {
+    return "暂无告警";
+  }
+
+  return alerts.map((alert) => alert.message || alert.code || "未返回告警说明").join(" / ");
 }
 
 function renderOpsUnavailable(reason) {

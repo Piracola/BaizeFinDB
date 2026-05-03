@@ -71,7 +71,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 按钮 | 行为 |
 | --- | --- |
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
-| 运行状态 | 调用 `/ops/overview`，显示最近扫描、失败率、Provider、数据质量、推送和模型调用摘要。 |
+| 运行状态 | 调用 `/ops/overview`，显示最近扫描、失败率、Provider、数据质量、推送、模型调用和告警摘要。 |
 | 数据源状态 | 调用 `/providers/tushare/status`，显示 Tushare token 配置、手动抓取启用状态和已实现端点数；不触发真实抓取。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |

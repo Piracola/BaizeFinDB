@@ -9,9 +9,10 @@ from app.db.audit_models import ModelCallLog
 from app.db.provider_models import DataQualityCheck, ProviderFetchLog
 from app.db.push_models import PushLog
 from app.db.radar_models import RadarScanBatch
-from app.ops.schemas import OpsCountSummary, OpsOverviewRead, OpsRadarSummary
+from app.ops.schemas import OpsAlertRead, OpsCountSummary, OpsOverviewRead, OpsRadarSummary
 
 RADAR_STALE_INTERVAL_MULTIPLIER = 2
+RADAR_FAILURE_RATE_ALERT_THRESHOLD = 0.2
 
 
 async def get_ops_overview(
@@ -29,42 +30,53 @@ async def get_ops_overview(
         now=generated_at,
         scan_interval_seconds=settings.radar_scan_interval_seconds,
     )
+    provider_fetch = await _status_summary(
+        session,
+        ProviderFetchLog,
+        ProviderFetchLog.status,
+        ProviderFetchLog.fetch_finished_at,
+        since,
+        healthy_statuses={"success"},
+    )
+    data_quality = await _status_summary(
+        session,
+        DataQualityCheck,
+        DataQualityCheck.status,
+        DataQualityCheck.created_at,
+        since,
+        healthy_statuses={"ok"},
+    )
+    telegram_push = await _status_summary(
+        session,
+        PushLog,
+        PushLog.status,
+        PushLog.created_at,
+        since,
+        healthy_statuses={"sent", "preview", "skipped"},
+    )
+    model_calls = await _status_summary(
+        session,
+        ModelCallLog,
+        ModelCallLog.status,
+        ModelCallLog.created_at,
+        since,
+        healthy_statuses={"success"},
+    )
 
     return OpsOverviewRead(
         generated_at=generated_at,
         lookback_hours=lookback_hours,
         radar=radar,
-        provider_fetch=await _status_summary(
-            session,
-            ProviderFetchLog,
-            ProviderFetchLog.status,
-            ProviderFetchLog.fetch_finished_at,
-            since,
-            healthy_statuses={"success"},
-        ),
-        data_quality=await _status_summary(
-            session,
-            DataQualityCheck,
-            DataQualityCheck.status,
-            DataQualityCheck.created_at,
-            since,
-            healthy_statuses={"ok"},
-        ),
-        telegram_push=await _status_summary(
-            session,
-            PushLog,
-            PushLog.status,
-            PushLog.created_at,
-            since,
-            healthy_statuses={"sent", "preview", "skipped"},
-        ),
-        model_calls=await _status_summary(
-            session,
-            ModelCallLog,
-            ModelCallLog.status,
-            ModelCallLog.created_at,
-            since,
-            healthy_statuses={"success"},
+        provider_fetch=provider_fetch,
+        data_quality=data_quality,
+        telegram_push=telegram_push,
+        model_calls=model_calls,
+        alerts=_ops_alerts(
+            radar=radar,
+            provider_fetch=provider_fetch,
+            data_quality=data_quality,
+            telegram_push=telegram_push,
+            model_calls=model_calls,
         ),
     )
 
@@ -136,6 +148,71 @@ async def _status_summary(
         ),
         latest_status=latest_status,
         latest_at=_row_datetime(latest_row, time_column.key),
+    )
+
+
+def _ops_alerts(
+    *,
+    radar: OpsRadarSummary,
+    provider_fetch: OpsCountSummary,
+    data_quality: OpsCountSummary,
+    telegram_push: OpsCountSummary,
+    model_calls: OpsCountSummary,
+) -> list[OpsAlertRead]:
+    alerts: list[OpsAlertRead] = []
+
+    if radar.latest_scan_id is None:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="radar_no_scan",
+                message="尚未找到雷达扫描记录。",
+            ),
+        )
+    elif radar.is_latest_scan_stale:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="radar_stale",
+                message="最新雷达扫描已超过预期调度间隔。",
+            ),
+        )
+
+    if (
+        radar.recent_scan_count > 0
+        and radar.recent_scan_failure_rate >= RADAR_FAILURE_RATE_ALERT_THRESHOLD
+    ):
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="radar_failure_rate_high",
+                message="最近雷达扫描失败率偏高。",
+            ),
+        )
+
+    _append_unhealthy_alert(alerts, provider_fetch, "provider_fetch_unhealthy", "Provider 拉取")
+    _append_unhealthy_alert(alerts, data_quality, "data_quality_unhealthy", "数据质量")
+    _append_unhealthy_alert(alerts, telegram_push, "telegram_push_unhealthy", "Telegram 推送")
+    _append_unhealthy_alert(alerts, model_calls, "model_calls_unhealthy", "模型调用")
+
+    return alerts
+
+
+def _append_unhealthy_alert(
+    alerts: list[OpsAlertRead],
+    summary: OpsCountSummary,
+    code: str,
+    label: str,
+) -> None:
+    if summary.unhealthy_count <= 0:
+        return
+
+    alerts.append(
+        OpsAlertRead(
+            severity="warning",
+            code=code,
+            message=f"{label}存在 {summary.unhealthy_count} 条异常记录。",
+        ),
     )
 
 

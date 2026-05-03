@@ -123,7 +123,7 @@ Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/R
 Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 ```
 
-该接口只读聚合已有数据库记录，不触发采集、扫描、推送或模型调用。重点看 `radar.recent_scan_failure_rate`、`radar.is_latest_scan_stale`、`provider_fetch.unhealthy_count`、`data_quality.unhealthy_count`、`telegram_push.unhealthy_count` 和 `model_calls.unhealthy_count`。
+该接口只读聚合已有数据库记录，不触发采集、扫描、推送或模型调用。重点看 `alerts`、`radar.recent_scan_failure_rate`、`radar.is_latest_scan_stale`、`provider_fetch.unhealthy_count`、`data_quality.unhealthy_count`、`telegram_push.unhealthy_count` 和 `model_calls.unhealthy_count`。
 
 ## Secrets 边界
 

@@ -311,6 +311,7 @@ async def test_telegram_ops_command_reports_runtime_overview(
     assert "成功 | 新鲜度：" in preview
     assert "扫描失败率：50% (1/2)" in preview
     assert "Provider：异常 0 / 总数 0 / 最新 暂无" in preview
+    assert "告警：最近雷达扫描失败率偏高。" in preview
     assert "该视图只读取已有运行记录" in preview
     assert "不构成投资建议" in preview
 

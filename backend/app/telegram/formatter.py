@@ -178,6 +178,7 @@ def format_ops_overview(overview: OpsOverviewRead) -> str:
         _ops_count_text("数据质量", overview.data_quality),
         _ops_count_text("推送", overview.telegram_push),
         _ops_count_text("模型", overview.model_calls),
+        f"告警：{_ops_alerts_text(overview.alerts)}",
         "该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。",
         "",
         DISCLAIMER,
@@ -531,6 +532,13 @@ def _ops_status_label(value: object) -> str:
     }
     raw_value = _value(value) if value is not None else "unknown"
     return labels.get(raw_value, "暂无" if value is None else raw_value)
+
+
+def _ops_alerts_text(alerts: list[object]) -> str:
+    if not alerts:
+        return "暂无"
+
+    return " / ".join(str(_field(alert, "message", "未返回告警说明")) for alert in alerts)
 
 
 def _rate_label(value: object) -> str:

@@ -217,6 +217,13 @@ async def test_ops_overview_summarizes_recent_runtime_signals(
     assert payload["telegram_push"]["unhealthy_count"] == 1
     assert payload["model_calls"]["status_counts"] == {"degraded": 1, "fallback": 1}
     assert payload["model_calls"]["unhealthy_count"] == 2
+    assert [alert["code"] for alert in payload["alerts"]] == [
+        "radar_failure_rate_high",
+        "provider_fetch_unhealthy",
+        "data_quality_unhealthy",
+        "telegram_push_unhealthy",
+        "model_calls_unhealthy",
+    ]
 
 
 @pytest.mark.asyncio
@@ -234,6 +241,13 @@ async def test_ops_overview_handles_empty_database(
     assert payload["data_quality"]["total_count"] == 0
     assert payload["telegram_push"]["total_count"] == 0
     assert payload["model_calls"]["total_count"] == 0
+    assert payload["alerts"] == [
+        {
+            "severity": "warning",
+            "code": "radar_no_scan",
+            "message": "尚未找到雷达扫描记录。",
+        }
+    ]
 
 
 async def _get_ops_overview(

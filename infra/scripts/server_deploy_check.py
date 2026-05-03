@@ -26,6 +26,7 @@ M5_SMOKE_ENDPOINTS = (
             "data_quality",
             "telegram_push",
             "model_calls",
+            "alerts",
         ),
     ),
     ("/providers/akshare/status", ("provider_name", "endpoints")),

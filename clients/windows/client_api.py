@@ -545,6 +545,7 @@ def format_ops_overview(payload: Mapping[str, Any]) -> str:
         _ops_count_text("数据质量", _mapping(payload.get("data_quality"))),
         _ops_count_text("Telegram 推送", _mapping(payload.get("telegram_push"))),
         _ops_count_text("模型调用", _mapping(payload.get("model_calls"))),
+        f"告警：{_ops_alerts_text(_sequence(payload.get('alerts')))}",
     ]
 
     lines.extend(
@@ -1000,6 +1001,15 @@ def _ops_status_label(value: Any) -> str:
         "skipped": "跳过",
     }
     return labels.get(_text(value, ""), _text(value, "暂无"))
+
+
+def _ops_alerts_text(alerts: Sequence[Any]) -> str:
+    if not alerts:
+        return "暂无"
+
+    return " / ".join(
+        _text(_mapping(alert).get("message"), "未返回告警说明") for alert in alerts
+    )
 
 
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:

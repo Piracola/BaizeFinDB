@@ -16,7 +16,7 @@ Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 
 
 Web 雷达终端工作台、Windows 客户端和 Telegram `/tushare` 已展示 Tushare token 状态、手动抓取启用状态和已实现端点数；Web `tushare` 命令、Windows“数据源状态”按钮和 Telegram `/tushare` 命令只刷新只读状态，不触发真实抓取。
 
-Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、AKShare Provider、Tushare Provider、Radar 和 Telegram 状态接口 JSON 契约。该状态只代表部署骨架完成，不代表完整生产部署完成。
+Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、AKShare Provider、Tushare Provider、Radar 和 Telegram 状态接口 JSON 契约。Ops 已能生成扫描停滞、失败率和 unhealthy 计数告警摘要。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。
 
@@ -227,6 +227,6 @@ uv run uvicorn app.main:app --reload
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移和只读 M5 smoke check。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0，后续再决定是否纳入调度。
-- 增加运行可观测性：`/ops/overview` 已汇总扫描耗时、失败率、推送结果、模型降级和数据质量状态，Web 状态面板、Windows 客户端和 Telegram `/ops` 已展示该摘要；后续再接趋势图、告警和服务器监控。
+- 增加运行可观测性：`/ops/overview` 已汇总扫描耗时、失败率、推送结果、模型降级、数据质量状态和只读告警摘要，Web 状态面板、Windows 客户端和 Telegram `/ops` 已展示该摘要；后续再接趋势图和服务器监控。
 - 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

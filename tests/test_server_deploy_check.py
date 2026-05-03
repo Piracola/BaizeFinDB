@@ -142,3 +142,5 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
         "/radar/overview",
         "/telegram/status",
     ]
+    ops_call = calls[2]
+    assert "alerts" in ops_call[2]

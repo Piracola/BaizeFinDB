@@ -210,6 +210,13 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
                 "unhealthy_count": 1,
                 "latest_status": "fallback",
             },
+            "alerts": [
+                {
+                    "severity": "warning",
+                    "code": "provider_fetch_unhealthy",
+                    "message": "Provider 拉取存在 1 条异常记录。",
+                }
+            ],
         },
     )
 
@@ -219,6 +226,7 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
     assert "扫描失败率：12.5% (1/8)" in text
     assert "Provider：异常=1 / 总数=6 / 最新=失败" in text
     assert "模型调用：异常=1 / 总数=2 / 最新=降级切换" in text
+    assert "告警：Provider 拉取存在 1 条异常记录。" in text
     assert "只读取已有运行记录" in text
 
 

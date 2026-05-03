@@ -103,6 +103,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 - `data_quality`：最近数据质量状态计数，`ok` 以外计入 unhealthy。
 - `telegram_push`：最近 Telegram 推送状态计数，`sent`、`preview`、`skipped` 视为健康。
 - `model_calls`：最近模型调用审计状态计数，`degraded`、`fallback` 等会计入 unhealthy。
+- `alerts`：根据扫描停滞、扫描失败率和各类 unhealthy 计数生成的只读告警摘要。
 
 查询参数：
 
