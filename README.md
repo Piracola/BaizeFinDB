@@ -33,7 +33,7 @@
 - `/reports` 查看当前 `user_key` 的报告列表
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
-- 静态 Web 雷达终端工作台可查看雷达总览、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号综合评分
+- 静态 Web 雷达终端工作台可查看雷达总览、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号综合评分，并维护 Telegram chat 绑定/白名单
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -75,7 +75,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示）、Telegram Bot MVP、Windows 客户端 MVP（含报告、日报/周报、评分展示和 Telegram 绑定管理）、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补评分校准和生产化部署。 |
+| M5 | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示和 Telegram 绑定管理）、Telegram Bot MVP、Windows 客户端 MVP（含报告、日报/周报、评分展示和 Telegram 绑定管理）、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补评分校准和生产化部署。 |
 
 ## 本地启动
 

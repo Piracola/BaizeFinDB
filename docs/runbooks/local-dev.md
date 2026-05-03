@@ -40,7 +40,7 @@ uv run uvicorn app.main:app --reload
 http://127.0.0.1:8000/
 ```
 
-Web 终端工作台当前可查看 API 状态、雷达总览、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告、日报/周报汇总和单信号综合评分。顶部命令栏支持 `radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports`、`daily`、`weekly`、`score` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级或评分。
+Web 终端工作台当前可查看 API 状态、雷达总览、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告、日报/周报汇总、单信号综合评分和 Telegram chat 绑定/白名单。顶部命令栏支持 `radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports`、`daily`、`weekly`、`score`、`telegram` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级或评分。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
@@ -206,6 +206,8 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/bindings
 ```
 
 如果 `.env` 未配置 `TELEGRAM_ALLOWED_CHAT_IDS` 且数据库没有任何绑定，本地 webhook 仍保持开放模式；一旦存在绑定，未绑定 chat 默认会被拒绝。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，环境白名单仍是硬过滤。
+
+也可以在 Web 工作台的 `Telegram 绑定 / 白名单` 面板维护绑定。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，在该面板的 `Webhook Secret` 输入框临时填写同一个值；前端不会保存该 secret。
 
 本地 preview `/help`：
 

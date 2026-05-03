@@ -23,6 +23,7 @@
         <button type="button" data-scroll-target="portfolio-panel">PORTFOLIO</button>
         <button type="button" data-scroll-target="reports-panel">REPORTS</button>
         <button type="button" data-scroll-target="analytics-panel">ANALYTICS</button>
+        <button type="button" data-scroll-target="telegram-panel">TELEGRAM</button>
       </nav>
     </aside>
 
@@ -39,7 +40,7 @@
             type="text"
             autocomplete="off"
             spellcheck="false"
-            placeholder="radar / scan / fetch / portfolio / reports / daily / score"
+            placeholder="radar / scan / fetch / portfolio / reports / daily / score / telegram"
           />
           <button id="command-run-button" type="button">执行</button>
         </div>
@@ -53,6 +54,7 @@
         <button type="button" data-scroll-target="portfolio-panel">F5 持仓</button>
         <button type="button" data-scroll-target="reports-panel">F6 报告</button>
         <button type="button" data-scroll-target="analytics-panel">F7 周期</button>
+        <button type="button" data-scroll-target="telegram-panel">F8 绑定</button>
       </div>
 
       <main class="layout">
@@ -199,6 +201,45 @@
           <section>
             <h3>信号评分</h3>
             <div id="score-run" class="report-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="telegram-panel" class="panel telegram-panel" aria-labelledby="telegram-title">
+        <div class="section-heading">
+          <h2 id="telegram-title">Telegram 绑定 / 白名单</h2>
+          <span class="muted">来自 /telegram/bindings</span>
+        </div>
+        <div class="telegram-grid">
+          <form id="telegram-binding-form" class="compact-form">
+            <h3>绑定 Chat</h3>
+            <div class="form-grid">
+              <label>
+                <span>Chat ID</span>
+                <input name="chat_id" required />
+              </label>
+              <label>
+                <span>User Key</span>
+                <input name="user_key" value="telegram-" maxlength="120" />
+              </label>
+              <label>
+                <span>备注</span>
+                <input name="display_name" maxlength="160" />
+              </label>
+              <label class="span-2">
+                <span>Webhook Secret</span>
+                <input id="telegram-secret" name="secret" type="password" autocomplete="off" />
+              </label>
+            </div>
+            <div class="telegram-actions">
+              <button id="telegram-refresh-button" type="button">刷新绑定</button>
+              <button type="submit">绑定 / 启用</button>
+              <button id="telegram-disable-button" type="button">禁用 Chat</button>
+            </div>
+          </form>
+          <section>
+            <h3>当前绑定</h3>
+            <div id="telegram-bindings-list" class="telegram-binding-list"></div>
           </section>
         </div>
       </section>

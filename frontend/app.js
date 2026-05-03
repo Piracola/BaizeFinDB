@@ -9,6 +9,11 @@ const elements = {
   dailyReportButton: document.querySelector("#daily-report-button"),
   weeklyReportButton: document.querySelector("#weekly-report-button"),
   scoreSignalButton: document.querySelector("#score-signal-button"),
+  telegramBindingForm: document.querySelector("#telegram-binding-form"),
+  telegramRefreshButton: document.querySelector("#telegram-refresh-button"),
+  telegramDisableButton: document.querySelector("#telegram-disable-button"),
+  telegramSecret: document.querySelector("#telegram-secret"),
+  telegramBindingsList: document.querySelector("#telegram-bindings-list"),
   commandInput: document.querySelector("#command-input"),
   commandRunButton: document.querySelector("#command-run-button"),
   lastUpdated: document.querySelector("#last-updated"),
@@ -36,6 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.dailyReportButton.addEventListener("click", () => loadPeriodicReport("daily"));
   elements.weeklyReportButton.addEventListener("click", () => loadPeriodicReport("weekly"));
   elements.scoreSignalButton.addEventListener("click", scoreSelectedSignal);
+  elements.telegramRefreshButton.addEventListener("click", loadTelegramBindings);
+  elements.telegramDisableButton.addEventListener("click", disableTelegramBinding);
   elements.commandRunButton.addEventListener("click", executeCommand);
   elements.commandInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -52,6 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   elements.holdingForm.addEventListener("submit", addHolding);
   elements.watchlistForm.addEventListener("submit", addWatchlistItem);
+  elements.telegramBindingForm.addEventListener("submit", saveTelegramBinding);
   refreshAll();
 });
 
@@ -67,6 +75,7 @@ async function refreshAll() {
       loadPortfolio(),
       loadReports(),
       loadPeriodicReport("daily", { silent: true }),
+      loadTelegramBindings({ silent: true }),
     ]);
     showMessage("info", "刷新完成。");
   } else {
@@ -136,6 +145,23 @@ async function loadReports() {
   }
 }
 
+async function loadTelegramBindings(options = {}) {
+  try {
+    const bindings = await fetchJson("/telegram/bindings?limit=50", {
+      headers: telegramHeaders(),
+    });
+    renderTelegramBindings(bindings);
+    if (!options.silent) {
+      showMessage("info", "Telegram 绑定已刷新。");
+    }
+  } catch (error) {
+    elements.telegramBindingsList.innerHTML = emptyState(`Telegram 绑定暂不可用：${formatError(error)}`);
+    if (!options.silent) {
+      showMessage("error", `读取 Telegram 绑定失败：${formatError(error)}`);
+    }
+  }
+}
+
 async function loadPeriodicReport(period, options = {}) {
   try {
     const report = await fetchJson(`/reports/periodic${periodicQuery(period)}`);
@@ -161,6 +187,7 @@ function renderRadarUnavailable(reason) {
   elements.reportsList.innerHTML = emptyState("依赖服务恢复后再读取报告。");
   elements.periodicReport.innerHTML = emptyState("依赖服务恢复后再读取周期汇总。");
   elements.scoreRun.innerHTML = emptyState("依赖服务恢复后再读取评分。");
+  elements.telegramBindingsList.innerHTML = emptyState("依赖服务恢复后再读取 Telegram 绑定。");
 }
 
 async function loadSignalDetail(signalId) {
@@ -313,10 +340,59 @@ async function scoreSelectedSignal() {
   }
 }
 
+async function saveTelegramBinding(event) {
+  event.preventDefault();
+  const payload = telegramBindingPayload();
+  if (!payload) {
+    return;
+  }
+
+  setButtonsBusy(true);
+  showMessage("info", `正在绑定 Telegram chat ${payload.chat_id}。`);
+
+  try {
+    await fetchJson("/telegram/bindings", {
+      method: "POST",
+      headers: telegramHeaders({ json: true }),
+      body: JSON.stringify(payload),
+    });
+    showMessage("info", `Telegram chat ${payload.chat_id} 已绑定。`);
+    await loadTelegramBindings({ silent: true });
+  } catch (error) {
+    showMessage("error", `绑定 Telegram chat 失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function disableTelegramBinding() {
+  const chatId = telegramChatId();
+  if (chatId === null) {
+    return;
+  }
+
+  setButtonsBusy(true);
+  showMessage("info", `正在禁用 Telegram chat ${chatId}。`);
+
+  try {
+    await fetchJson(`/telegram/bindings/${encodeURIComponent(chatId)}`, {
+      method: "PATCH",
+      headers: telegramHeaders({ json: true }),
+      body: JSON.stringify({ is_allowed: false }),
+    });
+    showMessage("info", `Telegram chat ${chatId} 已禁用。`);
+    await loadTelegramBindings({ silent: true });
+  } catch (error) {
+    showMessage("error", `禁用 Telegram chat 失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score。");
+    showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -340,10 +416,12 @@ function executeCommand() {
     score: scoreSelectedSignal,
     analytics: () => scrollToPanel("analytics-panel"),
     summary: () => scrollToPanel("analytics-panel"),
+    telegram: () => scrollToPanel("telegram-panel"),
+    bindings: () => scrollToPanel("telegram-panel"),
     help: () =>
       showMessage(
         "info",
-        "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score。",
+        "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -714,6 +792,30 @@ function renderScores(scoreRun) {
   `;
 }
 
+function renderTelegramBindings(bindings) {
+  if (!Array.isArray(bindings) || bindings.length === 0) {
+    elements.telegramBindingsList.innerHTML = emptyState("暂无数据库绑定。未配置环境白名单时，本地 webhook 仍保持开放模式。");
+    return;
+  }
+
+  elements.telegramBindingsList.innerHTML = bindings
+    .map((binding) => {
+      const isAllowed = binding.is_allowed === true;
+      return `
+        <article class="telegram-binding-card">
+          <div class="meta-row">
+            <span class="badge">${escapeHtml(isAllowed ? "允许" : "禁用")}</span>
+            <span class="badge">${escapeHtml(binding.source || "manual")}</span>
+          </div>
+          <h3>chat=${escapeHtml(binding.chat_id)}</h3>
+          <p class="summary">user_key=${escapeHtml(binding.user_key || "-")}</p>
+          <p class="muted">备注：${escapeHtml(binding.display_name || "无")}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 async function fetchJson(path, options = {}) {
   const response = await fetch(path, {
     headers: { Accept: "application/json" },
@@ -767,9 +869,12 @@ function setButtonsBusy(isBusy) {
   elements.dailyReportButton.disabled = isBusy;
   elements.weeklyReportButton.disabled = isBusy;
   elements.scoreSignalButton.disabled = isBusy;
+  elements.telegramRefreshButton.disabled = isBusy;
+  elements.telegramDisableButton.disabled = isBusy;
   elements.commandRunButton.disabled = isBusy;
   elements.holdingForm.querySelector("button").disabled = isBusy;
   elements.watchlistForm.querySelector("button").disabled = isBusy;
+  elements.telegramBindingForm.querySelector("button[type='submit']").disabled = isBusy;
 }
 
 function showMessage(type, text) {
@@ -843,6 +948,47 @@ function formPayload(form) {
   }
 
   return payload;
+}
+
+function telegramBindingPayload() {
+  const chatId = telegramChatId();
+  if (chatId === null) {
+    return null;
+  }
+
+  const formData = new FormData(elements.telegramBindingForm);
+  const userKey = String(formData.get("user_key") || "").trim() || `telegram-${chatId}`;
+  return {
+    chat_id: chatId,
+    user_key: userKey,
+    display_name: String(formData.get("display_name") || "").trim(),
+    is_allowed: true,
+  };
+}
+
+function telegramChatId() {
+  const rawValue = String(new FormData(elements.telegramBindingForm).get("chat_id") || "").trim();
+  const chatId = Number(rawValue);
+  if (!rawValue || !Number.isInteger(chatId) || chatId === 0) {
+    showMessage("error", "Telegram Chat ID 必须是非零整数。");
+    return null;
+  }
+
+  return chatId;
+}
+
+function telegramHeaders(options = {}) {
+  const headers = { Accept: "application/json" };
+  if (options.json) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const secret = elements.telegramSecret.value.trim();
+  if (secret) {
+    headers["X-Telegram-Bot-Api-Secret-Token"] = secret;
+  }
+
+  return headers;
 }
 
 function enabledLabel(value) {
