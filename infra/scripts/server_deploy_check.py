@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -13,6 +14,16 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 SERVER_COMPOSE_FILES = ("docker-compose.yml", "docker-compose.server.yml")
 DEFAULT_POSTGRES_SERVICE = "postgres"
+M5_SMOKE_ENDPOINTS = (
+    ("/health", ("status", "service")),
+    ("/health/ready", ("status", "checks")),
+    ("/providers/akshare/status", ("provider_name", "endpoints")),
+    ("/radar/overview", ("priority_counts", "lifecycle_counts", "subject_count")),
+    (
+        "/telegram/status",
+        ("bot_token_configured", "push_enabled", "binding_count"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -99,6 +110,56 @@ def check_http(base_url: str, path: str, *, timeout: int) -> CheckResult:
     return CheckResult(name, "ok", _truncate(body))
 
 
+def check_http_json_fields(
+    base_url: str,
+    path: str,
+    required_fields: tuple[str, ...],
+    *,
+    timeout: int,
+) -> CheckResult:
+    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    request = Request(url, headers={"Accept": "application/json"}, method="GET")
+    name = f"HTTP JSON {path}"
+    try:
+        with urlopen(request, timeout=timeout) as response:  # noqa: S310
+            body = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        return CheckResult(name, "fail", f"HTTP {exc.code}: {_truncate(body)}")
+    except (TimeoutError, URLError, OSError) as exc:
+        return CheckResult(name, "fail", str(exc))
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        return CheckResult(name, "fail", f"invalid JSON: {exc.msg}")
+
+    if not isinstance(payload, dict):
+        return CheckResult(name, "fail", "JSON response is not an object")
+
+    missing_fields = [field for field in required_fields if field not in payload]
+    if missing_fields:
+        return CheckResult(
+            name,
+            "fail",
+            f"missing required fields: {', '.join(missing_fields)}",
+        )
+
+    return CheckResult(name, "ok", f"fields present: {', '.join(required_fields)}")
+
+
+def check_m5_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
+    return [
+        check_http_json_fields(
+            base_url,
+            path,
+            required_fields,
+            timeout=timeout,
+        )
+        for path, required_fields in M5_SMOKE_ENDPOINTS
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check BaizeFinDB Linux server deployment prerequisites.",
@@ -112,6 +173,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--check-api",
         action="store_true",
         help="Check /health and /health/ready on the target API.",
+    )
+    parser.add_argument(
+        "--check-m5-smoke",
+        action="store_true",
+        help="Check read-only M5 API JSON contracts on the target API.",
     )
     parser.add_argument(
         "--check-containers",
@@ -194,6 +260,9 @@ def main(argv: list[str] | None = None) -> int:
                 check_http(args.base_url, "/health/ready", timeout=args.timeout),
             ],
         )
+
+    if args.check_m5_smoke:
+        checks.extend(check_m5_smoke(args.base_url, timeout=args.timeout))
 
     for check in checks:
         label = check.status.upper()

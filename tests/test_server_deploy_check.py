@@ -70,3 +70,73 @@ def test_check_env_passes_when_env_exists(tmp_path: Path) -> None:
 
     assert result.status == "ok"
     assert result.ok
+
+
+def test_check_http_json_fields_passes_for_required_fields(monkeypatch) -> None:
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"status":"ok","service":"BaizeFinDB"}'
+
+    monkeypatch.setattr(server_deploy_check, "urlopen", lambda *args, **kwargs: FakeResponse())
+
+    result = server_deploy_check.check_http_json_fields(
+        "http://example.test",
+        "/health",
+        ("status", "service"),
+        timeout=1,
+    )
+
+    assert result.status == "ok"
+    assert result.ok
+
+
+def test_check_http_json_fields_fails_for_missing_fields(monkeypatch) -> None:
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"status":"ok"}'
+
+    monkeypatch.setattr(server_deploy_check, "urlopen", lambda *args, **kwargs: FakeResponse())
+
+    result = server_deploy_check.check_http_json_fields(
+        "http://example.test",
+        "/health",
+        ("status", "service"),
+        timeout=1,
+    )
+
+    assert result.status == "fail"
+    assert not result.ok
+    assert "service" in result.detail
+
+
+def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
+    calls = []
+
+    def fake_check(base_url: str, path: str, required_fields: tuple[str, ...], *, timeout: int):
+        calls.append((base_url, path, required_fields, timeout))
+        return server_deploy_check.CheckResult(path, "ok")
+
+    monkeypatch.setattr(server_deploy_check, "check_http_json_fields", fake_check)
+
+    results = server_deploy_check.check_m5_smoke("http://api.test", timeout=3)
+
+    assert all(result.ok for result in results)
+    assert [call[1] for call in calls] == [
+        "/health",
+        "/health/ready",
+        "/providers/akshare/status",
+        "/radar/overview",
+        "/telegram/status",
+    ]

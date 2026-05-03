@@ -10,7 +10,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
-| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, and API health. |
+| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, and M5 read-only smoke checks. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
@@ -138,6 +138,12 @@ The same checks can be run through the bundled preflight:
 
 ```bash
 python infra/scripts/server_deploy_check.py --check-containers --check-api
+```
+
+Check the read-only M5 endpoint contracts after the API is up:
+
+```bash
+python infra/scripts/server_deploy_check.py --check-m5-smoke
 ```
 
 Verify the backup toolchain without exporting data:
