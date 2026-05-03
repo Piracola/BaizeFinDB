@@ -50,7 +50,7 @@ Required notes:
 - `RADAR_SCAN_INTERVAL_SECONDS` controls the Celery beat interval for the collect-then-scan task. The default is `300`.
 - `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` controls how many consecutive P1 scans create a quick-report candidate. The default is `3`.
 - `RADAR_CONTINUITY_WINDOW_MINUTES` controls the continuity window for repeated P1 checks. The default is `30`.
-- `TUSHARE_TOKEN` enables manual Tushare `stock_basic` and `anns_d` verification and collection. It is not used by the current beat schedule.
+- `TUSHARE_TOKEN` enables manual Tushare `stock_basic`, `anns_d`, and `stock_company` verification and collection. It is not used by the current beat schedule.
 - `TELEGRAM_PUSH_ENABLED=true` makes the collect-then-scan task send a folded Telegram radar push after each successful scan. Keep it `false` until token, chat whitelist, and webhook secret are ready.
 
 Example placeholders:
@@ -163,6 +163,7 @@ Verify Tushare `stock_basic` without writing to the database:
 ```bash
 python infra/scripts/verify_tushare_stock_basic.py
 python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 ```
 
 Manually write Tushare provider snapshots after migrations:
@@ -170,6 +171,7 @@ Manually write Tushare provider snapshots after migrations:
 ```bash
 python infra/scripts/collect_tushare_stock_basic.py
 python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
+python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 ```
 
 ## Telegram Webhook

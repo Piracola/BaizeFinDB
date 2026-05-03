@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -20,6 +20,7 @@ from app.providers.service import (
     collect_minimal_akshare,
     collect_tushare_announcements,
     collect_tushare_stock_basic,
+    collect_tushare_stock_company,
     get_akshare_collection_status,
     list_latest_provider_snapshots,
     list_provider_fetch_logs,
@@ -34,6 +35,7 @@ router = APIRouter(prefix="/providers", tags=["providers"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 TushareDateQuery = Annotated[str | None, Query(pattern=r"^\d{8}$")]
+TushareExchangeQuery = Annotated[Literal["SSE", "SZSE", "BSE"], Query()]
 
 
 @router.get("/akshare/endpoints", response_model=list[ProviderEndpointInfo])
@@ -70,6 +72,17 @@ async def fetch_tushare_announcements(
         return await collect_tushare_announcements(session, ann_date=ann_date)
     except SQLAlchemyError as exc:
         raise _database_unavailable("recording tushare announcements fetch", exc) from exc
+
+
+@router.post("/tushare/fetch/stock-company", response_model=ProviderEndpointResult)
+async def fetch_tushare_stock_company(
+    session: SessionDep,
+    exchange: TushareExchangeQuery = "SZSE",
+) -> ProviderEndpointResult:
+    try:
+        return await collect_tushare_stock_company(session, exchange=exchange)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("recording tushare stock company fetch", exc) from exc
 
 
 @router.post("/akshare/fetch/minimal", response_model=AkshareCollectionResponse)

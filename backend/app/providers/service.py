@@ -62,6 +62,20 @@ async def collect_tushare_announcements(
     )
 
 
+async def collect_tushare_stock_company(
+    session: AsyncSession,
+    exchange: str = "SZSE",
+    provider: TushareProvider | None = None,
+) -> ProviderEndpointResult:
+    tushare_provider = provider or TushareProvider()
+    return await collect_tushare_endpoint(
+        session,
+        tushare_provider,
+        "stock_company",
+        query_params={"exchange": exchange},
+    )
+
+
 async def collect_akshare_endpoint(
     session: AsyncSession,
     provider: AkshareProvider,

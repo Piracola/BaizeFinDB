@@ -109,7 +109,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/min
 
 ### 4.3 查看和手动验证 Tushare
 
-Tushare 当前用于补充证券主数据和公告数据。`stock_basic` 与 `anns_d` 已支持手动抓取并写入 Provider 快照；公司信息仍是预留，不会触发真实抓取。Tushare 不在当前 Celery 5 分钟调度里，避免权限、积分或字段变化影响主雷达闭环。
+Tushare 当前用于补充证券主数据、公告数据和公司主体资料。`stock_basic`、`anns_d` 与 `stock_company` 已支持手动抓取并写入 Provider 快照。Tushare 不在当前 Celery 5 分钟调度里，避免权限、积分或字段变化影响主雷达闭环。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
@@ -131,14 +131,18 @@ uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
+uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/stock-basic
 Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/announcements?ann_date=20260503"
+Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/stock-company?exchange=SZSE"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=anns_d"
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_company"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
-如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。后续接公司信息或调度前，还需要补真实 token 验证、字段漂移样例和风险事件映射测试。
+如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。后续接调度前，还需要补真实 token 验证、字段漂移样例和风险事件映射测试。
 
 ### 4.4 基于最新快照运行雷达扫描
 
@@ -500,9 +504,11 @@ uv run python infra/scripts/verify_akshare_minimal.py
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic&limit=5"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=anns_d&limit=5"
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_company&limit=5"
 ```
 
 常见原因：

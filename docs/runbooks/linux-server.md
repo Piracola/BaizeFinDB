@@ -76,6 +76,7 @@ uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 ```
 
 手动写入 Tushare 股票基础信息或公告快照：
@@ -83,6 +84,7 @@ uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
 ```powershell
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 ```
 
 验证 Postgres 容器内 `pg_dump` 可用：

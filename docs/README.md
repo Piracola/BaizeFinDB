@@ -24,7 +24,7 @@
 - 发布类输出必须复用 M4 审查和分享预检。
 - Linux 服务器部署目前只有骨架，包含 API 容器、Celery worker/beat、compose overlay、systemd 和 nginx 示例；不要把它当作完整生产部署。
 - `/ops/overview` 是当前只读运行状态汇总入口，可用于本地排障、服务器 smoke check 和后续监控接入。
-- Tushare 当前已支持 `stock_basic` 和 `anns_d` 手动抓取、失败记录、日志和快照查询；公司信息仍是预留，接入调度或风险事件映射前必须再做真实 token 验证和误差样例。
+- Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取、失败记录、日志和快照查询；接入调度或风险事件映射前必须再做真实 token 验证和误差样例。
 - Windows 客户端目前只是 MVP 源码运行版，不是安装包；只消费后端 API，不重新计算雷达等级、市场情绪、运行状态或评分。
 - 不接自动交易，不输出强买卖指令，不保存券商交易密码。
 - 新表必须有 Alembic 迁移，新规则必须有测试或 golden case。

@@ -22,13 +22,14 @@
 - `/ops/overview` 只读运行状态汇总：最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送和模型降级
 - AKShare 最小 Provider：A 股行情、行业板块、概念板块
 - AKShare 情绪 Provider：涨停股池、跌停股池、炸板股池
-- Tushare Provider：可查看 token 配置状态和计划端点，`stock_basic` 和 `anns_d` 已支持手动抓取并写入 Provider 快照；公司信息仍是预留
+- Tushare Provider：可查看 token 配置状态和计划端点，`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取并写入 Provider 快照
 - Provider 拉取日志、快照和数据质量表
 - `/providers/akshare/endpoints` 查看已封装接口
 - `/providers/tushare/endpoints` 查看计划接入的 Tushare 补充源端点
 - `/providers/tushare/status` 查看 Tushare token 是否配置，不返回 token 原文
 - `/providers/tushare/fetch/stock-basic` 手动触发 Tushare 股票基础信息抓取
 - `/providers/tushare/fetch/announcements` 手动触发 Tushare 公告抓取
+- `/providers/tushare/fetch/stock-company` 手动触发 Tushare 上市公司基本信息抓取
 - `/providers/tushare/fetch-logs` 查看 Tushare 抓取日志
 - `/providers/tushare/snapshots/latest` 查看 Tushare 最新快照摘要
 - `/providers/akshare/fetch/minimal` 手动触发最小采集
@@ -81,7 +82,7 @@
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
 | M1 工程骨架 | 已完成 | 后端可启动、可测试，PostgreSQL / Redis / Alembic / Docker Compose 基础就绪。 |
-| M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成；Tushare `stock_basic` 和 `anns_d` 已支持手动抓取、日志和快照查询，尚未接入调度。 |
+| M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成；Tushare `stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取、日志和快照查询，尚未接入调度。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
 | M5 | 验收项完成 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check；后续进入生产化验证和真实数据增强。 |
@@ -213,6 +214,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 ```
 
 PostgreSQL 迁移完成后，手动采集并写入数据库：
@@ -221,6 +223,7 @@ PostgreSQL 迁移完成后，手动采集并写入数据库：
 uv run python infra/scripts/collect_akshare_minimal.py
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 ```
 
 基于已入库快照手动运行雷达扫描：

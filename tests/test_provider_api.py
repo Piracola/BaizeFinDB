@@ -37,7 +37,7 @@ def test_tushare_endpoint_list_is_registered() -> None:
     implemented = {item["endpoint"]: item["implemented"] for item in payload}
     assert implemented == {
         "anns_d": True,
-        "stock_company": False,
+        "stock_company": True,
         "stock_basic": True,
     }
     assert all(item["required_fields"] for item in payload)
@@ -60,7 +60,7 @@ def test_tushare_status_does_not_leak_token(monkeypatch) -> None:
         "token_configured": True,
         "fetch_enabled": True,
         "endpoint_count": 3,
-        "implemented_endpoint_count": 2,
+        "implemented_endpoint_count": 3,
         "status": "configured",
         "message": "Tushare token is configured and implemented endpoints can be enabled.",
     }
@@ -121,4 +121,37 @@ def test_tushare_announcements_fetch_route_uses_service(monkeypatch) -> None:
     assert response.json()["row_count"] == 2
     assert response.json()["snapshot_id"] == 21
     assert calls == ["20260503"]
+
+
+def test_tushare_stock_company_fetch_route_uses_service(monkeypatch) -> None:
+    calls = []
+
+    async def fake_collect_tushare_stock_company(
+        session,
+        exchange="SZSE",
+    ) -> ProviderEndpointResult:
+        calls.append(exchange)
+        return ProviderEndpointResult(
+            endpoint="stock_company",
+            status=ProviderStatus.SUCCESS,
+            row_count=3,
+            quality_status=DataQualityStatus.OK,
+            confidence=0.95,
+            fetch_log_id=12,
+            snapshot_id=22,
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.providers.collect_tushare_stock_company",
+        fake_collect_tushare_stock_company,
+    )
+    client = TestClient(create_app())
+
+    response = client.post("/providers/tushare/fetch/stock-company?exchange=SSE")
+
+    assert response.status_code == 200
+    assert response.json()["endpoint"] == "stock_company"
+    assert response.json()["row_count"] == 3
+    assert response.json()["snapshot_id"] == 22
+    assert calls == ["SSE"]
 
