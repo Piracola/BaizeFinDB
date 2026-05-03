@@ -32,6 +32,9 @@ def test_frontend_assets_are_served() -> None:
     assert "createReport" in js_response.text
     assert "loadPeriodicReport" in js_response.text
     assert "scoreSelectedSignal" in js_response.text
+    assert "renderScoreComponents" in js_response.text
+    assert "score_band" in js_response.text
+    assert "data_quality" in js_response.text
     assert "loadTelegramBindings" in js_response.text
     assert "saveTelegramBinding" in js_response.text
     assert "executeCommand" in js_response.text
@@ -44,3 +47,4 @@ def test_frontend_assets_are_served() -> None:
     assert "analytics-panel" in css_response.text
     assert "telegram-panel" in css_response.text
     assert "score-grid" in css_response.text
+    assert "score-components" in css_response.text

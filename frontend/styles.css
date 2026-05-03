@@ -432,6 +432,33 @@ h3 {
   gap: 4px;
 }
 
+.score-components {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(76px, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.score-component {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.score-component span {
+  color: var(--muted-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.score-component strong {
+  color: var(--text-dark);
+  font-size: 16px;
+}
+
 .score-number {
   color: #6d5316;
   font-size: 26px;
@@ -611,7 +638,8 @@ pre {
   .portfolio-columns,
   .analytics-grid,
   .telegram-grid,
-  .score-grid {
+  .score-grid,
+  .score-components {
     grid-template-columns: 1fr;
   }
 

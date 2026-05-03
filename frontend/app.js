@@ -2,6 +2,16 @@ const state = {
   selectedSignalId: null,
 };
 
+const SCORE_COMPONENT_ORDER = [
+  "priority",
+  "lifecycle",
+  "review",
+  "evidence",
+  "continuity",
+  "data_quality",
+  "timeliness",
+];
+
 const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   runScanButton: document.querySelector("#run-scan-button"),
@@ -777,18 +787,46 @@ function renderScores(scoreRun) {
       <div class="score-grid">
         ${records
           .map((record) => {
+            const scoreBand = record.details?.score_band;
             return `
               <article class="score-card">
                 <strong>${escapeHtml(record.window_days)}d</strong>
                 <div class="score-number">${escapeHtml(formatScore(record.composite_score))}</div>
-                <span class="muted">${escapeHtml(label(record.score_status))}</span>
+                <div class="meta-row">
+                  <span class="badge">${escapeHtml(label(record.score_status))}</span>
+                  ${scoreBand ? `<span class="badge">${escapeHtml(label(scoreBand))}</span>` : ""}
+                </div>
               </article>
             `;
           })
           .join("")}
       </div>
+      ${renderScoreComponents(records[0])}
       <p class="summary">评分综合优先级、生命周期、审查、证据、连续性、数据质量和时效性；不是价格回测或交易建议。</p>
     </article>
+  `;
+}
+
+function renderScoreComponents(record) {
+  const components = record?.components && typeof record.components === "object" ? record.components : {};
+  const rows = SCORE_COMPONENT_ORDER.filter((name) => components[name] !== undefined);
+  if (rows.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="score-components">
+      ${rows
+        .map((name) => {
+          return `
+            <div class="score-component">
+              <span>${escapeHtml(label(name))}</span>
+              <strong>${escapeHtml(formatScore(components[name]))}</strong>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
   `;
 }
 
@@ -906,6 +944,17 @@ function label(value) {
     needs_human_review: "需人工复核",
     generated: "已生成",
     pending_window: "窗口未结束",
+    strong_attention: "强关注",
+    watch: "观察",
+    weak_watch: "弱观察",
+    low_signal_quality: "低质量",
+    priority: "优先级",
+    lifecycle: "生命周期",
+    review: "审查",
+    evidence: "证据",
+    continuity: "连续性",
+    data_quality: "数据质量",
+    timeliness: "时效性",
     ignition: "点火",
     developing: "发酵",
     divergence: "分歧",
