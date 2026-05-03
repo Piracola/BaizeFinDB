@@ -62,6 +62,7 @@ class TelegramPushDeliveryRead(BaseModel):
     sent: bool
     preview: str
     push_log_id: int | None = None
+    generated_report_ids: list[int] = Field(default_factory=list)
     error: str | None = None
 
 

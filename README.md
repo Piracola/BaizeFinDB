@@ -72,7 +72,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、Web 报告视图和 Telegram 折叠推送日志；后续继续补 P0 后台 standard report、日报周报和评分。 |
+| M5 | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、Web 报告视图、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补日报周报和评分。 |
 
 ## 本地启动
 
@@ -140,6 +140,7 @@ TELEGRAM_PUSH_ENABLED=false
 - `TELEGRAM_ALLOWED_CHAT_IDS` 可填逗号分隔的 chat id；配置后只有白名单 chat 会被处理。
 - `TELEGRAM_WEBHOOK_SECRET` 配置后，Webhook 必须携带 `X-Telegram-Bot-Api-Secret-Token`。
 - `TELEGRAM_PUSH_ENABLED=true` 后，Celery 扫描任务会向白名单 chat 发送最新扫描的折叠推送；留空或 false 时只保留手动 API 调试。
+- P0 信号完成折叠推送后，会为对应 `user_key=telegram-<chat_id>` 自动生成一份 `standard` report；重复推送同一扫描不会重复生成。
 - `/holding` 和 `/watchlist` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的个人持仓/自选，只用于个人提醒和复盘上下文。
 - `/reports` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的报告列表。
 

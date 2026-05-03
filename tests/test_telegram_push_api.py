@@ -186,6 +186,45 @@ async def test_telegram_push_request_chat_ids_respect_whitelist(
     assert [delivery["chat_id"] for delivery in data["deliveries"]] == [1001]
 
 
+@pytest.mark.asyncio
+async def test_telegram_push_generates_standard_report_for_p0(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_p0_push_scan(session_factory)
+
+    response = await client.post(
+        "/telegram/push/latest",
+        json={"chat_ids": [1001], "dry_run": False},
+    )
+    duplicate_response = await client.post(
+        "/telegram/push/latest",
+        json={"chat_ids": [1001], "dry_run": False},
+    )
+    reports_response = await client.get(
+        "/reports",
+        params={"user_key": "telegram-1001", "report_type": "standard"},
+    )
+
+    assert response.status_code == 200
+    delivery = response.json()["deliveries"][0]
+    assert delivery["delivery"] == "preview"
+    assert len(delivery["generated_report_ids"]) == 1
+
+    assert reports_response.status_code == 200
+    reports = reports_response.json()
+    assert len(reports) == 1
+    assert reports[0]["id"] == delivery["generated_report_ids"][0]
+    assert reports[0]["signal_id"] == signal_id
+    assert reports[0]["report_type"] == "standard"
+    assert reports[0]["suggestion_label"] == "重点关注"
+    assert reports[0]["details"]["generation_trigger"] == "telegram_p0_push"
+
+    duplicate_delivery = duplicate_response.json()["deliveries"][0]
+    assert duplicate_delivery["delivery"] == "skipped"
+    assert duplicate_delivery["generated_report_ids"] == []
+
+
 async def _seed_push_scan(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> tuple[int, int, int]:
@@ -244,6 +283,42 @@ async def _seed_push_scan(
         )
         await session.commit()
         return approved.id, blocked.id, human_review.id
+
+
+async def _seed_p0_push_scan(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> int:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        scan = RadarScanBatch(
+            status="success",
+            started_at=now,
+            finished_at=now,
+            source_snapshot_ids=[],
+            summary={"priority_counts": {"P0": 1, "P1": 0, "P2": 0}},
+        )
+        session.add(scan)
+        await session.flush()
+
+        p0_signal = _signal(
+            batch_id=scan.id,
+            signal_key="akshare:test:p0-approved",
+            subject_name="Mainline Theme",
+            priority="P0",
+            lifecycle_stage="developing",
+            evidence_count=1,
+        )
+        session.add(p0_signal)
+        await session.flush()
+        session.add(
+            _evidence(
+                signal_id=p0_signal.id,
+                collected_at=now,
+                confidence=0.9,
+            ),
+        )
+        await session.commit()
+        return p0_signal.id
 
 
 def _signal(

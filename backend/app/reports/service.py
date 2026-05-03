@@ -1,6 +1,7 @@
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.portfolio_models import UserProfile
 from app.db.report_models import Report
 from app.governance.review import review_radar_signal
 from app.portfolio.schemas import DEFAULT_USER_KEY
@@ -30,6 +31,51 @@ async def create_signal_report(
     user_key: str = DEFAULT_USER_KEY,
 ) -> ReportRead | None:
     user = await get_or_create_user(session, user_key)
+    return await _create_signal_report_for_user(
+        session=session,
+        user=user,
+        signal_id=signal_id,
+        report_type=report_type,
+        commit=True,
+    )
+
+
+async def ensure_signal_report(
+    session: AsyncSession,
+    signal_id: int,
+    report_type: CreatableReportType,
+    user_key: str = DEFAULT_USER_KEY,
+    details_update: dict[str, object] | None = None,
+    commit: bool = True,
+) -> ReportRead | None:
+    user = await get_or_create_user(session, user_key)
+    existing_report = await _find_existing_signal_report(
+        session=session,
+        user_id=user.id,
+        signal_id=signal_id,
+        report_type=report_type,
+    )
+    if existing_report is not None:
+        return _report_read(existing_report, user.user_key)
+
+    return await _create_signal_report_for_user(
+        session=session,
+        user=user,
+        signal_id=signal_id,
+        report_type=report_type,
+        details_update=details_update,
+        commit=commit,
+    )
+
+
+async def _create_signal_report_for_user(
+    session: AsyncSession,
+    user: UserProfile,
+    signal_id: int,
+    report_type: CreatableReportType,
+    details_update: dict[str, object] | None = None,
+    commit: bool = True,
+) -> ReportRead | None:
     review = await review_radar_signal(session, signal_id)
     if review is None:
         return None
@@ -50,6 +96,18 @@ async def create_signal_report(
     title = f"{_report_type_label(report_type)}：{signal.subject_name}"
     summary = _report_summary(signal, suggestion_label)
     body_markdown = _report_body(signal, report_type, suggestion_label, review.reasons)
+    details = {
+        "source_kind": "radar_signal",
+        "source_signal_id": signal.id,
+        "source_priority": signal.priority.value,
+        "source_lifecycle_stage": signal.lifecycle_stage.value,
+        "review_id": review.id,
+        "review_reasons": review.reasons,
+        "generation_mode": "deterministic_template",
+        "model_status": "not_used",
+    }
+    if details_update:
+        details.update(details_update)
 
     report = Report(
         user_id=user.id,
@@ -61,20 +119,13 @@ async def create_signal_report(
         body_markdown=body_markdown,
         suggestion_label=suggestion_label.value,
         review_status=review.review_status.value,
-        details={
-            "source_kind": "radar_signal",
-            "source_signal_id": signal.id,
-            "source_priority": signal.priority.value,
-            "source_lifecycle_stage": signal.lifecycle_stage.value,
-            "review_id": review.id,
-            "review_reasons": review.reasons,
-            "generation_mode": "deterministic_template",
-            "model_status": "not_used",
-        },
+        details=details,
     )
     session.add(report)
     await session.flush()
-    await session.commit()
+    if commit:
+        await session.commit()
+
     await session.refresh(report)
     return _report_read(report, user.user_key)
 
@@ -104,6 +155,25 @@ async def get_report(
     statement = select(Report).where(Report.id == report_id, Report.user_id == user.id)
     report = await session.scalar(statement)
     return _report_read(report, user.user_key) if report is not None else None
+
+
+async def _find_existing_signal_report(
+    session: AsyncSession,
+    user_id: int,
+    signal_id: int,
+    report_type: CreatableReportType,
+) -> Report | None:
+    statement = (
+        select(Report)
+        .where(
+            Report.user_id == user_id,
+            Report.signal_id == signal_id,
+            Report.report_type == report_type.value,
+        )
+        .order_by(desc(Report.created_at), desc(Report.id))
+        .limit(1)
+    )
+    return await session.scalar(statement)
 
 
 def _report_read(report: Report, user_key: str) -> ReportRead:

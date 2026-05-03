@@ -586,9 +586,9 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/push/latest `
 - `blocked_signal_ids`：审查阻断并过滤的信号。
 - `needs_human_review_signal_ids`：需要人工复核并在推送中标注的信号。
 - `priority_counts`：推送正文中的 P0/P1/P2 折叠计数。
-- `deliveries`：每个 chat 的 `sent`、`preview`、`push_log_id` 和错误信息。
+- `deliveries`：每个 chat 的 `sent`、`preview`、`push_log_id`、`generated_report_ids` 和错误信息。
 
-非 `dry_run` 且未配置 `TELEGRAM_BOT_TOKEN` 时，接口会返回 `preview` 并写入 `push_logs`，用于本地和服务器 dry-run 之外的审计调试。同一个 `user_key + chat + scan` 已有 `sent` 或 `preview` 记录时，会跳过重复投递；失败记录允许后续重试。
+非 `dry_run` 且未配置 `TELEGRAM_BOT_TOKEN` 时，接口会返回 `preview` 并写入 `push_logs`，用于本地和服务器 dry-run 之外的审计调试。P0 信号完成 `sent` 或 `preview` 后，会为对应 `user_key=telegram-<chat_id>` 生成或复用一份 `standard` report，并在 `generated_report_ids` 返回。同一个 `user_key + chat + scan` 已有 `sent` 或 `preview` 记录时，会跳过重复投递；失败记录允许后续重试。
 
 配置 `TELEGRAM_WEBHOOK_SECRET` 后，请求必须携带同一个 Telegram secret header。
 

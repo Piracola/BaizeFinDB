@@ -7,6 +7,8 @@ from app.governance.review import review_radar_signal
 from app.portfolio.service import get_or_create_user
 from app.radar.schemas import RadarPriority, RadarReviewStatus, RadarSignalRead
 from app.radar.service import get_latest_radar_scan
+from app.reports.schemas import CreatableReportType
+from app.reports.service import ReportBlockedError, ensure_signal_report
 from app.telegram.client import TelegramClient
 from app.telegram.formatter import format_radar_push
 from app.telegram.schemas import (
@@ -19,6 +21,7 @@ from app.telegram.schemas import (
 TELEGRAM_PUSH_CHANNEL = "telegram"
 RADAR_SCAN_SOURCE_KIND = "radar_scan"
 PUSH_TITLE = "雷达折叠推送"
+P0_STANDARD_REPORT_TRIGGER = "telegram_p0_push"
 
 
 async def send_latest_radar_push(
@@ -146,6 +149,12 @@ async def send_latest_radar_push(
         )
         session.add(push_log)
         await session.flush()
+        generated_report_ids = await _ensure_p0_standard_reports(
+            session=session,
+            user_key=user_key,
+            signals=included_signals,
+            delivery_status=status,
+        )
         deliveries.append(
             TelegramPushDeliveryRead(
                 chat_id=chat_id,
@@ -154,6 +163,7 @@ async def send_latest_radar_push(
                 sent=sent,
                 preview=message,
                 push_log_id=push_log.id,
+                generated_report_ids=generated_report_ids,
                 error=error,
             ),
         )
@@ -279,6 +289,38 @@ def _priority_counts(signals: list[RadarSignalRead]) -> dict[str, int]:
     for signal in signals:
         counts[signal.priority.value] += 1
     return counts
+
+
+async def _ensure_p0_standard_reports(
+    session: AsyncSession,
+    user_key: str,
+    signals: list[RadarSignalRead],
+    delivery_status: TelegramPushStatus,
+) -> list[int]:
+    if delivery_status not in {TelegramPushStatus.SENT, TelegramPushStatus.PREVIEW}:
+        return []
+
+    report_ids: list[int] = []
+    for signal in signals:
+        if signal.priority != RadarPriority.P0:
+            continue
+
+        try:
+            report = await ensure_signal_report(
+                session=session,
+                signal_id=signal.id,
+                report_type=CreatableReportType.STANDARD,
+                user_key=user_key,
+                details_update={"generation_trigger": P0_STANDARD_REPORT_TRIGGER},
+                commit=False,
+            )
+        except ReportBlockedError:
+            continue
+
+        if report is not None:
+            report_ids.append(report.id)
+
+    return report_ids
 
 
 def _push_log_read(log: PushLog, user_key: str) -> TelegramPushLogRead:

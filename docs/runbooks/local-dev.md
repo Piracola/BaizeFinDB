@@ -256,7 +256,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/push/latest `
 Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-1001"
 ```
 
-`TELEGRAM_PUSH_ENABLED=true` 时，Celery 的 `baizefindb.radar.collect_and_scan` 会在采集和扫描后追加一次最新扫描折叠推送。推送正文按 P0/P1/P2 折叠，复用后端审查过滤 `blocked`，并对 `needs_human_review` 明确标注；Telegram 层不重新计算雷达等级。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，手动推送接口显式传入的 `chat_ids` 也会被白名单过滤。
+`TELEGRAM_PUSH_ENABLED=true` 时，Celery 的 `baizefindb.radar.collect_and_scan` 会在采集和扫描后追加一次最新扫描折叠推送。推送正文按 P0/P1/P2 折叠，复用后端审查过滤 `blocked`，并对 `needs_human_review` 明确标注；P0 信号完成推送后会为对应聊天用户自动生成或复用 `standard` report。Telegram 层不重新计算雷达等级。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，手动推送接口显式传入的 `chat_ids` 也会被白名单过滤。
 
 ## 6. Celery Worker / Beat
 

@@ -8,7 +8,7 @@
 
 项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
-Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选和报告列表；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked 并记录 push log。Telegram 仍只消费后端结果，不重新计算雷达等级。
+Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选和报告列表；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级。
 
 Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级，也不是完整安装包。
 
@@ -53,7 +53,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、Web 报告视图和 Telegram 折叠推送日志；后续继续补 P0 后台 standard report、日报周报和基础评分。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、Web 报告视图、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补日报周报和基础评分。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -187,7 +187,7 @@ uv run uvicorn app.main:app --reload
 
 - 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则、生命周期和 P2 7 天观察。
 - 将持仓/自选接入 Telegram/Web 展示和报告上下文；继续保持只影响个人优先级，不改变市场主线等级。
-- Telegram 推送已能按 P0/P1/P2 折叠汇总、过滤 blocked 并记录 `push_logs`；后续补 P0 快速提醒后后台生成 standard report。
+- Telegram 推送已能按 P0/P1/P2 折叠汇总、过滤 blocked、记录 `push_logs`，并在 P0 推送后为对应聊天用户生成 standard report。
 - Web MVP 已改为雷达终端工作台外壳，具备左侧模块导航、顶部命令栏、F-key 操作条、雷达总览、信号详情、持仓/自选维护和报告列表。
 - 报告分 quick/standard/deep；自动最多 quick/standard，deep 只手动触发。
 - 加入日报、周报和 1d/3d/5d/10d 基础综合评分。
