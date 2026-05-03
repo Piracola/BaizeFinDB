@@ -50,6 +50,25 @@ button:disabled {
   opacity: 0.62;
 }
 
+input {
+  min-height: 36px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 9px;
+}
+
+label span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -117,7 +136,8 @@ h3 {
 .status-panel,
 .overview-panel,
 .signals-panel,
-.detail-panel {
+.detail-panel,
+.portfolio-panel {
   min-width: 0;
 }
 
@@ -128,6 +148,10 @@ h3 {
 .detail-panel {
   grid-column: 2;
   grid-row: 2 / span 2;
+}
+
+.portfolio-panel {
+  grid-column: 1 / -1;
 }
 
 .section-heading {
@@ -155,7 +179,9 @@ h3 {
 .subject-card,
 .signal-card,
 .detail-card,
-.evidence-card {
+.evidence-card,
+.portfolio-card,
+.compact-form {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
@@ -205,27 +231,63 @@ h3 {
 
 .subject-list,
 .signal-list,
-.evidence-list {
+.evidence-list,
+.portfolio-list {
   display: grid;
   gap: 10px;
 }
 
 .subject-card,
-.signal-card {
+.signal-card,
+.portfolio-card {
   display: grid;
   gap: 8px;
 }
 
-.signal-card {
+.signal-card,
+.portfolio-card {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
 }
 
 .signal-card h3,
 .subject-card h3,
-.detail-card h3 {
+.detail-card h3,
+.portfolio-card h3 {
   margin: 0;
   font-size: 15px;
+}
+
+.field-row {
+  display: grid;
+  max-width: 360px;
+  margin-bottom: 14px;
+}
+
+.portfolio-forms,
+.portfolio-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.compact-form {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-form h3 {
+  margin: 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.span-2 {
+  grid-column: span 2;
 }
 
 .meta-row {
@@ -362,9 +424,15 @@ pre {
   }
 
   .signals-panel,
-  .detail-panel {
+  .detail-panel,
+  .portfolio-panel {
     grid-column: auto;
     grid-row: auto;
+  }
+
+  .portfolio-forms,
+  .portfolio-columns {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -379,12 +447,18 @@ pre {
 
   .status-grid,
   .priority-grid,
-  .detail-grid {
+  .detail-grid,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 
-  .signal-card {
+  .signal-card,
+  .portfolio-card {
     grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: auto;
   }
 
   button {

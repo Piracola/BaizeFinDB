@@ -14,12 +14,20 @@ const elements = {
   currentSubjects: document.querySelector("#current-subjects"),
   signalsList: document.querySelector("#signals-list"),
   signalDetail: document.querySelector("#signal-detail"),
+  portfolioUserKey: document.querySelector("#portfolio-user-key"),
+  holdingForm: document.querySelector("#holding-form"),
+  watchlistForm: document.querySelector("#watchlist-form"),
+  holdingsList: document.querySelector("#holdings-list"),
+  watchlistList: document.querySelector("#watchlist-list"),
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   elements.refreshButton.addEventListener("click", refreshAll);
   elements.runScanButton.addEventListener("click", runRadarScan);
   elements.fetchAkshareButton.addEventListener("click", fetchMinimalAkshare);
+  elements.portfolioUserKey.addEventListener("change", loadPortfolio);
+  elements.holdingForm.addEventListener("submit", addHolding);
+  elements.watchlistForm.addEventListener("submit", addWatchlistItem);
   refreshAll();
 });
 
@@ -29,7 +37,7 @@ async function refreshAll() {
 
   const isReady = await loadReadyStatus();
   if (isReady) {
-    await Promise.all([loadOverview(), loadSignals()]);
+    await Promise.all([loadOverview(), loadSignals(), loadPortfolio()]);
     showMessage("info", "刷新完成。");
   } else {
     renderRadarUnavailable("API 依赖未就绪。确认 PostgreSQL、Redis 和迁移状态后再刷新。");
@@ -74,11 +82,28 @@ async function loadSignals() {
   }
 }
 
+async function loadPortfolio() {
+  try {
+    const userQuery = portfolioQuery();
+    const [holdings, watchlistItems] = await Promise.all([
+      fetchJson(`/portfolio/holdings${userQuery}`),
+      fetchJson(`/portfolio/watchlist${userQuery}`),
+    ]);
+    renderHoldings(holdings);
+    renderWatchlistItems(watchlistItems);
+  } catch (error) {
+    elements.holdingsList.innerHTML = emptyState(`持仓暂不可用：${formatError(error)}`);
+    elements.watchlistList.innerHTML = emptyState(`自选暂不可用：${formatError(error)}`);
+  }
+}
+
 function renderRadarUnavailable(reason) {
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.latestScan.innerHTML = emptyState("依赖服务恢复后，先触发采集或运行雷达扫描。");
   elements.currentSubjects.innerHTML = emptyState("暂无当前主题。");
   elements.signalsList.innerHTML = emptyState("暂无信号列表。");
+  elements.holdingsList.innerHTML = emptyState("依赖服务恢复后再读取持仓。");
+  elements.watchlistList.innerHTML = emptyState("依赖服务恢复后再读取自选。");
 }
 
 async function loadSignalDetail(signalId) {
@@ -123,6 +148,65 @@ async function fetchMinimalAkshare() {
     await Promise.all([loadOverview(), loadSignals()]);
   } catch (error) {
     showMessage("error", `AKShare 采集失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function addHolding(event) {
+  event.preventDefault();
+  setButtonsBusy(true);
+  showMessage("info", "正在添加持仓。");
+
+  try {
+    await postJson(`/portfolio/holdings${portfolioQuery()}`, formPayload(elements.holdingForm));
+    elements.holdingForm.reset();
+    elements.holdingForm.elements.market.value = "A_SHARE";
+    showMessage("info", "持仓已添加。");
+    await loadPortfolio();
+  } catch (error) {
+    showMessage("error", `添加持仓失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function addWatchlistItem(event) {
+  event.preventDefault();
+  setButtonsBusy(true);
+  showMessage("info", "正在添加自选。");
+
+  try {
+    await postJson(`/portfolio/watchlist${portfolioQuery()}`, formPayload(elements.watchlistForm));
+    elements.watchlistForm.reset();
+    elements.watchlistForm.elements.market.value = "A_SHARE";
+    showMessage("info", "自选已添加。");
+    await loadPortfolio();
+  } catch (error) {
+    showMessage("error", `添加自选失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function deleteHolding(holdingId) {
+  await deletePortfolioItem(`/portfolio/holdings/${holdingId}${portfolioQuery()}`, "持仓");
+}
+
+async function deleteWatchlistItem(itemId) {
+  await deletePortfolioItem(`/portfolio/watchlist/${itemId}${portfolioQuery()}`, "自选");
+}
+
+async function deletePortfolioItem(path, labelText) {
+  setButtonsBusy(true);
+  showMessage("info", `正在删除${labelText}。`);
+
+  try {
+    await fetchJson(path, { method: "DELETE" });
+    showMessage("info", `${labelText}已删除。`);
+    await loadPortfolio();
+  } catch (error) {
+    showMessage("error", `删除${labelText}失败：${formatError(error)}`);
   } finally {
     setButtonsBusy(false);
   }
@@ -307,6 +391,66 @@ function renderSignalDetail(detail) {
   document.querySelector("#metrics-json").textContent = JSON.stringify(detail.metrics || {}, null, 2);
 }
 
+function renderHoldings(holdings) {
+  if (!Array.isArray(holdings) || holdings.length === 0) {
+    elements.holdingsList.innerHTML = emptyState("暂无手动持仓。");
+    return;
+  }
+
+  elements.holdingsList.innerHTML = holdings
+    .map((holding) => {
+      return `
+        <article class="portfolio-card">
+          <div>
+            <div class="meta-row">
+              <span class="badge">${escapeHtml(holding.market)}</span>
+              <span class="badge">仓位 ${escapeHtml(formatRatio(holding.position_ratio))}</span>
+              <span class="badge">提醒 ${escapeHtml(enabledLabel(holding.alert_enabled))}</span>
+            </div>
+            <h3>${escapeHtml(holding.instrument_code)} ${escapeHtml(holding.instrument_name)}</h3>
+            <p class="summary">${escapeHtml(holding.note || "暂无备注。")}</p>
+            <p class="muted">成本：${escapeHtml(formatOptionalNumber(holding.cost_price))}</p>
+          </div>
+          <button class="secondary" type="button" data-holding-id="${escapeHtml(holding.id)}">删除</button>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.holdingsList.querySelectorAll("[data-holding-id]").forEach((button) => {
+    button.addEventListener("click", () => deleteHolding(button.dataset.holdingId));
+  });
+}
+
+function renderWatchlistItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    elements.watchlistList.innerHTML = emptyState("暂无自选关注。");
+    return;
+  }
+
+  elements.watchlistList.innerHTML = items
+    .map((item) => {
+      return `
+        <article class="portfolio-card">
+          <div>
+            <div class="meta-row">
+              <span class="badge">${escapeHtml(item.market)}</span>
+              <span class="badge">提醒 ${escapeHtml(enabledLabel(item.alert_enabled))}</span>
+            </div>
+            <h3>${escapeHtml(item.instrument_code)} ${escapeHtml(item.instrument_name)}</h3>
+            <p class="summary">${escapeHtml(item.note || "暂无备注。")}</p>
+          </div>
+          <button class="secondary" type="button" data-watchlist-id="${escapeHtml(item.id)}">删除</button>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.watchlistList.querySelectorAll("[data-watchlist-id]").forEach((button) => {
+    button.addEventListener("click", () => deleteWatchlistItem(button.dataset.watchlistId));
+  });
+}
+
 async function fetchJson(path, options = {}) {
   const response = await fetch(path, {
     headers: { Accept: "application/json" },
@@ -322,6 +466,17 @@ async function fetchJson(path, options = {}) {
   }
 
   return payload;
+}
+
+async function postJson(path, payload) {
+  return fetchJson(path, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 async function readPayload(response) {
@@ -341,6 +496,8 @@ function setButtonsBusy(isBusy) {
   elements.refreshButton.disabled = isBusy;
   elements.runScanButton.disabled = isBusy;
   elements.fetchAkshareButton.disabled = isBusy;
+  elements.holdingForm.querySelector("button").disabled = isBusy;
+  elements.watchlistForm.querySelector("button").disabled = isBusy;
 }
 
 function showMessage(type, text) {
@@ -383,6 +540,51 @@ function label(value) {
   };
 
   return labels[value] || String(value ?? "-");
+}
+
+function portfolioQuery() {
+  const userKey = elements.portfolioUserKey.value.trim() || "default";
+  return `?user_key=${encodeURIComponent(userKey)}`;
+}
+
+function formPayload(form) {
+  const formData = new FormData(form);
+  const payload = {};
+
+  for (const [key, value] of formData.entries()) {
+    const text = String(value).trim();
+    if (!text) {
+      continue;
+    }
+
+    if (key === "cost_price" || key === "position_ratio") {
+      payload[key] = Number(text);
+    } else {
+      payload[key] = text;
+    }
+  }
+
+  return payload;
+}
+
+function enabledLabel(value) {
+  return value ? "开启" : "关闭";
+}
+
+function formatRatio(value) {
+  if (value === null || value === undefined) {
+    return "未填";
+  }
+
+  return `${Math.round(Number(value) * 100)}%`;
+}
+
+function formatOptionalNumber(value) {
+  if (value === null || value === undefined) {
+    return "未填";
+  }
+
+  return Number(value).toString();
 }
 
 function formatDate(value) {
