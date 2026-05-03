@@ -18,6 +18,7 @@ def test_frontend_index_returns_static_page() -> None:
     assert "周期汇总 / 综合评分" in response.text
     assert "Telegram 绑定 / 白名单" in response.text
     assert "daily / score" in response.text
+    assert "lifecycle-counts" in response.text
 
 
 def test_frontend_assets_are_served() -> None:
@@ -35,6 +36,8 @@ def test_frontend_assets_are_served() -> None:
     assert "renderScoreComponents" in js_response.text
     assert "score_band" in js_response.text
     assert "data_quality" in js_response.text
+    assert "renderLifecycleCounts" in js_response.text
+    assert "lifecycle_counts" in js_response.text
     assert "loadTelegramBindings" in js_response.text
     assert "saveTelegramBinding" in js_response.text
     assert "executeCommand" in js_response.text
@@ -48,3 +51,4 @@ def test_frontend_assets_are_served() -> None:
     assert "telegram-panel" in css_response.text
     assert "score-grid" in css_response.text
     assert "score-components" in css_response.text
+    assert "lifecycle-grid" in css_response.text

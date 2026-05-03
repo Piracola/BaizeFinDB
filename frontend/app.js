@@ -12,6 +12,16 @@ const SCORE_COMPONENT_ORDER = [
   "timeliness",
 ];
 
+const LIFECYCLE_ORDER = [
+  "ignition",
+  "developing",
+  "divergence",
+  "returning",
+  "climax",
+  "fading",
+  "extinguished",
+];
+
 const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   runScanButton: document.querySelector("#run-scan-button"),
@@ -30,6 +40,7 @@ const elements = {
   readyStatus: document.querySelector("#ready-status"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
+  lifecycleCounts: document.querySelector("#lifecycle-counts"),
   latestScan: document.querySelector("#latest-scan"),
   currentSubjects: document.querySelector("#current-subjects"),
   signalsList: document.querySelector("#signals-list"),
@@ -113,10 +124,12 @@ async function loadOverview() {
   try {
     const overview = await fetchJson("/radar/overview");
     renderPriorityCounts(overview.priority_counts || {});
+    renderLifecycleCounts(overview.lifecycle_counts || {});
     renderLatestScan(overview.latest_scan);
     renderCurrentSubjects(overview.current_subjects || []);
   } catch (error) {
     elements.priorityCounts.innerHTML = emptyState(`雷达总览暂不可用：${formatError(error)}`);
+    elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
     elements.latestScan.innerHTML = emptyState("确认数据库迁移和依赖服务后再刷新。");
     elements.currentSubjects.innerHTML = emptyState("暂无当前主题。可先触发采集，再运行雷达扫描。");
   }
@@ -189,6 +202,7 @@ async function loadPeriodicReport(period, options = {}) {
 
 function renderRadarUnavailable(reason) {
   elements.priorityCounts.innerHTML = emptyState(reason);
+  elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
   elements.latestScan.innerHTML = emptyState("依赖服务恢复后，先触发采集或运行雷达扫描。");
   elements.currentSubjects.innerHTML = emptyState("暂无当前主题。");
   elements.signalsList.innerHTML = emptyState("暂无信号列表。");
@@ -498,6 +512,23 @@ function renderPriorityCounts(counts) {
           <strong>${priority}</strong>
           <div class="priority-number priority-${priority.toLowerCase()}">${escapeHtml(value)}</div>
           <div class="muted">后端返回计数</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderLifecycleCounts(counts) {
+  const visibleStages = LIFECYCLE_ORDER.filter((stage) => Number(counts[stage] ?? 0) > 0);
+  const stages = visibleStages.length > 0 ? visibleStages : LIFECYCLE_ORDER.slice(0, 3);
+  elements.lifecycleCounts.innerHTML = stages
+    .map((stage) => {
+      const value = counts[stage] ?? 0;
+      return `
+        <article class="priority-card">
+          <strong>${escapeHtml(label(stage))}</strong>
+          <div class="priority-number">${escapeHtml(value)}</div>
+          <div class="muted">生命周期计数</div>
         </article>
       `;
     })

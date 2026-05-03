@@ -157,4 +157,5 @@ class RadarOverviewRead(BaseModel):
     active_signals: list[RadarSignalRead] = Field(default_factory=list)
     current_subjects: list[RadarSubjectOverviewRead] = Field(default_factory=list)
     priority_counts: dict[str, int]
+    lifecycle_counts: dict[str, int]
     subject_count: int

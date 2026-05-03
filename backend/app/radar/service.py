@@ -192,6 +192,7 @@ async def get_radar_overview(
             for signal in active_signals
         ],
         priority_counts=_signal_priority_counts(current_signals),
+        lifecycle_counts=_signal_lifecycle_counts(current_signals),
         subject_count=len(current_signals),
     )
 
@@ -820,6 +821,13 @@ def _signal_priority_counts(signals: list[RadarSignalRead]) -> dict[str, int]:
     counts = {priority.value: 0 for priority in RadarPriority}
     for signal in signals:
         counts[signal.priority.value] += 1
+    return counts
+
+
+def _signal_lifecycle_counts(signals: list[RadarSignalRead]) -> dict[str, int]:
+    counts = {stage.value: 0 for stage in RadarLifecycleStage}
+    for signal in signals:
+        counts[signal.lifecycle_stage.value] += 1
     return counts
 
 

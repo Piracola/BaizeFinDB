@@ -272,10 +272,15 @@ h3 {
 }
 
 .status-grid,
-.priority-grid {
+.priority-grid,
+.lifecycle-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.lifecycle-grid {
+  margin-top: 10px;
 }
 
 .status-card,
@@ -654,6 +659,7 @@ pre {
 
   .status-grid,
   .priority-grid,
+  .lifecycle-grid,
   .detail-grid,
   .form-grid,
   .signal-card,

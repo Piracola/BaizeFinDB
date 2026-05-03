@@ -34,6 +34,15 @@ LIFECYCLE_LABELS = {
     "fading": "退潮",
     "extinguished": "熄火",
 }
+LIFECYCLE_ORDER = (
+    "ignition",
+    "developing",
+    "divergence",
+    "returning",
+    "climax",
+    "fading",
+    "extinguished",
+)
 
 REVIEW_LABELS = {
     "candidate": "候选",
@@ -485,6 +494,7 @@ def format_health(payload: Mapping[str, Any]) -> str:
 
 def format_radar_overview(overview: Mapping[str, Any]) -> str:
     counts = _mapping(overview.get("priority_counts"))
+    lifecycle_counts = _mapping(overview.get("lifecycle_counts"))
     latest_scan = _mapping(overview.get("latest_scan"))
     current_subjects = _sequence(overview.get("current_subjects"))
     lines = [
@@ -495,6 +505,7 @@ def format_radar_overview(overview: Mapping[str, Any]) -> str:
             f"P1={_int_text(counts.get('P1'))} / "
             f"P2={_int_text(counts.get('P2'))}"
         ),
+        f"后端生命周期分布：{_lifecycle_counts_text(lifecycle_counts)}",
         f"当前主题：{_int_text(overview.get('subject_count'))} 个",
     ]
 
@@ -824,6 +835,15 @@ def _score_components_text(value: Any) -> str:
         if name in components
     ]
     return " / ".join(parts)
+
+
+def _lifecycle_counts_text(counts: Mapping[str, Any]) -> str:
+    parts = [
+        f"{_lifecycle_label(name)}={_int_text(counts.get(name))}"
+        for name in LIFECYCLE_ORDER
+        if counts.get(name)
+    ]
+    return " / ".join(parts) if parts else "暂无"
 
 
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:

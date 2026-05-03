@@ -279,6 +279,7 @@ async def test_telegram_radar_command_handles_empty_data(client: AsyncClient) ->
     preview = response.json()["preview"]
     assert "雷达总览" in preview
     assert "P0：0 / P1：0 / P2：0" in preview
+    assert "生命周期：暂无" in preview
     assert "最新扫描：暂无" in preview
 
 
@@ -466,6 +467,7 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     )
     overview = SimpleNamespace(
         priority_counts={"P0": 0, "P1": 1, "P2": 0},
+        lifecycle_counts={"developing": 1},
         subject_count=1,
         latest_scan=SimpleNamespace(
             id=3,
@@ -487,6 +489,7 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     assert "生命周期：发展观察" in signal_preview
     assert "审查状态：候选待审" in signal_preview
     assert "最新扫描：#3 完成" in overview_preview
+    assert "生命周期：发展观察 1" in overview_preview
     assert "暂未维护持仓" in holdings_preview
     assert "暂未维护自选" in watchlist_preview
     assert "暂未生成报告" in reports_preview

@@ -127,6 +127,7 @@ def test_format_radar_overview_uses_backend_priority_counts() -> None:
     text = client_api.format_radar_overview(
         {
             "priority_counts": {"P0": 2, "P1": 1, "P2": 0},
+            "lifecycle_counts": {"developing": 2, "ignition": 1},
             "subject_count": 3,
             "latest_scan": {
                 "id": 7,
@@ -149,6 +150,7 @@ def test_format_radar_overview_uses_backend_priority_counts() -> None:
     )
 
     assert "P0=2 / P1=1 / P2=0" in text
+    assert "后端生命周期分布：点火=1 / 发酵=2" in text
     assert "最新扫描：#7 成功" in text
     assert "[P1] AI Applications" in text
 

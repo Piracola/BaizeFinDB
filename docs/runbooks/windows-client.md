@@ -5,7 +5,7 @@
 ## 1. 功能边界
 
 - 查看 API 就绪状态：`GET /health/ready`。
-- 查看雷达总览：`GET /radar/overview`。
+- 查看雷达总览、优先级和生命周期分布：`GET /radar/overview`。
 - 查看信号列表：`GET /radar/signals`。
 - 查看持仓：`GET /portfolio/holdings`。
 - 查看自选：`GET /portfolio/watchlist`。
@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 按钮 | 行为 |
 | --- | --- |
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
-| 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、最新扫描和当前主题。 |
+| 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |
 | 查看自选 | 调用 `/portfolio/watchlist`，按 User Key 显示个人自选。 |

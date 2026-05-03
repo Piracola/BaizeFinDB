@@ -31,6 +31,16 @@ LIFECYCLE_LABELS = {
     RadarLifecycleStage.EXTINGUISHED: "结束复盘",
 }
 
+LIFECYCLE_ORDER = (
+    RadarLifecycleStage.IGNITION,
+    RadarLifecycleStage.DEVELOPING,
+    RadarLifecycleStage.DIVERGENCE,
+    RadarLifecycleStage.RETURNING,
+    RadarLifecycleStage.CLIMAX,
+    RadarLifecycleStage.FADING,
+    RadarLifecycleStage.EXTINGUISHED,
+)
+
 REVIEW_LABELS = {
     RadarReviewStatus.CANDIDATE: "候选待审",
     RadarReviewStatus.APPROVED: "审查通过",
@@ -146,6 +156,7 @@ def format_radar_overview(overview: RadarOverviewRead) -> str:
     lines = [
         "雷达总览",
         f"P0：{counts.get('P0', 0)} / P1：{counts.get('P1', 0)} / P2：{counts.get('P2', 0)}",
+        f"生命周期：{_lifecycle_counts_text(overview.lifecycle_counts)}",
         f"当前主题：{overview.subject_count} 个",
     ]
 
@@ -375,6 +386,15 @@ def format_periodic_report(report: PeriodicReportRead) -> str:
 
     lines.extend(["", DISCLAIMER])
     return _trim_message("\n".join(lines))
+
+
+def _lifecycle_counts_text(counts: dict[str, int]) -> str:
+    parts = [
+        f"{_lifecycle_label(stage)} {counts.get(stage.value, 0)}"
+        for stage in LIFECYCLE_ORDER
+        if counts.get(stage.value, 0)
+    ]
+    return " / ".join(parts) if parts else "暂无"
 
 
 def format_scores(score_run: ScoreRunRead) -> str:

@@ -403,6 +403,8 @@ async def test_radar_overview_dedupes_subjects_and_counts_priorities(
     assert overview.latest_scan.id == second_scan.id
     assert overview.subject_count == 2
     assert overview.priority_counts == {"P0": 1, "P1": 0, "P2": 1}
+    assert overview.lifecycle_counts["developing"] == 1
+    assert overview.lifecycle_counts["ignition"] == 1
 
     ai_subjects = [
         subject for subject in overview.current_subjects if subject.subject_code == "GN001"
@@ -414,6 +416,8 @@ async def test_radar_overview_dedupes_subjects_and_counts_priorities(
     assert len(limited_overview.active_signals) == 1
     assert limited_overview.subject_count == 2
     assert limited_overview.priority_counts == {"P0": 1, "P1": 0, "P2": 1}
+    assert limited_overview.lifecycle_counts["developing"] == 1
+    assert limited_overview.lifecycle_counts["ignition"] == 1
 
 
 @pytest.mark.asyncio
@@ -487,6 +491,7 @@ async def test_radar_overview_uses_latest_scan_only(
     assert overview.current_subjects == []
     assert overview.subject_count == 0
     assert overview.priority_counts == {"P0": 0, "P1": 0, "P2": 0}
+    assert all(count == 0 for count in overview.lifecycle_counts.values())
 
 
 @pytest.mark.asyncio
@@ -600,6 +605,7 @@ async def test_radar_overview_hides_expired_p2_from_current_view(
     ]
     assert overview.subject_count == 1
     assert overview.priority_counts == {"P0": 0, "P1": 1, "P2": 0}
+    assert overview.lifecycle_counts["developing"] == 1
     assert [subject.subject_name for subject in overview.current_subjects] == [
         "Old P1 Theme"
     ]

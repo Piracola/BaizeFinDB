@@ -235,7 +235,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/scans/1
 
 ### `GET /radar/overview`
 
-用途：查看当前雷达总览、活跃信号、优先级聚合和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
+用途：查看当前雷达总览、活跃信号、优先级聚合、生命周期分布和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
@@ -247,6 +247,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 - `active_signals`
 - `current_subjects`
 - `priority_counts`
+- `lifecycle_counts`
 - `subject_count`
 
 ### `GET /radar/signals`
@@ -596,7 +597,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/start`、`/help` | 查看命令说明和免责声明 |
 | `/id`、`/chatid` | 查看当前聊天 ID；未进入白名单时也允许返回这个 ID，便于绑定 |
 | `/health` | 查看 API、数据库、Redis 和最近一次雷达扫描摘要 |
-| `/radar` | 查看雷达总览：P0/P1/P2、最新扫描、主题数量 |
+| `/radar` | 查看雷达总览：P0/P1/P2、生命周期分布、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
 | `/signal <id>` | 查看单个信号复盘、生命周期、审查状态和证据摘要 |
 | `/holding`、`/holdings` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的手动持仓 |
