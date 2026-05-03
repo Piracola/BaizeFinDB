@@ -8,6 +8,7 @@
 
 ```text
 GET  /health/ready
+GET  /ops/overview
 GET  /providers/akshare/endpoints
 POST /providers/akshare/fetch/minimal
 GET  /providers/akshare/status
@@ -79,6 +80,26 @@ Invoke-RestMethod http://127.0.0.1:8000/health/ready
 ```
 
 失败时返回 `503`，并在 `checks` 中说明具体依赖错误。
+
+### `GET /ops/overview`
+
+用途：读取只读运行状态汇总，用于本地排障、服务器 smoke check 和后续监控接入。该接口不触发采集、扫描、推送或模型调用，只聚合已有数据库记录。
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
+```
+
+响应重点：
+
+- `radar`：最新扫描 ID、状态、开始/完成时间、耗时、最近扫描数、失败数、失败率、是否超过 2 个调度间隔未更新。
+- `provider_fetch`：最近 Provider 拉取状态计数，`success` 以外计入 unhealthy。
+- `data_quality`：最近数据质量状态计数，`ok` 以外计入 unhealthy。
+- `telegram_push`：最近 Telegram 推送状态计数，`sent`、`preview`、`skipped` 视为健康。
+- `model_calls`：最近模型调用审计状态计数，`degraded`、`fallback` 等会计入 unhealthy。
+
+查询参数：
+
+- `lookback_hours`：统计窗口，范围 1 到 168，默认 24。
 
 ## 3. Provider API
 

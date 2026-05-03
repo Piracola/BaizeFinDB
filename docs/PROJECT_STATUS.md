@@ -6,7 +6,7 @@
 
 当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
-项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
+项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态汇总、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级或评分。
 
@@ -14,7 +14,7 @@ M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻�
 
 Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
 
-Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Provider、Radar 和 Telegram 状态接口 JSON 契约。该状态只代表部署骨架完成，不代表完整生产部署完成。
+Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、Provider、Radar 和 Telegram 状态接口 JSON 契约。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。
 
@@ -66,6 +66,10 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 
 - `GET /health`
 - `GET /health/ready`
+
+Ops：
+
+- `GET /ops/overview`
 
 Provider：
 
@@ -207,6 +211,6 @@ uv run uvicorn app.main:app --reload
 
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移和只读 M5 smoke check。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
-- 增加运行可观测性：扫描耗时、失败率、推送结果、模型降级和数据质量趋势。
+- 增加运行可观测性：`/ops/overview` 已汇总扫描耗时、失败率、推送结果、模型降级和数据质量状态；后续再接趋势图、告警和服务器监控。
 - 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

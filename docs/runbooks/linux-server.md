@@ -9,7 +9,7 @@
 | `Dockerfile` | 生产取向的 FastAPI API 镜像，启动 `uvicorn app.main:app --host 0.0.0.0 --port 8000`。 |
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
-| `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查和 M5 只读 smoke check。 |
+| `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查、Ops 运行状态和 M5 只读 smoke check。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
@@ -65,7 +65,7 @@ uv run python infra/scripts/server_deploy_check.py
 uv run python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
-验证 M5 核心只读接口 JSON 契约：
+验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态汇总：
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
@@ -98,6 +98,16 @@ uv run python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confir
 恢复会覆盖目标数据库当前状态；执行前先确认当前 compose project、目标数据库和备份文件路径。
 
 Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整调度间隔，可用 `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 调整连续 P1 快报候选阈值。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。
+
+## 运维状态接口
+
+服务器启动后可用以下命令快速查看最近 24 小时运行状态：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
+```
+
+该接口只读聚合已有数据库记录，不触发采集、扫描、推送或模型调用。重点看 `radar.recent_scan_failure_rate`、`radar.is_latest_scan_stale`、`provider_fetch.unhealthy_count`、`data_quality.unhealthy_count`、`telegram_push.unhealthy_count` 和 `model_calls.unhealthy_count`。
 
 ## Secrets 边界
 

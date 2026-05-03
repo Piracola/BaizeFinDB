@@ -45,6 +45,7 @@ Web 终端工作台当前可查看 API 状态、雷达总览、优先级和生�
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/health/ready
+Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 ```
 
 期望：
@@ -429,6 +430,16 @@ docker compose logs --tail=80 redis
 uv run alembic heads
 uv run alembic upgrade head
 ```
+
+### 查看最近运行状态
+
+本地或服务器 API 启动后，可以用只读运维接口查看最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送和模型降级状态：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
+```
+
+该接口只聚合已有记录，不会触发采集、扫描、推送或模型调用。
 
 ### AKShare 采集失败
 

@@ -17,6 +17,17 @@ DEFAULT_POSTGRES_SERVICE = "postgres"
 M5_SMOKE_ENDPOINTS = (
     ("/health", ("status", "service")),
     ("/health/ready", ("status", "checks")),
+    (
+        "/ops/overview",
+        (
+            "generated_at",
+            "radar",
+            "provider_fetch",
+            "data_quality",
+            "telegram_push",
+            "model_calls",
+        ),
+    ),
     ("/providers/akshare/status", ("provider_name", "endpoints")),
     ("/radar/overview", ("priority_counts", "lifecycle_counts", "subject_count")),
     (

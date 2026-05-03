@@ -23,6 +23,7 @@
 - 板块/主题/概念权重大于单票异动；个股异动主要用于反推主线或风险。
 - 发布类输出必须复用 M4 审查和分享预检。
 - Linux 服务器部署目前只有骨架，包含 API 容器、Celery worker/beat、compose overlay、systemd 和 nginx 示例；不要把它当作完整生产部署。
+- `/ops/overview` 是当前只读运行状态汇总入口，可用于本地排障、服务器 smoke check 和后续监控接入。
 - Windows 客户端目前只是 MVP 源码运行版，不是安装包；只消费后端 API，不重新计算雷达等级、市场情绪或评分。
 - 不接自动交易，不输出强买卖指令，不保存券商交易密码。
 - 新表必须有 Alembic 迁移，新规则必须有测试或 golden case。
