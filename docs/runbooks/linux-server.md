@@ -60,6 +60,8 @@ docker build -t baizefindb-api:dev .
 uv run python infra/scripts/server_deploy_check.py
 ```
 
+预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。
+
 服务已经启动后，可以追加容器和 API 检查：
 
 ```powershell
@@ -76,6 +78,13 @@ uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
 
 ```powershell
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
+```
+
+如果 runtime check 只有 `radar_stale` warning，说明服务可读但最近雷达扫描过期。可手动跑一次只依赖既有快照的扫描，再复查 readiness：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/scans/run
+uv run python infra/scripts/server_runtime_check.py --samples 2 --interval-seconds 1
 ```
 
 更严格的部署验收可以把 warning 也视为失败：
@@ -161,6 +170,17 @@ uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-secon
 ```
 
 该脚本只读，不触发采集、扫描、推送或模型调用；它基于 `/health/ready` 和 `/ops/readiness` 判断阻塞状态，并汇总 `/ops/overview` 的资源摘要、alerts 以及 `/ops/history` 的 failure summary。
+
+Windows 本机演练 server overlay 时，确认 `127.0.0.1:8000` 没有被本机 `uvicorn` 占用，否则浏览器和 `curl` 可能命中本地开发进程而不是 Docker API：
+
+```powershell
+Get-NetTCPConnection -LocalPort 8000 -State Listen |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+Get-CimInstance Win32_Process -Filter "ProcessId=<pid>" |
+  Select-Object ProcessId,CommandLine
+```
+
+如果确认是本项目的本地 `uvicorn`，先停止它，再验证 Docker API 的 `/health` 是否返回 `environment=server`。
 
 ## Secrets 边界
 

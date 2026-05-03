@@ -478,6 +478,21 @@ Get-NetTCPConnection -LocalPort 5432,6379 -State Listen
 
 如果本机已有 PostgreSQL/Redis，建议先停掉本机服务，保持项目使用 Docker Compose 的固定端口。
 
+### 8000 端口命中了错误的 API
+
+本地 `uv run uvicorn app.main:app --reload` 和 server overlay 的 Docker API 都默认使用 `8000`。在 Windows + Docker Desktop 下，如果本机 `uvicorn` 仍监听 `127.0.0.1:8000`，而 Docker 也发布 `8000`，`curl http://127.0.0.1:8000/health` 可能命中本机开发进程，不是容器。
+
+查看占用：
+
+```powershell
+Get-NetTCPConnection -LocalPort 8000 -State Listen |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+Get-CimInstance Win32_Process -Filter "ProcessId=<pid>" |
+  Select-Object ProcessId,CommandLine
+```
+
+做 Docker 部署演练时，确认本机 `uvicorn` 已停止，或确认 `/health` 返回的 `environment` 是 `server`。
+
 ### `/health` 正常但 `/health/ready` 不正常
 
 含义：

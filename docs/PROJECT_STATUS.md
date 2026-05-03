@@ -16,7 +16,7 @@ Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 
 
 Web 雷达终端工作台、Windows 客户端和 Telegram `/tushare` 已展示 Tushare token 状态、手动抓取启用状态和已实现端点数；`/providers/tushare/readiness`、Web 数据源状态卡片、Windows“数据源自检”按钮和 Telegram `/tushare_ready` 已展示 token、端点、最近抓取和数据质量准入状态。所有这些入口都只读，不触发真实抓取或调度。
 
-Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、运行采样脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、Ops history、Ops readiness、AKShare Provider、Tushare Provider、Radar 和 Telegram 状态接口 JSON 契约；运行采样脚本可连续读取健康、Ops、运维历史和就绪状态，生成 JSON 验收记录并在接口失败或 readiness `blocked` 时返回失败退出码。Ops 已能生成扫描停滞、失败率、服务端磁盘/CPU/内存资源压力和 unhealthy 计数告警摘要，Ops history 已能只读列出最近扫描和运行异常历史，Ops readiness 已能给出运行就绪自检结果。该状态只代表部署骨架完成，不代表完整生产部署完成。
+Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、运行采样脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、Ops history、Ops readiness、AKShare Provider、Tushare Provider、Radar 和 Telegram 状态接口 JSON 契约；运行采样脚本可连续读取健康、Ops、运维历史和就绪状态，生成 JSON 验收记录并在接口失败或 readiness `blocked` 时返回失败退出码。2026-05-04 已在本机 Docker Desktop 用 server overlay 完成一次 API/worker/beat 启动、容器迁移、M5 smoke check、runtime check 和手动扫描后 readiness `ready` 验证；预检脚本已改为 quiet compose config，避免输出展开后的 `.env`。Ops 已能生成扫描停滞、失败率、服务端磁盘/CPU/内存资源压力和 unhealthy 计数告警摘要，Ops history 已能只读列出最近扫描和运行异常历史，Ops readiness 已能给出运行就绪自检结果。该状态只代表本机部署演练和部署骨架完成，不代表公网 HTTPS、域名、备份策略和生产安全加固完成。
 
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。
 
@@ -60,7 +60,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
 | M5 A 股 5 分钟资金主线雷达 MVP | 验收项完成 | 静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计、运行状态汇总和只读 M5 smoke check 已接入。 |
-| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查和只读 M5 smoke check，覆盖 `/ops/overview`、AKShare 状态和 Tushare 状态）、`infra/scripts/server_runtime_check.py` 运行采样脚本、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/scripts/postgres_restore.py` PostgreSQL 恢复脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；`/ops/overview` 和 `/ops/readiness` 已包含磁盘、CPU、内存资源摘要和压力告警；尚不是完整生产部署。 |
+| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/scripts/server_deploy_check.py` 部署预检（含可选 `pg_dump` 可用性检查和只读 M5 smoke check，覆盖 `/ops/overview`、AKShare 状态和 Tushare 状态）、`infra/scripts/server_runtime_check.py` 运行采样脚本、`infra/scripts/postgres_backup.py` PostgreSQL 备份脚本、`infra/scripts/postgres_restore.py` PostgreSQL 恢复脚本、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；本机 Docker Desktop server overlay 已完成 API/worker/beat 启动和 runtime ready 验证；`/ops/overview` 和 `/ops/readiness` 已包含磁盘、CPU、内存资源摘要和压力告警；尚不是完整公网生产部署。 |
 
 ## 当前可用 API
 

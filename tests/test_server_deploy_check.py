@@ -17,7 +17,7 @@ SPEC.loader.exec_module(server_deploy_check)
 
 
 def test_server_compose_command_uses_overlay_files() -> None:
-    assert server_deploy_check.server_compose_command("config") == [
+    assert server_deploy_check.server_compose_command("config", "--quiet") == [
         "docker",
         "compose",
         "-f",
@@ -25,6 +25,7 @@ def test_server_compose_command_uses_overlay_files() -> None:
         "-f",
         "docker-compose.server.yml",
         "config",
+        "--quiet",
     ]
 
 
@@ -70,6 +71,32 @@ def test_check_env_passes_when_env_exists(tmp_path: Path) -> None:
 
     assert result.status == "ok"
     assert result.ok
+
+
+def test_run_command_handles_utf8_output_and_missing_streams(monkeypatch, tmp_path: Path) -> None:
+    class Completed:
+        returncode = 0
+        stdout = None
+        stderr = "状态 ✓"
+
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return Completed()
+
+    monkeypatch.setattr(server_deploy_check.subprocess, "run", fake_run)
+
+    result = server_deploy_check.run_command(
+        "docker compose ps",
+        ["docker", "compose", "ps"],
+        tmp_path,
+    )
+
+    assert result.status == "ok"
+    assert result.detail == "状态 ✓"
+    assert calls[0][1]["encoding"] == "utf-8"
+    assert calls[0][1]["errors"] == "replace"
 
 
 def test_check_http_json_fields_passes_for_required_fields(monkeypatch) -> None:

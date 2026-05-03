@@ -128,6 +128,8 @@ def run_command(name: str, command: list[str], root: Path) -> CheckResult:
             command,
             cwd=root,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
         )
@@ -135,12 +137,15 @@ def run_command(name: str, command: list[str], root: Path) -> CheckResult:
         return CheckResult(name, "fail", f"command not found: {exc.filename}")
 
     if completed.returncode == 0:
-        output = completed.stdout.strip() or completed.stderr.strip()
+        output = (completed.stdout or "").strip() or (completed.stderr or "").strip()
         return CheckResult(name, "ok", _truncate(output))
 
     detail = "\n".join(
         part
-        for part in (completed.stdout.strip(), completed.stderr.strip())
+        for part in (
+            (completed.stdout or "").strip(),
+            (completed.stderr or "").strip(),
+        )
         if part
     )
     return CheckResult(name, "fail", _truncate(detail))
@@ -270,10 +275,14 @@ def main(argv: list[str] | None = None) -> int:
     root = find_repo_root()
     checks = [
         check_env(root, strict=args.strict_env),
-        run_command("docker compose config", ["docker", "compose", "config"], root),
+        run_command(
+            "docker compose config",
+            ["docker", "compose", "config", "--quiet"],
+            root,
+        ),
         run_command(
             "docker compose server config",
-            server_compose_command("config"),
+            server_compose_command("config", "--quiet"),
             root,
         ),
     ]

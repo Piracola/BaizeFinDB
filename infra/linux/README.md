@@ -89,6 +89,9 @@ Or run the bundled preflight:
 python infra/scripts/server_deploy_check.py --strict-env
 ```
 
+The preflight uses `docker compose config --quiet` so real environment values
+from `.env` are validated without being printed to deployment logs.
+
 Build the API image:
 
 ```bash
@@ -160,6 +163,14 @@ Sample the running API for a short validation window. Endpoint failures or
 
 ```bash
 python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
+```
+
+If the only runtime warning is `radar_stale`, run a scan from existing provider
+snapshots and repeat the runtime check:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8000/radar/scans/run
+python infra/scripts/server_runtime_check.py --samples 2 --interval-seconds 1
 ```
 
 Verify the backup toolchain without exporting data:
