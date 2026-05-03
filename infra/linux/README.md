@@ -11,6 +11,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, and API health. |
+| `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
 
@@ -198,15 +199,27 @@ journalctl -u baizefindb.service -f
 
 ## Backup
 
-Database backup example:
+Run a timestamped PostgreSQL backup through the bundled helper:
 
 ```bash
-mkdir -p backups
-docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T postgres \
-  pg_dump -U baizefindb -d baizefindb > backups/baizefindb-$(date +%Y%m%d-%H%M%S).sql
+python infra/scripts/postgres_backup.py
 ```
 
-Also back up `.env` through a secure server-side secret process, not through git.
+Or specify an exact output path before an upgrade:
+
+```bash
+python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql
+```
+
+The helper runs:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T postgres \
+  pg_dump -U baizefindb -d baizefindb
+```
+
+`backups/` is ignored by git. Also back up `.env` through a secure server-side
+secret process, not through git.
 
 ## Upgrade
 
