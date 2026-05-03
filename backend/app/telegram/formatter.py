@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from app.ops.schemas import OpsOverviewRead
 from app.portfolio.schemas import HoldingRead, WatchlistItemRead
+from app.providers.schemas import TushareProviderStatusResponse
 from app.radar.schemas import (
     RadarLifecycleStage,
     RadarOverviewRead,
@@ -105,6 +106,7 @@ def format_help() -> str:
                 "/id - 查看当前聊天 ID，用于绑定白名单",
                 "/health - 查看 API、数据库、Redis 和最近扫描状态",
                 "/ops - 查看最近运行状态、失败率和降级摘要",
+                "/tushare - 查看 Tushare 数据源配置状态",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
@@ -177,6 +179,21 @@ def format_ops_overview(overview: OpsOverviewRead) -> str:
         _ops_count_text("推送", overview.telegram_push),
         _ops_count_text("模型", overview.model_calls),
         "该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。",
+        "",
+        DISCLAIMER,
+    ]
+    return _trim_message("\n".join(lines))
+
+
+def format_tushare_status(status: TushareProviderStatusResponse) -> str:
+    lines = [
+        "Tushare 状态",
+        f"状态：{_tushare_status_label(status.status)}",
+        f"Token：{_configured_label(status.token_configured)}",
+        f"手动抓取：{_enabled_label(status.fetch_enabled)}",
+        f"已实现端点：{status.implemented_endpoint_count}/{status.endpoint_count}",
+        f"说明：{status.message}",
+        "该视图只读取 Provider 配置状态，不触发真实抓取。",
         "",
         DISCLAIMER,
     ]
@@ -706,6 +723,19 @@ def _scan_status_label(value: RadarScanStatus | str) -> str:
 
 def _enabled_label(value: bool) -> str:
     return "开启" if value else "关闭"
+
+
+def _configured_label(value: bool) -> str:
+    return "已配置" if value else "未配置"
+
+
+def _tushare_status_label(value: str) -> str:
+    labels = {
+        "configured": "已配置",
+        "not_configured": "未配置",
+        "unknown": "未知",
+    }
+    return labels.get(value, value)
 
 
 def _ratio_label(value: float | None) -> str:

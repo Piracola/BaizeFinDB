@@ -281,6 +281,14 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":11,"message":{"message_id":11,"chat":{"id":1001},"text":"/ops"}}'
 ```
 
+本地 preview `/tushare` 会返回 Tushare token 配置、手动抓取启用状态和已实现端点数；不会返回 token 原文，也不会触发真实抓取：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":12,"message":{"message_id":12,"chat":{"id":1001},"text":"/tushare"}}'
+```
+
 本地 preview `/radar`：
 
 ```powershell
@@ -327,7 +335,7 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/deleteWebhook"
 ```
 
-Telegram 输出只用于关注、观察、风险和复盘；P0/P1/P2、生命周期和审查状态都来自后端服务结果。
+Telegram 输出只用于关注、观察、风险和复盘；P0/P1/P2、生命周期、数据源状态和审查状态都来自后端服务结果。
 
 Telegram 个人数据命令：
 

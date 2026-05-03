@@ -734,7 +734,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 
 ## 9. Telegram Bot API
 
-Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪或审查状态。
+Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、Tushare 数据源状态和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、数据源状态或审查状态。
 
 ### `GET /telegram/status`
 
@@ -777,6 +777,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/id`、`/chatid` | 查看当前聊天 ID；未进入白名单时也允许返回这个 ID，便于绑定 |
 | `/health` | 查看 API、数据库、Redis 和最近一次雷达扫描摘要 |
 | `/ops` | 查看最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要 |
+| `/tushare` | 查看 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取 |
 | `/radar` | 查看雷达总览：P0/P1/P2、生命周期分布、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
 | `/signal <id>` | 查看单个信号复盘、生命周期、审查状态和证据摘要 |
@@ -817,7 +818,7 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
-`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
+`/tushare`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/tushare` 不触发真实抓取，`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
 
 ### `GET /telegram/bindings`
 
