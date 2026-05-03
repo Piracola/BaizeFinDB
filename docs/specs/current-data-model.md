@@ -4,7 +4,7 @@
 
 ## 1. 当前真实数据表
 
-当前 Alembic head：`202605030005`。
+当前 Alembic head：`202605030006`。
 
 | 表 | 阶段 | 作用 |
 | --- | --- | --- |
@@ -15,6 +15,7 @@
 | `users` | M5 | 单用户/白名单阶段的身份键和个人数据隔离前置 |
 | `portfolio_holdings` | M5 | 手动持仓，成本价和仓位比例可为空 |
 | `watchlist_items` | M5 | 自选关注项，只影响个人提醒和展示上下文 |
+| `reports` | M5 | quick/standard 模板报告，按用户隔离，生成前复用审查 |
 | `radar_scan_batches` | M3 | 记录每次雷达扫描批次、状态、摘要、失败原因 |
 | `radar_signals` | M3 | 保存候选信号、优先级、生命周期、审查状态 |
 | `signal_evidences` | M3 | 保存信号证据链、置信度、新鲜度和分享策略 |
@@ -33,6 +34,7 @@ provider_fetch_logs
 users
   <- portfolio_holdings.user_id
   <- watchlist_items.user_id
+  <- reports.user_id
 
 radar_scan_batches
   <- radar_signals.batch_id
@@ -40,6 +42,7 @@ radar_scan_batches
 radar_signals
   <- signal_evidences.signal_id
   <- radar_signal_reviews.signal_id
+  <- reports.signal_id
 ```
 
 ## 3. 当前核心枚举
@@ -123,6 +126,22 @@ Portfolio 表不负责：
 - 接券商、下单或保存交易密码。
 - 进入公开分享 payload。
 
+### Reports 报告表
+
+Reports 表只回答：
+
+- 哪个 `user_key` 生成了哪份 quick/standard 报告。
+- 报告来源于哪个雷达信号。
+- 报告生成前的审查状态、报告状态和建议标签是什么。
+- 模板报告正文和生成元数据是什么。
+
+Reports 表不负责：
+
+- 覆盖雷达 P0/P1/P2。
+- 自动生成 deep report。
+- 发布公开分享或导出文件。
+- 保存完整模型 prompt；当前 MVP 不调用模型。
+
 ## 5. 当前尚未实现但路线图中出现的表
 
 这些表出现在总文档规划里，但当前代码和迁移里还没有实现。开发前必须先写 PRD、模型和迁移。
@@ -144,7 +163,6 @@ M5 的数据模型基线已经修正为 A 股 5 分钟资金主线雷达 MVP：
 | `signal_lifecycle_events` | M5 | 更细粒度生命周期事件，和 P0/P1/P2 强度等级分离 |
 | `evidence_items` | M6+ | 更通用的证据对象 |
 | `focus_items` | M5 | 临时关注、备注和 free-chat 低风险数据修改 |
-| `reports` | M5 | quick/standard/deep 报告正文和元数据；deep 只手动触发 |
 | `report_exports` | M5+ | HTML/PDF/Markdown 导出记录，M5 可先只保留 Markdown/HTML |
 | `report_reviews` | M5 | 所有报告发布前审查 |
 | `model_call_logs` | M5+ | 模型调用日志；默认不保存完整 raw prompt，debug 模式才保存完整上下文 |

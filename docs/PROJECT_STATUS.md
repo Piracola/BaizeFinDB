@@ -6,7 +6,7 @@
 
 当前已完成 **M4 轻量审查层闭环**。
 
-项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API。
+项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、Provider 数据质量透传、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓和自选；Telegram 仍只消费后端结果，不重新计算雷达等级。
 
@@ -17,6 +17,8 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；服务器 compose overlay 已补充 worker / beat 服务。
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 面板已能维护和展示这些个人数据。这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2。
+
+报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记。
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
@@ -51,7 +53,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图；后续继续补折叠推送、quick/standard 报告、日报周报和基础评分。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP；后续继续补折叠推送、日报周报和基础评分。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -79,6 +81,12 @@ Portfolio：
 - `POST /portfolio/watchlist`
 - `PATCH /portfolio/watchlist/{item_id}`
 - `DELETE /portfolio/watchlist/{item_id}`
+
+Reports：
+
+- `POST /reports/from-signal`
+- `GET /reports`
+- `GET /reports/{report_id}`
 
 Radar：
 
@@ -121,6 +129,7 @@ Windows 客户端：
 - `users`
 - `portfolio_holdings`
 - `watchlist_items`
+- `reports`
 - `radar_scan_batches`
 - `radar_signals`
 - `radar_signal_reviews`

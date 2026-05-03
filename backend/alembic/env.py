@@ -16,6 +16,7 @@ from app.db.radar_models import (  # noqa: F401
     RadarSignalReview,
     SignalEvidence,
 )
+from app.db.report_models import Report  # noqa: F401
 
 config = context.config
 

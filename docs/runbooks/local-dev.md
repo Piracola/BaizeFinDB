@@ -148,6 +148,20 @@ Invoke-RestMethod "http://127.0.0.1:8000/portfolio/watchlist?user_key=default"
 
 当前 API 不接券商、不保存交易密码、不导入持仓截图；持仓/自选只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2。
 
+### 4.6 从信号生成报告
+
+报告生成前会复用轻量审查。blocked 信号不会生成报告：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/from-signal `
+  -ContentType "application/json" `
+  -Body '{"signal_id":1,"report_type":"quick"}'
+
+Invoke-RestMethod http://127.0.0.1:8000/reports
+```
+
+当前只支持 quick / standard 模板报告；deep report 后续只能手动触发并二次确认。
+
 ## 5. Telegram Bot MVP 本地调试
 
 `.env` 支持三个可选配置：

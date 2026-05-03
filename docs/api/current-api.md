@@ -20,6 +20,8 @@ GET  /portfolio/holdings
 POST /portfolio/holdings
 GET  /portfolio/watchlist
 POST /portfolio/watchlist
+POST /reports/from-signal
+GET  /reports
 POST /radar/signals/{signal_id}/review
 GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
@@ -352,7 +354,60 @@ Invoke-RestMethod -Method Patch http://127.0.0.1:8000/portfolio/watchlist/1 `
 Invoke-RestMethod -Method Delete http://127.0.0.1:8000/portfolio/watchlist/1
 ```
 
-## 6. Governance / 分享安全 API
+## 6. Reports / 报告 API
+
+报告 API 当前是 MVP 模板生成，不调用模型，不生成 deep report。报告只用于关注、观察、风险和复盘，不构成投资建议。
+
+### `POST /reports/from-signal`
+
+用途：从雷达信号生成 quick/standard 报告。生成前会执行轻量规则审查：
+
+- `blocked`：返回 `409`，不生成报告。
+- `needs_human_review`：生成报告，但 `status` 标记为 `needs_human_review`。
+- `approved`：生成 `generated` 报告。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/from-signal `
+  -ContentType "application/json" `
+  -Body '{"signal_id":1,"report_type":"quick"}'
+```
+
+可选查询参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `user_key` | 单用户 MVP 隔离键，默认 `default` |
+
+`report_type` 当前只接受 `quick` 和 `standard`。`deep` 后续只能手动触发并二次确认。
+
+### `GET /reports`
+
+用途：查看当前 `user_key` 的报告列表。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/reports
+Invoke-RestMethod "http://127.0.0.1:8000/reports?user_key=telegram-1001&report_type=standard"
+```
+
+可选参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `user_key` | 单用户 MVP 隔离键，默认 `default` |
+| `report_type` | `quick` 或 `standard` |
+| `limit` | 1 到 100，默认 50 |
+
+### `GET /reports/{report_id}`
+
+用途：查看单个报告。读取其他 `user_key` 的报告返回 `404`。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/reports/1
+```
+
+报告正文使用 `body_markdown` 返回。当前模板不会输出原始证据摘录、交易指令或保证收益语言。
+
+## 7. Governance / 分享安全 API
 
 ### `POST /radar/signals/{signal_id}/review`
 
@@ -434,7 +489,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 - 精确置信度。
 - 来源时间。
 
-## 7. Telegram Bot API
+## 8. Telegram Bot API
 
 Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期或审查状态。
 
@@ -504,22 +559,24 @@ Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议
 
 `/holding` 和 `/watchlist` 只读取 Portfolio API 维护的个人数据，不改变市场级雷达等级，不输出交易指令。
 
-## 8. 错误码约定
+## 9. 错误码约定
 
 | 错误码 | 常见原因 | 调用方处理 |
 | --- | --- | --- |
 | `404` | 扫描或信号不存在；未知 endpoint | 提示用户资源不存在，必要时刷新列表 |
 | `409` | 信号不满足公开分享条件 | 调用 `share-preview` 查看阻断原因 |
 | `409` | 持仓或自选重复 | 刷新列表或改用 PATCH 更新已有记录 |
+| `409` | 报告生成前审查阻断 | 查看返回的审查原因，必要时人工复核 |
 | `403` | Telegram webhook secret 不匹配 | 检查 `TELEGRAM_WEBHOOK_SECRET` 和请求 header |
 | `503` | PostgreSQL 或 Redis 不可用 | 检查 Docker、迁移和 `/health/ready` |
 
-## 9. 接 Telegram / Web / 报告时的推荐用法
+## 10. 接 Telegram / Web / 报告时的推荐用法
 
 - 首页/总览：用 `GET /radar/overview`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
+- 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告。
 - 内部调试：用 `share-preview`。
 - 公开展示：只能用 `share-payload`。
 - 触发扫描：先保证 Provider 有最新快照，再调用 `POST /radar/scans/run`。
