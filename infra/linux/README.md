@@ -45,6 +45,7 @@ Required notes:
 - `docker-compose.server.yml` overrides `DATABASE_URL` and `REDIS_URL` for the API container so it reaches `postgres` and `redis` by compose service name.
 - `SERVER_DATABASE_URL` and `SERVER_REDIS_URL` are optional escape hatches for a later hardened setup. Use placeholders in docs, never real values.
 - `RADAR_SCAN_INTERVAL_SECONDS` controls the Celery beat interval for the collect-then-scan task. The default is `300`.
+- `TELEGRAM_PUSH_ENABLED=true` makes the collect-then-scan task send a folded Telegram radar push after each successful scan. Keep it `false` until token, chat whitelist, and webhook secret are ready.
 
 Example placeholders:
 
@@ -53,6 +54,7 @@ APP_ENV=server
 TELEGRAM_BOT_TOKEN=<telegram-bot-token>
 TELEGRAM_ALLOWED_CHAT_IDS=<comma-separated-chat-ids>
 TELEGRAM_WEBHOOK_SECRET=<telegram-webhook-secret>
+TELEGRAM_PUSH_ENABLED=false
 SERVER_DATABASE_URL=postgresql+asyncpg://<db-user>:<db-password>@postgres:5432/<db-name>
 SERVER_REDIS_URL=redis://redis:6379/0
 RADAR_SCAN_INTERVAL_SECONDS=300
@@ -98,7 +100,9 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api work
 The beat process schedules `baizefindb.radar.collect_and_scan` every
 `RADAR_SCAN_INTERVAL_SECONDS` seconds. That task first runs the minimal AKShare
 collection and then runs the radar scan, so the scan consumes the freshest
-available provider snapshots.
+available provider snapshots. If `TELEGRAM_PUSH_ENABLED=true`, it then sends the
+latest scan as one P0/P1/P2 folded Telegram push and records the delivery in
+`push_logs`.
 
 ## Health Checks
 

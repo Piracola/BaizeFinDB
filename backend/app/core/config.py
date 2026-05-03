@@ -37,6 +37,7 @@ class Settings(BaseSettings):
         default=None,
         alias="TELEGRAM_WEBHOOK_SECRET",
     )
+    telegram_push_enabled: bool = Field(default=False, alias="TELEGRAM_PUSH_ENABLED")
 
     @property
     def effective_celery_broker_url(self) -> str:

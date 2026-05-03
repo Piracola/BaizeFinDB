@@ -86,6 +86,7 @@ async def test_telegram_status_does_not_leak_secrets(
         "bot_token_configured": True,
         "allowed_chat_count": 2,
         "webhook_secret_enabled": True,
+        "push_enabled": False,
     }
     assert "123456:secret-token" not in response.text
     assert "hook-secret" not in response.text

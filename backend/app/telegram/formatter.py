@@ -16,6 +16,7 @@ SIGNALS_PREVIEW_LIMIT = 5
 PORTFOLIO_PREVIEW_LIMIT = 8
 REPORT_PREVIEW_LIMIT = 5
 EVIDENCE_PREVIEW_LIMIT = 3
+PUSH_PREVIEW_LIMIT_PER_PRIORITY = 5
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 
 LIFECYCLE_LABELS = {
@@ -291,6 +292,61 @@ def format_reports(reports: list[ReportRead]) -> str:
         lines.append(f"已折叠 {len(reports) - REPORT_PREVIEW_LIMIT} 份更多报告。")
 
     lines.extend(["报告正文请在 Web/API 中查看。", "", DISCLAIMER])
+    return _trim_message("\n".join(lines))
+
+
+def format_radar_push(
+    scan_id: int,
+    signals: list[RadarSignalRead],
+    blocked_signal_ids: list[int],
+    needs_human_review_signal_ids: list[int],
+    priority_counts: dict[str, int],
+) -> str:
+    lines = [
+        "雷达折叠推送",
+        f"扫描批次：#{scan_id}",
+        (
+            "折叠计数："
+            f"P0 {priority_counts.get('P0', 0)} / "
+            f"P1 {priority_counts.get('P1', 0)} / "
+            f"P2 {priority_counts.get('P2', 0)}"
+        ),
+    ]
+
+    if not signals:
+        lines.append("本轮没有通过审查且需要推送的雷达信号。")
+
+    human_review_ids = set(needs_human_review_signal_ids)
+    for priority in ("P0", "P1", "P2"):
+        priority_signals = [signal for signal in signals if _value(signal.priority) == priority]
+        if not priority_signals:
+            continue
+
+        lines.append("")
+        lines.append(f"{priority}：{len(priority_signals)} 条")
+        for signal in priority_signals[:PUSH_PREVIEW_LIMIT_PER_PRIORITY]:
+            human_review_label = " | 需人工复核" if signal.id in human_review_ids else ""
+            lines.append(
+                (
+                    f"- #{signal.id} {signal.subject_name} | "
+                    f"生命周期：{_lifecycle_label(signal.lifecycle_stage)} | "
+                    f"审查：{_review_label(signal.review_status)}"
+                    f"{human_review_label}"
+                ),
+            )
+
+        folded_count = len(priority_signals) - PUSH_PREVIEW_LIMIT_PER_PRIORITY
+        if folded_count > 0:
+            lines.append(f"  已折叠 {folded_count} 条更多 {priority} 信号。")
+
+    if blocked_signal_ids:
+        lines.append("")
+        lines.append(f"已过滤 {len(blocked_signal_ids)} 条审查阻断信号。")
+
+    if signals:
+        lines.append("使用 /signal <id> 查看单条复盘。")
+
+    lines.extend(["", DISCLAIMER])
     return _trim_message("\n".join(lines))
 
 

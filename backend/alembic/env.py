@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.db.health_models import SchemaHealthCheck  # noqa: F401
 from app.db.portfolio_models import PortfolioHolding, UserProfile, WatchlistItem  # noqa: F401
 from app.db.provider_models import DataQualityCheck, MarketSnapshot, ProviderFetchLog  # noqa: F401
+from app.db.push_models import PushLog  # noqa: F401
 from app.db.radar_models import (  # noqa: F401
     RadarScanBatch,
     RadarSignal,

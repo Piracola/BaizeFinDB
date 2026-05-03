@@ -50,11 +50,12 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml config
 docker build -t baizefindb-api:dev .
 ```
 
-Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整。
+Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。
 
 ## Secrets 边界
 
 - `.env` 不进入 git，也不会被 Dockerfile 复制进镜像。
 - 文档和示例只使用 `<telegram-bot-token>`、`<telegram-webhook-secret>`、`<db-password>` 这类占位符。
 - Telegram webhook 需要公网 HTTPS 后再设置到 `https://<your-domain>/telegram/webhook`。
+- Telegram 折叠推送只使用 `.env` 中的 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_ALLOWED_CHAT_IDS` 和 `TELEGRAM_PUSH_ENABLED`；不要把真实 chat id、token 或推送日志导出文件提交到 git。
 - 当前只是部署骨架；PostgreSQL 默认凭据、TLS 证书签发、备份策略、监控告警和生产安全加固仍需要后续专门处理。

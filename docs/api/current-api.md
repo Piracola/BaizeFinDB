@@ -27,6 +27,8 @@ GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
 GET  /telegram/status
 POST /telegram/webhook
+POST /telegram/push/latest
+GET  /telegram/push/logs
 ```
 
 ## 2. 健康检查
@@ -507,7 +509,8 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 {
   "bot_token_configured": false,
   "allowed_chat_count": 0,
-  "webhook_secret_enabled": false
+  "webhook_secret_enabled": false,
+  "push_enabled": false
 }
 ```
 
@@ -559,6 +562,45 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
 `/holding`、`/watchlist` 和 `/reports` 只读取后端维护的个人数据或报告结果，不改变市场级雷达等级，不输出交易指令。
+
+### `POST /telegram/push/latest`
+
+用途：基于最新雷达扫描生成一条 P0/P1/P2 折叠推送。发送前复用轻量审查：`blocked` 信号会被过滤，`needs_human_review` 会在内部推送中明确标注。接口不在 Telegram 层重新计算雷达等级。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/push/latest `
+  -ContentType "application/json" `
+  -Body '{"chat_ids":[1001],"dry_run":true}'
+```
+
+请求字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `chat_ids` | 可选，最多 20 个 chat id；为空时使用 `TELEGRAM_ALLOWED_CHAT_IDS`；配置白名单后，显式传入的 chat id 也会被白名单过滤 |
+| `dry_run` | `true` 时只返回 preview，不写入 `push_logs`，不调用 Telegram API |
+
+响应重点：
+
+- `included_signal_ids`：本轮推送正文纳入的信号。
+- `blocked_signal_ids`：审查阻断并过滤的信号。
+- `needs_human_review_signal_ids`：需要人工复核并在推送中标注的信号。
+- `priority_counts`：推送正文中的 P0/P1/P2 折叠计数。
+- `deliveries`：每个 chat 的 `sent`、`preview`、`push_log_id` 和错误信息。
+
+非 `dry_run` 且未配置 `TELEGRAM_BOT_TOKEN` 时，接口会返回 `preview` 并写入 `push_logs`，用于本地和服务器 dry-run 之外的审计调试。同一个 `user_key + chat + scan` 已有 `sent` 或 `preview` 记录时，会跳过重复投递；失败记录允许后续重试。
+
+配置 `TELEGRAM_WEBHOOK_SECRET` 后，请求必须携带同一个 Telegram secret header。
+
+### `GET /telegram/push/logs`
+
+用途：查看某个 `user_key` 的 Telegram 推送记录，默认 `user_key=default`。当前仍是单用户/白名单 MVP，不作为公开多租户 API。
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-1001&limit=20"
+```
+
+返回字段包括推送来源批次、投递状态、折叠后的正文、包含/过滤/人工复核信号 id 和非敏感投递元数据。返回内容不得包含 Telegram token、webhook secret、原始证据摘录、原始 URL 或来源域名。
 
 ## 9. 错误码约定
 

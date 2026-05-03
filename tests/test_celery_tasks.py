@@ -38,6 +38,7 @@ async def test_collect_and_run_radar_collects_before_scanning(monkeypatch) -> No
     monkeypatch.setattr(celery_module, "AsyncSessionLocal", FakeSessionContext)
     monkeypatch.setattr(celery_module, "collect_minimal_akshare", fake_collect_minimal_akshare)
     monkeypatch.setattr(celery_module, "run_radar_scan", fake_run_radar_scan)
+    monkeypatch.setattr(celery_module, "settings", SimpleNamespace(telegram_push_enabled=False))
 
     result = await celery_module._collect_and_run_radar()
 
@@ -45,4 +46,27 @@ async def test_collect_and_run_radar_collects_before_scanning(monkeypatch) -> No
     assert result == {
         "collection": {"status": "collected", "mode": "json"},
         "scan": {"status": "scanned", "mode": "json"},
+        "telegram_push": {"push_enabled": False, "deliveries": []},
     }
+
+
+@pytest.mark.asyncio
+async def test_configured_telegram_push_runs_only_when_enabled(monkeypatch) -> None:
+    calls = []
+
+    async def fake_send_latest_radar_push(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(model_dump=lambda mode: {"status": "preview", "mode": mode})
+
+    monkeypatch.setattr(
+        celery_module,
+        "settings",
+        SimpleNamespace(telegram_push_enabled=True, telegram_bot_token=None),
+    )
+    monkeypatch.setattr(celery_module, "send_latest_radar_push", fake_send_latest_radar_push)
+
+    result = await celery_module._send_configured_telegram_push("session")
+
+    assert result == {"status": "preview", "mode": "json"}
+    assert calls[0]["session"] == "session"
+    assert calls[0]["respect_enabled"] is True

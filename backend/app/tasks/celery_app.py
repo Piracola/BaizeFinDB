@@ -6,6 +6,8 @@ from app.core.config import get_settings
 from app.db.session import AsyncSessionLocal
 from app.providers.service import collect_minimal_akshare
 from app.radar.service import run_radar_scan
+from app.telegram.client import TelegramClient
+from app.telegram.push_service import send_latest_radar_push
 
 settings = get_settings()
 
@@ -82,7 +84,38 @@ async def _collect_and_run_radar() -> dict[str, object]:
     async with AsyncSessionLocal() as session:
         collection = await collect_minimal_akshare(session)
         scan = await run_radar_scan(session)
+        telegram_push = await _send_configured_telegram_push(session)
         return {
             "collection": collection.model_dump(mode="json"),
             "scan": scan.model_dump(mode="json"),
+            "telegram_push": telegram_push,
         }
+
+
+@celery_app.task(
+    name="baizefindb.telegram.push_latest_radar",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def push_latest_radar_task() -> dict[str, object]:
+    return asyncio.run(_push_latest_radar())
+
+
+async def _push_latest_radar() -> dict[str, object]:
+    async with AsyncSessionLocal() as session:
+        result = await _send_configured_telegram_push(session)
+        return result
+
+
+async def _send_configured_telegram_push(session) -> dict[str, object]:
+    if not settings.telegram_push_enabled:
+        return {"push_enabled": False, "deliveries": []}
+
+    result = await send_latest_radar_push(
+        session=session,
+        settings=settings,
+        client=TelegramClient(settings.telegram_bot_token),
+        respect_enabled=True,
+    )
+    return result.model_dump(mode="json")

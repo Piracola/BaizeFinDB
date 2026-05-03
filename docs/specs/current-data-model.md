@@ -4,7 +4,7 @@
 
 ## 1. 当前真实数据表
 
-当前 Alembic head：`202605030006`。
+当前 Alembic head：`202605030007`。
 
 | 表 | 阶段 | 作用 |
 | --- | --- | --- |
@@ -16,6 +16,7 @@
 | `portfolio_holdings` | M5 | 手动持仓，成本价和仓位比例可为空 |
 | `watchlist_items` | M5 | 自选关注项，只影响个人提醒和展示上下文 |
 | `reports` | M5 | quick/standard 模板报告，按用户隔离，生成前复用审查 |
+| `push_logs` | M5 | Telegram 折叠推送记录，按用户和渠道隔离 |
 | `radar_scan_batches` | M3 | 记录每次雷达扫描批次、状态、摘要、失败原因 |
 | `radar_signals` | M3 | 保存候选信号、优先级、生命周期、审查状态 |
 | `signal_evidences` | M3 | 保存信号证据链、置信度、新鲜度和分享策略 |
@@ -35,6 +36,7 @@ users
   <- portfolio_holdings.user_id
   <- watchlist_items.user_id
   <- reports.user_id
+  <- push_logs.user_id
 
 radar_scan_batches
   <- radar_signals.batch_id
@@ -142,6 +144,23 @@ Reports 表不负责：
 - 发布公开分享或导出文件。
 - 保存完整模型 prompt；当前 MVP 不调用模型。
 
+### Push logs 推送表
+
+Push logs 表只回答：
+
+- 哪个 `user_key` 通过哪个渠道收到过哪次推送。
+- 推送目标引用是什么，例如 Telegram chat id。
+- 推送来源是什么，例如最新雷达扫描批次。
+- 本次折叠推送包含、过滤或标记人工复核了哪些信号。
+- 发送状态、预览文本和非敏感投递元数据是什么。
+
+Push logs 表不负责：
+
+- 决定 P0/P1/P2、生命周期或审查状态。
+- 保存 Telegram bot token、webhook secret 或其他密钥。
+- 保存原始证据摘录、原始 URL、来源域名或个人持仓成本。
+- 阻止失败后的重试；服务层只对已成功或 preview 的同批次推送做幂等跳过。
+
 ## 5. 当前尚未实现但路线图中出现的表
 
 这些表出现在总文档规划里，但当前代码和迁移里还没有实现。开发前必须先写 PRD、模型和迁移。
@@ -168,7 +187,6 @@ M5 的数据模型基线已经修正为 A 股 5 分钟资金主线雷达 MVP：
 | `model_call_logs` | M5+ | 模型调用日志；默认不保存完整 raw prompt，debug 模式才保存完整上下文 |
 | `agent_task_logs` | M5+ | Agent 任务日志、显式降级和 fallback 记录 |
 | `tool_call_logs` | M5+ | Telegram/Web/Agent 工具调用日志 |
-| `push_logs` | M5 | Telegram/其他渠道折叠推送记录 |
 | `audit_events` | M5 | 用户操作、二次确认和系统审计 |
 | `score_records` | M5 | 1d/3d/5d/10d 基础综合评分 |
 | `debug_cases` | M8+ | 调试案例库 |

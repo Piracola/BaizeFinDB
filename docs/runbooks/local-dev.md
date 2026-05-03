@@ -164,12 +164,13 @@ Invoke-RestMethod http://127.0.0.1:8000/reports
 
 ## 5. Telegram Bot MVP 本地调试
 
-`.env` 支持三个可选配置：
+`.env` 支持这些 Telegram 可选配置：
 
 ```dotenv
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_IDS=
 TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_PUSH_ENABLED=false
 ```
 
 本地开发时可以先不填 `TELEGRAM_BOT_TOKEN`。此时 webhook 不会调用 Telegram Bot API，而是返回 `preview`，方便直接看 Bot 会发送的中文内容。
@@ -241,12 +242,29 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
 如果要让这个命令看到数据，请先用 Portfolio API 创建 `user_key=telegram-1001` 的持仓或自选。
 如果要让 `/reports` 看到数据，请先用 Reports API 创建 `user_key=telegram-1001` 的报告。
 
+本地折叠推送 preview：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/push/latest `
+  -ContentType "application/json" `
+  -Body '{"chat_ids":[1001],"dry_run":true}'
+```
+
+查看推送日志：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-1001"
+```
+
+`TELEGRAM_PUSH_ENABLED=true` 时，Celery 的 `baizefindb.radar.collect_and_scan` 会在采集和扫描后追加一次最新扫描折叠推送。推送正文按 P0/P1/P2 折叠，复用后端审查过滤 `blocked`，并对 `needs_human_review` 明确标注；Telegram 层不重新计算雷达等级。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，手动推送接口显式传入的 `chat_ids` 也会被白名单过滤。
+
 ## 6. Celery Worker / Beat
 
-当前 Celery 用 Redis 作为 broker/result。Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 调整：
+当前 Celery 用 Redis 作为 broker/result。Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描；启用 `TELEGRAM_PUSH_ENABLED=true` 后会继续触发 Telegram 折叠推送。可通过 `.env` 调整：
 
 ```dotenv
 RADAR_SCAN_INTERVAL_SECONDS=300
+TELEGRAM_PUSH_ENABLED=false
 ```
 
 需要调试后台任务时，先启动 worker：

@@ -13,6 +13,7 @@ def test_settings_defaults() -> None:
     assert settings.telegram_allowed_chat_id_set == set()
     assert not settings.telegram_bot_token_configured
     assert not settings.telegram_webhook_secret_enabled
+    assert settings.telegram_push_enabled is False
 
 
 def test_settings_reads_environment(monkeypatch) -> None:
@@ -27,10 +28,12 @@ def test_settings_reads_telegram_environment(monkeypatch) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001, 1002")
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("TELEGRAM_PUSH_ENABLED", "true")
 
     settings = Settings()
 
     assert settings.telegram_bot_token_configured
     assert settings.telegram_allowed_chat_id_set == {"1001", "1002"}
     assert settings.telegram_webhook_secret_enabled
+    assert settings.telegram_push_enabled is True
 

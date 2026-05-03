@@ -37,6 +37,7 @@ def telegram_status(settings: Settings) -> TelegramStatusRead:
         bot_token_configured=settings.telegram_bot_token_configured,
         allowed_chat_count=len(settings.telegram_allowed_chat_id_set),
         webhook_secret_enabled=settings.telegram_webhook_secret_enabled,
+        push_enabled=settings.telegram_push_enabled,
     )
 
 
