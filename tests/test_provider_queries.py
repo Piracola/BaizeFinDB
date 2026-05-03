@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
@@ -16,6 +17,7 @@ from app.providers.service import (
     collect_akshare_endpoint,
     collect_tushare_endpoint,
     get_akshare_collection_status,
+    get_tushare_readiness,
     list_latest_provider_snapshots,
     list_provider_fetch_logs,
 )
@@ -212,3 +214,72 @@ async def test_tushare_query_api_returns_database_state(
     assert snapshots_response.json()[0]["preview_rows"][0]["ts_code"] == "600000.SH"
 
     assert unknown_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_tushare_readiness_blocks_without_token(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        async with session_factory() as session:
+            readiness = await get_tushare_readiness(session)
+    finally:
+        get_settings.cache_clear()
+
+    assert readiness.status == "blocked"
+    assert readiness.token_configured is False
+    assert readiness.scheduler_ready_endpoint_count == 0
+    assert readiness.endpoints[0].manual_fetch_eligible is False
+    token_check = next(check for check in readiness.endpoints[0].checks if check.name == "token")
+    assert token_check.status == "fail"
+
+
+@pytest.mark.asyncio
+async def test_tushare_readiness_api_returns_database_state(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "secret-tushare-token")
+    get_settings.cache_clear()
+
+    async with session_factory() as session:
+        await collect_tushare_endpoint(
+            session,
+            SuccessfulTushareStockProvider(),
+            "stock_basic",
+        )
+
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/providers/tushare/readiness")
+    finally:
+        app.dependency_overrides.clear()
+        get_settings.cache_clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_name"] == "tushare"
+    assert payload["status"] == "warning"
+    assert payload["token_configured"] is True
+    assert payload["scheduler_enabled"] is False
+    assert payload["scheduler_ready_endpoint_count"] == 1
+    assert "secret-tushare-token" not in response.text
+
+    by_endpoint = {item["endpoint"]: item for item in payload["endpoints"]}
+    assert by_endpoint["stock_basic"]["scheduler_eligible"] is True
+    assert by_endpoint["stock_basic"]["latest_status"] == "success"
+    assert by_endpoint["stock_basic"]["latest_quality_status"] == "ok"
+    assert by_endpoint["anns_d"]["status"] == "warning"

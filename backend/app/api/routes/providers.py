@@ -15,6 +15,7 @@ from app.providers.schemas import (
     ProviderSnapshotSummary,
     TushareEndpointInfo,
     TushareProviderStatusResponse,
+    TushareReadinessResponse,
 )
 from app.providers.service import (
     collect_minimal_akshare,
@@ -22,6 +23,7 @@ from app.providers.service import (
     collect_tushare_stock_basic,
     collect_tushare_stock_company,
     get_akshare_collection_status,
+    get_tushare_readiness,
     list_latest_provider_snapshots,
     list_provider_fetch_logs,
 )
@@ -51,6 +53,16 @@ async def tushare_endpoints() -> list[TushareEndpointInfo]:
 @router.get("/tushare/status", response_model=TushareProviderStatusResponse)
 async def tushare_provider_status() -> TushareProviderStatusResponse:
     return get_tushare_provider_status()
+
+
+@router.get("/tushare/readiness", response_model=TushareReadinessResponse)
+async def tushare_readiness(
+    session: SessionDep,
+) -> TushareReadinessResponse:
+    try:
+        return await get_tushare_readiness(session)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("reading tushare readiness", exc) from exc
 
 
 @router.post("/tushare/fetch/stock-basic", response_model=ProviderEndpointResult)

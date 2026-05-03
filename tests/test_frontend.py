@@ -54,7 +54,9 @@ def test_frontend_assets_are_served() -> None:
     assert "disk_free_percent" in js_response.text
     assert "loadTushareStatus" in js_response.text
     assert "/providers/tushare/status" in js_response.text
+    assert "/providers/tushare/readiness" in js_response.text
     assert "renderTushareStatus" in js_response.text
+    assert "statusCardClass" in js_response.text
     assert "loadPortfolio" in js_response.text
     assert "createReport" in js_response.text
     assert "loadPeriodicReport" in js_response.text
@@ -77,6 +79,7 @@ def test_frontend_assets_are_served() -> None:
     assert "status-panel" in css_response.text
     assert "ops-grid" in css_response.text
     assert "tushare-grid" in css_response.text
+    assert "status-warning" in css_response.text
     assert "portfolio-panel" in css_response.text
     assert "reports-panel" in css_response.text
     assert "analytics-panel" in css_response.text

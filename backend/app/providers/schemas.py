@@ -136,3 +136,42 @@ class TushareProviderStatusResponse(BaseModel):
     implemented_endpoint_count: int
     status: str
     message: str
+
+
+class TushareReadinessCheck(BaseModel):
+    name: str
+    status: str
+    message: str
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class TushareEndpointReadiness(BaseModel):
+    endpoint: str
+    title: str
+    implemented: bool
+    manual_fetch_eligible: bool
+    scheduler_eligible: bool
+    status: str
+    latest_status: ProviderStatus | None = None
+    latest_quality_status: DataQualityStatus | None = None
+    latest_fetch_log_id: int | None = None
+    latest_checked_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    row_count: int | None = None
+    checks: list[TushareReadinessCheck] = Field(default_factory=list)
+
+
+class TushareReadinessResponse(BaseModel):
+    provider_name: str = "tushare"
+    generated_at: datetime
+    status: str
+    token_configured: bool
+    fetch_enabled: bool = False
+    endpoint_count: int
+    implemented_endpoint_count: int
+    scheduler_enabled: bool = False
+    scheduler_ready_endpoint_count: int
+    scheduler_policy: str
+    message: str
+    endpoints: list[TushareEndpointReadiness] = Field(default_factory=list)

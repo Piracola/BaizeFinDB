@@ -88,6 +88,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "运维历史", self.view_ops_history)
         self._add_button(button_frame, "就绪自检", self.view_ops_readiness)
         self._add_button(button_frame, "数据源状态", self.view_tushare_status)
+        self._add_button(button_frame, "数据源自检", self.view_tushare_readiness)
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
         self._add_button(button_frame, "查看信号", self.view_signals)
         self._add_button(button_frame, "查看持仓", self.view_holdings)
@@ -160,6 +161,13 @@ class BaizeFinDBClientApp:
             return client_api.format_tushare_status(payload)
 
         self._run_worker("读取数据源状态", worker)
+
+    def view_tushare_readiness(self) -> None:
+        def worker() -> str:
+            payload = client_api.fetch_tushare_readiness(self._normalized_server_url())
+            return client_api.format_tushare_readiness(payload)
+
+        self._run_worker("读取数据源自检", worker)
 
     def refresh_radar(self) -> None:
         def worker() -> str:

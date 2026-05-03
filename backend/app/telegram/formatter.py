@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from app.ops.schemas import OpsHistoryRead, OpsOverviewRead, OpsReadinessRead
 from app.portfolio.schemas import HoldingRead, WatchlistItemRead
-from app.providers.schemas import TushareProviderStatusResponse
+from app.providers.schemas import TushareProviderStatusResponse, TushareReadinessResponse
 from app.radar.schemas import (
     RadarLifecycleStage,
     RadarOverviewRead,
@@ -109,6 +109,7 @@ def format_help() -> str:
                 "/ops_history - 查看最近运维异常历史",
                 "/ops_ready - 查看部署/运行就绪自检",
                 "/tushare - 查看 Tushare 数据源配置状态",
+                "/tushare_ready - 查看 Tushare 抓取/调度准入自检",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
@@ -255,6 +256,42 @@ def format_tushare_status(status: TushareProviderStatusResponse) -> str:
         "",
         DISCLAIMER,
     ]
+    return _trim_message("\n".join(lines))
+
+
+def format_tushare_readiness(readiness: TushareReadinessResponse) -> str:
+    lines = [
+        "Tushare 准入自检",
+        f"状态：{_readiness_status_label(readiness.status)}",
+        f"Token：{_configured_label(readiness.token_configured)}",
+        f"手动抓取：{_enabled_label(readiness.fetch_enabled)}",
+        (
+            "调度准入样例："
+            f"{readiness.scheduler_ready_endpoint_count}/"
+            f"{readiness.implemented_endpoint_count}"
+        ),
+        f"策略：{readiness.scheduler_policy}",
+        f"说明：{readiness.message}",
+    ]
+
+    for endpoint in readiness.endpoints[:5]:
+        non_ok_checks = [check for check in endpoint.checks if check.status != "ok"]
+        detail = non_ok_checks[0].message if non_ok_checks else "检查项均正常。"
+        eligibility = "可评审调度" if endpoint.scheduler_eligible else "仅手动验证"
+        lines.append(
+            (
+                f"- {endpoint.title}：{_readiness_status_label(endpoint.status)} / "
+                f"{eligibility}，{detail}"
+            ),
+        )
+
+    lines.extend(
+        [
+            "该视图只读取配置和已有抓取/质量记录，不触发真实抓取或调度。",
+            "",
+            DISCLAIMER,
+        ],
+    )
     return _trim_message("\n".join(lines))
 
 

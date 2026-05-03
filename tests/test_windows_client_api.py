@@ -211,6 +211,33 @@ def test_fetch_tushare_status_uses_provider_status_endpoint() -> None:
     assert payload["provider"] == "tushare"
 
 
+def test_fetch_tushare_readiness_uses_provider_readiness_endpoint() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        return FakeResponse(
+            json.dumps(
+                {
+                    "provider_name": "tushare",
+                    "status": "warning",
+                    "token_configured": True,
+                    "fetch_enabled": True,
+                    "scheduler_ready_endpoint_count": 0,
+                    "implemented_endpoint_count": 3,
+                    "scheduler_policy": "manual_only",
+                    "message": "Need samples.",
+                    "endpoints": [],
+                },
+            ),
+        )
+
+    payload = client_api.fetch_tushare_readiness("http://localhost:8000", opener=opener)
+
+    assert calls["url"] == "http://localhost:8000/providers/tushare/readiness"
+    assert payload["provider_name"] == "tushare"
+
+
 def test_format_health_outputs_dependency_statuses() -> None:
     text = client_api.format_health(
         {
@@ -364,6 +391,51 @@ def test_format_tushare_status_outputs_read_only_provider_state() -> None:
     assert "手动抓取：开启" in text
     assert "已实现端点：3/3" in text
     assert "不触发真实抓取" in text
+    assert "不构成投资建议" in text
+
+
+def test_format_tushare_readiness_outputs_read_only_gate_state() -> None:
+    text = client_api.format_tushare_readiness(
+        {
+            "provider_name": "tushare",
+            "status": "warning",
+            "token_configured": True,
+            "fetch_enabled": True,
+            "scheduler_ready_endpoint_count": 1,
+            "implemented_endpoint_count": 3,
+            "scheduler_policy": "manual_only_until_verified",
+            "message": "Need more samples.",
+            "endpoints": [
+                {
+                    "endpoint": "stock_basic",
+                    "title": "股票基础信息",
+                    "status": "ready",
+                    "scheduler_eligible": True,
+                    "checks": [{"name": "data_quality", "status": "ok", "message": "ok"}],
+                },
+                {
+                    "endpoint": "anns_d",
+                    "title": "公告快讯",
+                    "status": "warning",
+                    "scheduler_eligible": False,
+                    "checks": [
+                        {
+                            "name": "latest_fetch",
+                            "status": "warning",
+                            "message": "暂无真实抓取记录。",
+                        }
+                    ],
+                },
+            ],
+        },
+    )
+
+    assert "Tushare 准入自检" in text
+    assert "状态：有警告" in text
+    assert "调度准入样例：1/3" in text
+    assert "股票基础信息：可运行 / 可评审调度" in text
+    assert "公告快讯：有警告 / 仅手动验证，暂无真实抓取记录。" in text
+    assert "不触发真实抓取或调度" in text
     assert "不构成投资建议" in text
 
 

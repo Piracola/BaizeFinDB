@@ -110,6 +110,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "/ops_history" in data["preview"]
     assert "/ops_ready" in data["preview"]
     assert "/tushare" in data["preview"]
+    assert "/tushare_ready" in data["preview"]
     assert "/holding" in data["preview"]
     assert "/watchlist" in data["preview"]
     assert "/reports" in data["preview"]
@@ -383,6 +384,26 @@ async def test_telegram_tushare_command_reports_read_only_status(
     assert "手动抓取：开启" in preview
     assert "已实现端点：3/3" in preview
     assert "不触发真实抓取" in preview
+    assert "不构成投资建议" in preview
+    assert "real-tushare-token" not in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_tushare_ready_command_reports_read_only_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "real-tushare-token")
+    get_settings.cache_clear()
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/tushare_ready"))
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "Tushare 准入自检" in preview
+    assert "Token：已配置" in preview
+    assert "调度准入样例：0/3" in preview
+    assert "不触发真实抓取或调度" in preview
     assert "不构成投资建议" in preview
     assert "real-tushare-token" not in preview
 

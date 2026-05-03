@@ -141,6 +141,7 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
         "/ops/readiness",
         "/providers/akshare/status",
         "/providers/tushare/status",
+        "/providers/tushare/readiness",
         "/radar/overview",
         "/telegram/status",
     ]

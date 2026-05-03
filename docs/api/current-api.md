@@ -14,6 +14,7 @@ GET  /ops/readiness
 GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
 GET  /providers/tushare/status
+GET  /providers/tushare/readiness
 POST /providers/tushare/fetch/stock-basic
 POST /providers/tushare/fetch/announcements
 POST /providers/tushare/fetch/stock-company
@@ -246,6 +247,22 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
   "message": "TUSHARE_TOKEN is required before enabling Tushare fetch."
 }
 ```
+
+### `GET /providers/tushare/readiness`
+
+用途：查看 Tushare 端点是否具备手动抓取和后续调度准入条件。该接口只读取配置、最近抓取日志和数据质量记录，不返回 token 原文，不触发真实抓取，也不会启用 Celery 调度。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
+```
+
+响应重点：
+
+- `status`：整体结果，`ready` 表示端点已有成功抓取和 `ok` 质量样例，`warning` 表示仍缺样例或存在降级，`blocked` 表示 token 缺失或最近失败。
+- `scheduler_enabled`：当前固定为 `false`；这个接口只做准入自检，不代表调度已启用。
+- `scheduler_ready_endpoint_count`：具备成功抓取、非空行数和 `ok` 质量记录的已实现端点数量。
+- `scheduler_policy`：当前调度策略说明，默认保持手动模式，直到 token、字段漂移和误报样例验证通过。
+- `endpoints[].checks`：逐端点检查 token、实现状态、必需字段、默认查询、最近抓取、数据质量；`anns_d` 还标记重大风险公告映射已接入。
 
 ### `POST /providers/tushare/fetch/stock-basic`
 
@@ -778,7 +795,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 
 ## 9. Telegram Bot API
 
-Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、Tushare 数据源状态和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、数据源状态或审查状态。
+Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、Tushare 数据源状态、Tushare 准入自检和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、数据源状态或审查状态。
 
 ### `GET /telegram/status`
 
@@ -824,6 +841,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/ops_history` | 查看最近运维异常历史和异常汇总 |
 | `/ops_ready` | 查看运行就绪自检 |
 | `/tushare` | 查看 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取 |
+| `/tushare_ready` | 查看 Tushare token、端点、最近抓取和数据质量准入状态；不返回 token 原文，不触发真实抓取或调度 |
 | `/radar` | 查看雷达总览：P0/P1/P2、生命周期分布、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
 | `/signal <id>` | 查看单个信号复盘、生命周期、审查状态和证据摘要 |
@@ -864,7 +882,7 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
-`/tushare`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/tushare` 不触发真实抓取，`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
+`/tushare`、`/tushare_ready`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/tushare` 和 `/tushare_ready` 不触发真实抓取或调度，`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
 
 ### `GET /telegram/bindings`
 

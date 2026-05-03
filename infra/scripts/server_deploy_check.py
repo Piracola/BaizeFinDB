@@ -60,6 +60,16 @@ M5_SMOKE_ENDPOINTS = (
             "implemented_endpoint_count",
         ),
     ),
+    (
+        "/providers/tushare/readiness",
+        (
+            "provider_name",
+            "generated_at",
+            "status",
+            "scheduler_policy",
+            "endpoints",
+        ),
+    ),
     ("/radar/overview", ("priority_counts", "lifecycle_counts", "subject_count")),
     (
         "/telegram/status",

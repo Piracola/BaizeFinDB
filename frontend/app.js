@@ -162,8 +162,11 @@ async function loadOpsReadiness() {
 
 async function loadTushareStatus() {
   try {
-    const status = await fetchJson("/providers/tushare/status");
-    renderTushareStatus(status);
+    const [status, readiness] = await Promise.all([
+      fetchJson("/providers/tushare/status"),
+      fetchJson("/providers/tushare/readiness"),
+    ]);
+    renderTushareStatus(status, readiness);
   } catch (error) {
     renderTushareUnavailable(`Tushare 状态暂不可用：${formatError(error)}`);
   }
@@ -744,11 +747,14 @@ function renderOpsReadinessUnavailable(reason) {
   elements.opsReadiness.innerHTML = emptyState(reason);
 }
 
-function renderTushareStatus(status) {
+function renderTushareStatus(status, readiness) {
   const tokenConfigured = Boolean(status?.token_configured);
   const fetchEnabled = Boolean(status?.fetch_enabled);
   const endpointCount = Number(status?.endpoint_count ?? 0);
   const implementedCount = Number(status?.implemented_endpoint_count ?? 0);
+  const readinessStatus = readiness?.status || "unknown";
+  const schedulerReadyCount = Number(readiness?.scheduler_ready_endpoint_count ?? 0);
+  const endpoints = Array.isArray(readiness?.endpoints) ? readiness.endpoints : [];
   const cards = [
     {
       name: "Tushare Token",
@@ -768,12 +774,35 @@ function renderTushareStatus(status) {
       value: label(status?.status || "unknown"),
       detail: status?.message || "未返回状态说明",
     },
+    {
+      name: "调度准入",
+      status: readinessStatus,
+      value: label(readinessStatus),
+      detail: `准入样例 ${schedulerReadyCount}/${implementedCount}；当前仍保持手动模式`,
+    },
   ];
 
-  elements.tushareStatus.innerHTML = cards
+  const endpointCards = endpoints.map((endpoint) => {
+    const failedChecks = (endpoint.checks || [])
+      .filter((check) => check.status !== "ok")
+      .map((check) => check.message)
+      .slice(0, 2);
+    const detail = failedChecks.length
+      ? failedChecks.join("；")
+      : `最近 ${label(endpoint.latest_status || "success")} / 质量 ${label(endpoint.latest_quality_status || "ok")}`;
+
+    return {
+      name: endpoint.title || endpoint.endpoint,
+      status: endpoint.status,
+      value: endpoint.scheduler_eligible ? "可评审调度" : "仅手动验证",
+      detail,
+    };
+  });
+
+  elements.tushareStatus.innerHTML = [...cards, ...endpointCards]
     .map((card) => {
       return `
-        <article class="status-card ${card.status === "ok" ? "status-ok" : "status-fail"}">
+        <article class="status-card ${statusCardClass(card.status)}">
           <strong>${escapeHtml(card.name)}</strong>
           <div>${escapeHtml(card.value)}</div>
           <div class="muted">${escapeHtml(card.detail)}</div>
@@ -785,6 +814,17 @@ function renderTushareStatus(status) {
 
 function renderTushareUnavailable(reason) {
   elements.tushareStatus.innerHTML = emptyState(reason);
+}
+
+function statusCardClass(status) {
+  const value = String(status || "").toLowerCase();
+  if (["ok", "ready", "configured", "success"].includes(value)) {
+    return "status-ok";
+  }
+  if (["warning", "degraded"].includes(value)) {
+    return "status-warning";
+  }
+  return "status-fail";
 }
 
 function opsCountCard(name, summary) {
@@ -1349,9 +1389,12 @@ function priorityBadgeClass(priority) {
 function label(value) {
   const labels = {
     ready: "就绪",
+    warning: "有警告",
     not_ready: "未就绪",
     ok: "正常",
     unknown: "未知",
+    configured: "已配置",
+    not_configured: "未配置",
     running: "运行中",
     success: "成功",
     failure: "失败",

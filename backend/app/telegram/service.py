@@ -6,6 +6,7 @@ from app.core.redis import check_redis
 from app.db.session import check_database
 from app.ops.service import get_ops_history, get_ops_overview, get_ops_readiness
 from app.portfolio.service import list_holdings, list_watchlist_items
+from app.providers.service import get_tushare_readiness
 from app.providers.tushare import get_tushare_provider_status
 from app.radar.service import (
     get_latest_radar_scan,
@@ -36,6 +37,7 @@ from app.telegram.formatter import (
     format_signal_detail,
     format_signal_not_found,
     format_signals,
+    format_tushare_readiness,
     format_tushare_status,
     format_unauthorized,
     format_unknown_command,
@@ -159,6 +161,10 @@ class TelegramCommandService:
 
             if command == "/tushare":
                 return format_tushare_status(get_tushare_provider_status(self._settings))
+
+            if command == "/tushare_ready":
+                readiness = await get_tushare_readiness(session, settings=self._settings)
+                return format_tushare_readiness(readiness)
 
             if command == "/radar":
                 overview = await get_radar_overview(session, limit=50)

@@ -325,6 +325,10 @@ h3 {
   border-left: 4px solid var(--red);
 }
 
+.status-warning {
+  border-left: 4px solid var(--orange);
+}
+
 .priority-number {
   font-size: 30px;
   font-weight: 900;

@@ -9,6 +9,7 @@
 - 查看只读运维历史：`GET /ops/history`。
 - 查看运行就绪自检：`GET /ops/readiness`。
 - 查看 Tushare 数据源状态：`GET /providers/tushare/status`，只返回 token 是否配置和端点实现状态，不返回 token 原文。
+- 查看 Tushare 数据源自检：`GET /providers/tushare/readiness`，只读取配置、最近抓取日志和数据质量记录，不触发真实抓取或调度。
 - 查看雷达总览、优先级、生命周期分布、市场情绪摘要和个股回推证据：`GET /radar/overview`。
 - 查看信号列表：`GET /radar/signals`。
 - 查看持仓：`GET /portfolio/holdings`。
@@ -77,6 +78,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 运维历史 | 调用 `/ops/history`，显示最近扫描和运行异常历史，以及异常汇总。 |
 | 就绪自检 | 调用 `/ops/readiness`，显示部署/运行自检总体状态和逐项检查。 |
 | 数据源状态 | 调用 `/providers/tushare/status`，显示 Tushare token 配置、手动抓取启用状态和已实现端点数；不触发真实抓取。 |
+| 数据源自检 | 调用 `/providers/tushare/readiness`，显示 Tushare token、端点、最近抓取和数据质量准入状态；不触发真实抓取或调度。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |

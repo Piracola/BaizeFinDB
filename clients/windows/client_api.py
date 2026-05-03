@@ -335,6 +335,15 @@ def fetch_tushare_status(
     return _expect_object(payload, "/providers/tushare/status")
 
 
+def fetch_tushare_readiness(
+    base_url: str | None,
+    *,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(base_url, "/providers/tushare/readiness", opener=opener)
+    return _expect_object(payload, "/providers/tushare/readiness")
+
+
 def fetch_radar_overview(
     base_url: str | None,
     *,
@@ -679,6 +688,59 @@ def format_tushare_status(payload: Mapping[str, Any]) -> str:
         "",
         DISCLAIMER,
     ]
+    return _trim_text("\n".join(lines))
+
+
+def format_tushare_readiness(payload: Mapping[str, Any]) -> str:
+    endpoints = _sequence(payload.get("endpoints"))
+    lines = [
+        "Tushare 准入自检",
+        f"状态：{_readiness_status_label(payload.get('status'))}",
+        f"Token：{_configured_label(payload.get('token_configured'))}",
+        f"手动抓取：{_enabled_label(payload.get('fetch_enabled'))}",
+        (
+            "调度准入样例："
+            f"{_int_text(payload.get('scheduler_ready_endpoint_count'))}/"
+            f"{_int_text(payload.get('implemented_endpoint_count'))}"
+        ),
+        f"策略：{_text(payload.get('scheduler_policy'), '未返回')}",
+        f"说明：{_text(payload.get('message'), '未返回状态说明')}",
+    ]
+
+    if endpoints:
+        lines.append("端点：")
+        for endpoint in endpoints[:SUBJECTS_PREVIEW_LIMIT]:
+            endpoint_map = _mapping(endpoint)
+            checks = _sequence(endpoint_map.get("checks"))
+            non_ok_checks = [
+                _mapping(check)
+                for check in checks
+                if _mapping(check).get("status") != "ok"
+            ]
+            detail = (
+                _text(non_ok_checks[0].get("message"), "未返回检查说明")
+                if non_ok_checks
+                else "检查项均正常"
+            )
+            eligibility = "可评审调度" if endpoint_map.get("scheduler_eligible") else "仅手动验证"
+            title = _text(endpoint_map.get("title"), _text(endpoint_map.get("endpoint"), "-"))
+            lines.append(
+                (
+                    f"- {title}："
+                    f"{_readiness_status_label(endpoint_map.get('status'))} / "
+                    f"{eligibility}，{detail}"
+                ),
+            )
+    else:
+        lines.append("端点：暂无")
+
+    lines.extend(
+        [
+            "该视图只读取配置和已有抓取/质量记录，不触发真实抓取或调度。",
+            "",
+            DISCLAIMER,
+        ],
+    )
     return _trim_text("\n".join(lines))
 
 
