@@ -123,6 +123,29 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/overview
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals
 ```
 
+### 4.5 手动维护持仓和自选
+
+持仓和自选是单用户 MVP 能力，按 `user_key` 隔离。默认 `user_key` 是 `default`：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/holdings `
+  -ContentType "application/json" `
+  -Body '{"instrument_code":"600000","instrument_name":"浦发银行","market":"A_SHARE","cost_price":10.25,"position_ratio":0.2}'
+
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/watchlist `
+  -ContentType "application/json" `
+  -Body '{"instrument_code":"SZ000001","instrument_name":"平安银行","market":"A_SHARE","note":"观察风险变化"}'
+```
+
+查询：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/portfolio/holdings
+Invoke-RestMethod "http://127.0.0.1:8000/portfolio/watchlist?user_key=default"
+```
+
+当前 API 不接券商、不保存交易密码、不导入持仓截图；持仓/自选只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2。
+
 ## 5. Telegram Bot MVP 本地调试
 
 `.env` 支持三个可选配置：

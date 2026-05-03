@@ -27,6 +27,8 @@
 - `/providers/akshare/status` 查看每个接口最新采集状态
 - `/providers/akshare/fetch-logs` 查看最新采集日志
 - `/providers/akshare/snapshots/latest` 查看最新快照摘要
+- `/portfolio/holdings` 手动维护持仓，成本价和仓位比例可选
+- `/portfolio/watchlist` 手动维护自选关注项
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -65,7 +67,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP 和 5 分钟采集后扫描调度入口消费/更新后端雷达结果；后续继续补持仓自选、折叠推送、报告、日报周报和评分。 |
+| M5 | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度入口、持仓/自选最小 API；后续继续补折叠推送、报告、日报周报和评分。 |
 
 ## 本地启动
 
@@ -196,6 +198,20 @@ uv run celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
 ```
 
 Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 的 `RADAR_SCAN_INTERVAL_SECONDS` 调整本地/服务器调度间隔。
+
+手动维护持仓和自选：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/holdings `
+  -ContentType "application/json" `
+  -Body '{"instrument_code":"600000","instrument_name":"浦发银行","market":"A_SHARE","position_ratio":0.2}'
+
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/watchlist `
+  -ContentType "application/json" `
+  -Body '{"instrument_code":"SZ000001","instrument_name":"平安银行","market":"A_SHARE","note":"观察风险变化"}'
+```
+
+当前持仓/自选按 `user_key` 做单用户 MVP 隔离，只影响个人提醒和展示上下文，不改变市场主线 P0/P1/P2。
 
 ## 测试
 

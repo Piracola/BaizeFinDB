@@ -4,7 +4,7 @@
 
 ## 1. 当前真实数据表
 
-当前 Alembic head：`202604300004`。
+当前 Alembic head：`202605030005`。
 
 | 表 | 阶段 | 作用 |
 | --- | --- | --- |
@@ -12,6 +12,9 @@
 | `market_snapshots` | M2 | 保存 Provider 标准化后的市场快照 |
 | `provider_fetch_logs` | M2 | 记录每次 Provider 拉取状态、错误、质量摘要 |
 | `data_quality_checks` | M2 | 记录数据质量检查结果 |
+| `users` | M5 | 单用户/白名单阶段的身份键和个人数据隔离前置 |
+| `portfolio_holdings` | M5 | 手动持仓，成本价和仓位比例可为空 |
+| `watchlist_items` | M5 | 自选关注项，只影响个人提醒和展示上下文 |
 | `radar_scan_batches` | M3 | 记录每次雷达扫描批次、状态、摘要、失败原因 |
 | `radar_signals` | M3 | 保存候选信号、优先级、生命周期、审查状态 |
 | `signal_evidences` | M3 | 保存信号证据链、置信度、新鲜度和分享策略 |
@@ -26,6 +29,10 @@ market_snapshots
 
 provider_fetch_logs
   <- data_quality_checks.fetch_log_id
+
+users
+  <- portfolio_holdings.user_id
+  <- watchlist_items.user_id
 
 radar_scan_batches
   <- radar_signals.batch_id
@@ -102,6 +109,20 @@ Radar 表不负责：
 - 生成公开页面。
 - 保存完整 LLM prompt。
 
+### Portfolio 个人数据表
+
+Portfolio 表只回答：
+
+- 某个 `user_key` 手动维护了哪些持仓。
+- 某个 `user_key` 手动维护了哪些自选关注项。
+- 持仓成本价、仓位比例、备注和提醒开关是什么。
+
+Portfolio 表不负责：
+
+- 修改市场级 P0/P1/P2。
+- 接券商、下单或保存交易密码。
+- 进入公开分享 payload。
+
 ## 5. 当前尚未实现但路线图中出现的表
 
 这些表出现在总文档规划里，但当前代码和迁移里还没有实现。开发前必须先写 PRD、模型和迁移。
@@ -116,15 +137,12 @@ M5 的数据模型基线已经修正为 A 股 5 分钟资金主线雷达 MVP：
 
 | 规划表 | 所属未来阶段 | 预期用途 |
 | --- | --- | --- |
-| `users` | M5 | 单用户/白名单身份、个人数据隔离和入口绑定前置 |
 | `telegram_bindings` | M5 | Telegram 用户绑定、白名单和 allowed chat 管理 |
 | `instruments` | M5 | 标的主数据，用于个股异动回推和持仓/自选关联 |
 | `sectors` | M5 | 行业/板块主数据，用于资金主线聚合 |
 | `concepts` | M5 | 概念/主题主数据，用于资金主线聚合 |
 | `signal_lifecycle_events` | M5 | 更细粒度生命周期事件，和 P0/P1/P2 强度等级分离 |
 | `evidence_items` | M6+ | 更通用的证据对象 |
-| `portfolios` | M5 | 手动持仓；成本价、仓位比例可选 |
-| `watchlists` | M5 | 自选列表，只影响个人优先级 |
 | `focus_items` | M5 | 临时关注、备注和 free-chat 低风险数据修改 |
 | `reports` | M5 | quick/standard/deep 报告正文和元数据；deep 只手动触发 |
 | `report_exports` | M5+ | HTML/PDF/Markdown 导出记录，M5 可先只保留 Markdown/HTML |

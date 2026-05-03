@@ -16,6 +16,10 @@ GET  /radar/scans/latest
 GET  /radar/overview
 GET  /radar/signals
 GET  /radar/signals/{signal_id}
+GET  /portfolio/holdings
+POST /portfolio/holdings
+GET  /portfolio/watchlist
+POST /portfolio/watchlist
 POST /radar/signals/{signal_id}/review
 GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
@@ -267,7 +271,88 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1
 - `metrics`
 - `evidences`
 
-## 5. Governance / 分享安全 API
+## 5. Portfolio / 持仓自选 API
+
+Portfolio API 是单用户 MVP 能力，当前通过 `user_key` 查询参数做个人数据隔离，默认值为 `default`。它不接券商、不保存交易密码、不导入持仓截图。
+
+持仓和自选只影响后续个人提醒、展示排序和报告上下文，不改变市场主线 P0/P1/P2。
+
+### `GET /portfolio/holdings`
+
+用途：查看某个 `user_key` 下的手动持仓。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/portfolio/holdings
+Invoke-RestMethod "http://127.0.0.1:8000/portfolio/holdings?user_key=telegram-1001"
+```
+
+### `POST /portfolio/holdings`
+
+用途：新增持仓。`cost_price` 和 `position_ratio` 可为空；`position_ratio` 使用 0 到 1 的比例。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/holdings `
+  -ContentType "application/json" `
+  -Body '{"instrument_code":"600000","instrument_name":"浦发银行","market":"A_SHARE","cost_price":10.25,"position_ratio":0.2}'
+```
+
+重复的 `user_key + market + instrument_code` 返回 `409`。
+
+### `PATCH /portfolio/holdings/{holding_id}`
+
+用途：更新持仓名称、备注、成本价、仓位比例或提醒开关。
+
+```powershell
+Invoke-RestMethod -Method Patch http://127.0.0.1:8000/portfolio/holdings/1 `
+  -ContentType "application/json" `
+  -Body '{"note":"降低提醒频率","alert_enabled":false}'
+```
+
+### `DELETE /portfolio/holdings/{holding_id}`
+
+用途：删除持仓。删除其他 `user_key` 的记录会返回 `404`。
+
+```powershell
+Invoke-RestMethod -Method Delete http://127.0.0.1:8000/portfolio/holdings/1
+```
+
+### `GET /portfolio/watchlist`
+
+用途：查看某个 `user_key` 下的自选关注项。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/portfolio/watchlist
+```
+
+### `POST /portfolio/watchlist`
+
+用途：新增自选关注项。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/watchlist `
+  -ContentType "application/json" `
+  -Body '{"instrument_code":"SZ000001","instrument_name":"平安银行","market":"A_SHARE","note":"观察风险变化"}'
+```
+
+### `PATCH /portfolio/watchlist/{item_id}`
+
+用途：更新自选名称、备注或提醒开关。
+
+```powershell
+Invoke-RestMethod -Method Patch http://127.0.0.1:8000/portfolio/watchlist/1 `
+  -ContentType "application/json" `
+  -Body '{"alert_enabled":false}'
+```
+
+### `DELETE /portfolio/watchlist/{item_id}`
+
+用途：删除自选关注项。
+
+```powershell
+Invoke-RestMethod -Method Delete http://127.0.0.1:8000/portfolio/watchlist/1
+```
+
+## 6. Governance / 分享安全 API
 
 ### `POST /radar/signals/{signal_id}/review`
 
@@ -349,7 +434,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 - 精确置信度。
 - 来源时间。
 
-## 6. Telegram Bot API
+## 7. Telegram Bot API
 
 Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期或审查状态。
 
@@ -415,20 +500,22 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
-## 7. 错误码约定
+## 8. 错误码约定
 
 | 错误码 | 常见原因 | 调用方处理 |
 | --- | --- | --- |
 | `404` | 扫描或信号不存在；未知 endpoint | 提示用户资源不存在，必要时刷新列表 |
 | `409` | 信号不满足公开分享条件 | 调用 `share-preview` 查看阻断原因 |
+| `409` | 持仓或自选重复 | 刷新列表或改用 PATCH 更新已有记录 |
 | `403` | Telegram webhook secret 不匹配 | 检查 `TELEGRAM_WEBHOOK_SECRET` 和请求 header |
 | `503` | PostgreSQL 或 Redis 不可用 | 检查 Docker、迁移和 `/health/ready` |
 
-## 8. 接 Telegram / Web / 报告时的推荐用法
+## 9. 接 Telegram / Web / 报告时的推荐用法
 
 - 首页/总览：用 `GET /radar/overview`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
+- 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
 - 内部调试：用 `share-preview`。
 - 公开展示：只能用 `share-payload`。
 - 触发扫描：先保证 Provider 有最新快照，再调用 `POST /radar/scans/run`。
