@@ -64,6 +64,12 @@ uv run python infra/scripts/server_deploy_check.py
 uv run python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
+验证 Postgres 容器内 `pg_dump` 可用：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --check-backup
+```
+
 生成 PostgreSQL 备份：
 
 ```powershell

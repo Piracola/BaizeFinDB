@@ -109,7 +109,7 @@ uv run uvicorn app.main:app --reload
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
-Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态和 API 健康状态，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份。不代表完整生产部署已经完成。
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态和 `pg_dump` 可用性，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份。不代表完整生产部署已经完成。
 
 ## Windows 客户端 MVP
 

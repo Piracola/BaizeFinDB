@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 SERVER_COMPOSE_FILES = ("docker-compose.yml", "docker-compose.server.yml")
+DEFAULT_POSTGRES_SERVICE = "postgres"
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,10 @@ def server_compose_command(*args: str) -> list[str]:
         command.extend(["-f", compose_file])
     command.extend(args)
     return command
+
+
+def pg_dump_version_command(service: str = DEFAULT_POSTGRES_SERVICE) -> list[str]:
+    return server_compose_command("exec", "-T", service, "pg_dump", "--version")
 
 
 def check_env(root: Path, *, strict: bool) -> CheckResult:
@@ -114,6 +119,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run docker compose ps for the server overlay.",
     )
     parser.add_argument(
+        "--check-backup",
+        action="store_true",
+        help="Verify pg_dump is available in the PostgreSQL compose service.",
+    )
+    parser.add_argument(
+        "--postgres-service",
+        default=DEFAULT_POSTGRES_SERVICE,
+        help=f"PostgreSQL compose service for --check-backup, default: {DEFAULT_POSTGRES_SERVICE}",
+    )
+    parser.add_argument(
         "--build",
         action="store_true",
         help="Build baizefindb-api:verify as part of the preflight.",
@@ -159,6 +174,15 @@ def main(argv: list[str] | None = None) -> int:
             run_command(
                 "docker compose server ps",
                 server_compose_command("ps"),
+                root,
+            ),
+        )
+
+    if args.check_backup:
+        checks.append(
+            run_command(
+                "postgres pg_dump available",
+                pg_dump_version_command(args.postgres_service),
                 root,
             ),
         )

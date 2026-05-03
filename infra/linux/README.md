@@ -135,6 +135,12 @@ The same checks can be run through the bundled preflight:
 python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
+Verify the backup toolchain without exporting data:
+
+```bash
+python infra/scripts/server_deploy_check.py --check-backup
+```
+
 ## Telegram Webhook
 
 Expose the API through HTTPS before setting the Telegram webhook. The webhook path is:
