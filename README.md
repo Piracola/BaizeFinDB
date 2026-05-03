@@ -42,6 +42,7 @@
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
 - `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`
 - Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表并打开 Web 面板
+- Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集和雷达扫描
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
 - 雷达扫描失败会记录 `failure`、`error_message` 和失败摘要，避免普通异常留下 `running` 批次
@@ -51,9 +52,9 @@
 - Pydantic 配置
 - SQLAlchemy 2.0 异步数据库连接
 - Alembic 迁移框架
-- Celery Worker / Beat 配置壳
+- Celery Worker / Beat 调度入口
 - Docker Compose 的 PostgreSQL / Redis 配置
-- Linux 服务端部署骨架：API Dockerfile、server compose overlay、systemd 示例和 nginx HTTPS 反代示例
+- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、systemd 示例和 nginx HTTPS 反代示例
 - pytest 冒烟测试
 
 ## 当前进度
@@ -64,7 +65,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web 和 Telegram Bot MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、报告、日报周报和评分。 |
+| M5 | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP 和 5 分钟采集后扫描调度入口消费/更新后端雷达结果；后续继续补持仓自选、折叠推送、报告、日报周报和评分。 |
 
 ## 本地启动
 
@@ -97,7 +98,7 @@ uv run uvicorn app.main:app --reload
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
-Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web 和 Telegram webhook，不代表完整生产部署已经完成。
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat，不代表完整生产部署已经完成。
 
 ## Windows 客户端 MVP
 
@@ -193,6 +194,8 @@ uv run celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO
 ```powershell
 uv run celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
 ```
+
+Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 的 `RADAR_SCAN_INTERVAL_SECONDS` 调整本地/服务器调度间隔。
 
 ## 测试
 

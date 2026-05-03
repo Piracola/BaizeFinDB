@@ -1,26 +1,30 @@
+x-api-base: &api-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: baizefindb-api:latest
+  env_file:
+    - .env
+  environment:
+    APP_ENV: server
+    DATABASE_URL: ${SERVER_DATABASE_URL:-postgresql+asyncpg://baizefindb:baizefindb@postgres:5432/baizefindb}
+    REDIS_URL: ${SERVER_REDIS_URL:-redis://redis:6379/0}
+    CELERY_BROKER_URL: ${SERVER_REDIS_URL:-redis://redis:6379/0}
+    CELERY_RESULT_BACKEND: ${SERVER_REDIS_URL:-redis://redis:6379/0}
+    RADAR_SCAN_INTERVAL_SECONDS: ${RADAR_SCAN_INTERVAL_SECONDS:-300}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: baizefindb-api:latest
+    <<: *api-base
     container_name: baizefindb-api
-    env_file:
-      - .env
-    environment:
-      APP_ENV: server
-      DATABASE_URL: ${SERVER_DATABASE_URL:-postgresql+asyncpg://baizefindb:baizefindb@postgres:5432/baizefindb}
-      REDIS_URL: ${SERVER_REDIS_URL:-redis://redis:6379/0}
-      CELERY_BROKER_URL: ${SERVER_REDIS_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${SERVER_REDIS_URL:-redis://redis:6379/0}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     ports:
       - "8000:8000"
-    restart: unless-stopped
     healthcheck:
       test:
         [
@@ -31,3 +35,28 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  worker:
+    <<: *api-base
+    container_name: baizefindb-worker
+    command:
+      [
+        "celery",
+        "-A",
+        "app.tasks.celery_app.celery_app",
+        "worker",
+        "--loglevel=INFO",
+      ]
+
+  beat:
+    <<: *api-base
+    container_name: baizefindb-beat
+    command:
+      [
+        "celery",
+        "-A",
+        "app.tasks.celery_app.celery_app",
+        "beat",
+        "--loglevel=INFO",
+        "--schedule=/tmp/celerybeat-schedule",
+      ]

@@ -14,6 +14,8 @@ Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
+5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；服务器 compose overlay 已补充 worker / beat 服务。
+
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
 下一阶段开发基线已修正为 **A 股 5 分钟资金主线雷达 MVP**。Telegram、Web、报告、持仓自选、日报周报和评分都围绕雷达结果展开，不再按 Telegram / 报告 / Web 三选一推进。
@@ -47,8 +49,8 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP 和 Windows 客户端 MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、折叠推送、quick/standard 报告、日报周报和基础评分。 |
-| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP、Windows 客户端 MVP 和 Celery 5 分钟采集后扫描调度入口；后续继续补持仓自选、折叠推送、quick/standard 报告、日报周报和基础评分。 |
+| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
 
@@ -88,6 +90,11 @@ Windows 客户端：
 - `clients/windows/run-client.ps1`
 - `clients/windows/baizefindb_client.py`
 - `clients/windows/client_api.py`
+
+后台调度：
+
+- `baizefindb.radar.collect_and_scan`：Celery beat 默认每 300 秒触发，先采集 AKShare 最小数据，再运行雷达扫描。
+- `RADAR_SCAN_INTERVAL_SECONDS`：调度间隔环境变量，默认 `300`。
 
 ## 当前数据表
 
@@ -148,7 +155,7 @@ uv run uvicorn app.main:app --reload
 
 建议进入 **M5 A 股 5 分钟资金主线雷达 MVP**，范围继续保持轻量：
 
-- 先巩固后端雷达计算、5 分钟调度、状态记录、P0/P1/P2 规则、生命周期和 P2 7 天观察。
+- 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则、生命周期和 P2 7 天观察。
 - 补手动持仓/自选；成本价和仓位比例可选，只影响个人优先级，不改变市场主线等级。
 - Telegram 推送按 P0/P1/P2 折叠汇总；P0 快速提醒后后台生成 standard report，P1 连续触发生成 quick report 候选。
 - Web MVP 页面顺序为雷达总览、信号详情、持仓/自选、报告列表。

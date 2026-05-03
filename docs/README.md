@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | 当前阶段、已完成能力、可用 API 和下一步建议 | 接手项目前先读 |
 | [runbooks/local-dev.md](runbooks/local-dev.md) | 本地开发、Docker、迁移、采集、扫描、故障处理 | 每次搭环境或调试服务时读 |
-| [runbooks/linux-server.md](runbooks/linux-server.md) | Linux 服务端部署骨架、Docker 镜像、compose overlay、systemd、nginx | 准备 Ubuntu 服务器部署前读 |
+| [runbooks/linux-server.md](runbooks/linux-server.md) | Linux 服务端部署骨架、Docker 镜像、compose overlay、worker/beat、systemd、nginx | 准备 Ubuntu 服务器部署前读 |
 | [runbooks/windows-client.md](runbooks/windows-client.md) | Windows 客户端 MVP 的启动、连接本地/服务器和故障处理 | 在 Windows 上查看 API 状态、雷达总览或信号时读 |
 | [api/current-api.md](api/current-api.md) | 当前 API、调用顺序、curl 示例、响应示例 | 写脚本、接 Telegram/Web/报告前读 |
 | [specs/current-data-model.md](specs/current-data-model.md) | 当前真实数据表和规划表边界 | 改数据库、写迁移、设计新模块前读 |
@@ -21,7 +21,7 @@
 - 雷达等级由规则引擎判定，AI 只能解释、补证据、指出风险。
 - 板块/主题/概念权重大于单票异动；个股异动主要用于反推主线或风险。
 - 发布类输出必须复用 M4 审查和分享预检。
-- Linux 服务器部署目前只有骨架，包含 API 容器、compose overlay、systemd 和 nginx 示例；不要把它当作完整生产部署。
+- Linux 服务器部署目前只有骨架，包含 API 容器、Celery worker/beat、compose overlay、systemd 和 nginx 示例；不要把它当作完整生产部署。
 - Windows 客户端目前只是 MVP 源码运行版，不是安装包；只消费后端 API，不重新计算雷达等级。
 - 不接自动交易，不输出强买卖指令，不保存券商交易密码。
 - 新表必须有 Alembic 迁移，新规则必须有测试或 golden case。

@@ -8,7 +8,7 @@
 | --- | --- |
 | `Dockerfile` | 生产取向的 FastAPI API 镜像，启动 `uvicorn app.main:app --host 0.0.0.0 --port 8000`。 |
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
-| `docker-compose.server.yml` | 服务器 compose overlay，新增 `api` 服务，依赖 healthy 的 `postgres` / `redis`。 |
+| `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
@@ -23,10 +23,16 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-`docker-compose.server.yml` 只在服务器或部署演练时显式叠加：
+`docker-compose.server.yml` 只在服务器或部署演练时显式叠加。只启动 API：
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api
+```
+
+启动 API、Celery worker 和 Celery beat：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat
 ```
 
 ## 部署演练命令
@@ -44,7 +50,7 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml config
 docker build -t baizefindb-api:dev .
 ```
 
-Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。
+Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整。
 
 ## Secrets 边界
 

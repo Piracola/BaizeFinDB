@@ -1,15 +1,15 @@
 # BaizeFinDB Linux Server Deployment Skeleton
 
 This directory contains a Linux deployment skeleton for a future Ubuntu server
-running the FastAPI API, static Web UI, and Telegram webhook. It is not a full
-production-hardening guide.
+running the FastAPI API, static Web UI, Telegram webhook, Celery worker, and
+Celery beat scheduler. It is not a full production-hardening guide.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
-| `../../docker-compose.server.yml` | Compose overlay that adds the `api` service on top of local `postgres` and `redis`. |
+| `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
 
@@ -44,6 +44,7 @@ Required notes:
 - Do not put real Telegram tokens, webhook secrets, database passwords, or API tokens in tracked files.
 - `docker-compose.server.yml` overrides `DATABASE_URL` and `REDIS_URL` for the API container so it reaches `postgres` and `redis` by compose service name.
 - `SERVER_DATABASE_URL` and `SERVER_REDIS_URL` are optional escape hatches for a later hardened setup. Use placeholders in docs, never real values.
+- `RADAR_SCAN_INTERVAL_SECONDS` controls the Celery beat interval for the collect-then-scan task. The default is `300`.
 
 Example placeholders:
 
@@ -54,6 +55,7 @@ TELEGRAM_ALLOWED_CHAT_IDS=<comma-separated-chat-ids>
 TELEGRAM_WEBHOOK_SECRET=<telegram-webhook-secret>
 SERVER_DATABASE_URL=postgresql+asyncpg://<db-user>:<db-password>@postgres:5432/<db-name>
 SERVER_REDIS_URL=redis://redis:6379/0
+RADAR_SCAN_INTERVAL_SECONDS=300
 ```
 
 For the current skeleton, the bundled PostgreSQL service still uses the existing
@@ -87,11 +89,16 @@ Run migrations:
 docker compose -f docker-compose.yml -f docker-compose.server.yml run --rm api alembic upgrade head
 ```
 
-Start the API:
+Start the API, worker, and beat scheduler:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat
 ```
+
+The beat process schedules `baizefindb.radar.collect_and_scan` every
+`RADAR_SCAN_INTERVAL_SECONDS` seconds. That task first runs the minimal AKShare
+collection and then runs the radar scan, so the scan consumes the freshest
+available provider snapshots.
 
 ## Health Checks
 
@@ -165,6 +172,8 @@ sample includes an explicit `/telegram/webhook` location reminder.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.server.yml logs -f api
+docker compose -f docker-compose.yml -f docker-compose.server.yml logs -f worker
+docker compose -f docker-compose.yml -f docker-compose.server.yml logs -f beat
 docker compose -f docker-compose.yml -f docker-compose.server.yml logs --tail=100 postgres
 docker compose -f docker-compose.yml -f docker-compose.server.yml logs --tail=100 redis
 journalctl -u baizefindb.service -f
@@ -189,7 +198,7 @@ cd /opt/baizefindb
 git pull --ff-only
 docker compose -f docker-compose.yml -f docker-compose.server.yml build api
 docker compose -f docker-compose.yml -f docker-compose.server.yml run --rm api alembic upgrade head
-docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat
 curl -fsS http://127.0.0.1:8000/health/ready
 ```
 
@@ -200,7 +209,7 @@ Keep the previous git revision and database backup before upgrading. A minimal r
 ```bash
 git checkout <previous-known-good-commit>
 docker compose -f docker-compose.yml -f docker-compose.server.yml build api
-docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat
 ```
 
 If a migration changed data or schema, restore from the pre-upgrade database backup

@@ -187,14 +187,25 @@ Telegram 输出只用于关注、观察、风险和复盘；P0/P1/P2、生命周
 
 ## 6. Celery Worker / Beat
 
-当前 Celery 已有配置壳，Redis 用作 broker/result。需要调试后台任务时再启动：
+当前 Celery 用 Redis 作为 broker/result。Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 调整：
+
+```dotenv
+RADAR_SCAN_INTERVAL_SECONDS=300
+```
+
+需要调试后台任务时，先启动 worker：
 
 ```powershell
 uv run celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO
+```
+
+再另开一个 PowerShell 启动 beat：
+
+```powershell
 uv run celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
 ```
 
-如果只是手动采集和扫描，可以先不用 Celery，直接跑 `infra/scripts` 或 API。
+如果只是手动采集和扫描，可以先不用 Celery，直接跑 `infra/scripts` 或 API。不要同时运行多个 beat 实例，避免同一时间重复触发采集和扫描。
 
 ## 7. 数据库操作
 

@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     celery_broker_url: str | None = Field(default=None, alias="CELERY_BROKER_URL")
     celery_result_backend: str | None = Field(default=None, alias="CELERY_RESULT_BACKEND")
+    radar_scan_interval_seconds: int = Field(
+        default=300,
+        gt=0,
+        alias="RADAR_SCAN_INTERVAL_SECONDS",
+    )
     tushare_token: str | None = Field(default=None, alias="TUSHARE_TOKEN")
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_allowed_chat_ids: str | None = Field(

@@ -8,6 +8,7 @@ def test_settings_defaults() -> None:
     assert settings.app_env == "local"
     assert settings.database_url.startswith("postgresql+asyncpg://")
     assert settings.effective_celery_broker_url == settings.redis_url
+    assert settings.radar_scan_interval_seconds == 300
     assert settings.telegram_bot_token is None
     assert settings.telegram_allowed_chat_id_set == set()
     assert not settings.telegram_bot_token_configured
