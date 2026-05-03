@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     celery_broker_url: str | None = Field(default=None, alias="CELERY_BROKER_URL")
     celery_result_backend: str | None = Field(default=None, alias="CELERY_RESULT_BACKEND")
     tushare_token: str | None = Field(default=None, alias="TUSHARE_TOKEN")
+    telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_allowed_chat_ids: str | None = Field(
+        default=None,
+        alias="TELEGRAM_ALLOWED_CHAT_IDS",
+    )
+    telegram_webhook_secret: str | None = Field(
+        default=None,
+        alias="TELEGRAM_WEBHOOK_SECRET",
+    )
 
     @property
     def effective_celery_broker_url(self) -> str:
@@ -31,6 +40,25 @@ class Settings(BaseSettings):
     @property
     def effective_celery_result_backend(self) -> str:
         return self.celery_result_backend or self.redis_url
+
+    @property
+    def telegram_allowed_chat_id_set(self) -> set[str]:
+        if not self.telegram_allowed_chat_ids:
+            return set()
+
+        return {
+            chat_id.strip()
+            for chat_id in self.telegram_allowed_chat_ids.split(",")
+            if chat_id.strip()
+        }
+
+    @property
+    def telegram_bot_token_configured(self) -> bool:
+        return bool(self.telegram_bot_token and self.telegram_bot_token.strip())
+
+    @property
+    def telegram_webhook_secret_enabled(self) -> bool:
+        return bool(self.telegram_webhook_secret and self.telegram_webhook_secret.strip())
 
 
 @lru_cache

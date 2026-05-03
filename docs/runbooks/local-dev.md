@@ -123,7 +123,69 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/overview
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals
 ```
 
-## 5. Celery Worker / Beat
+## 5. Telegram Bot MVP 本地调试
+
+`.env` 支持三个可选配置：
+
+```dotenv
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ALLOWED_CHAT_IDS=
+TELEGRAM_WEBHOOK_SECRET=
+```
+
+本地开发时可以先不填 `TELEGRAM_BOT_TOKEN`。此时 webhook 不会调用 Telegram Bot API，而是返回 `preview`，方便直接看 Bot 会发送的中文内容。
+
+查看配置状态，确认不会泄露 token 或 secret：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/telegram/status
+```
+
+本地 preview `/help`：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":1,"message":{"message_id":1,"chat":{"id":1001},"text":"/help"}}'
+```
+
+本地 preview `/radar`：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":2,"message":{"message_id":2,"chat":{"id":1001},"text":"/radar"}}'
+```
+
+如果启用了 `TELEGRAM_WEBHOOK_SECRET`，本地请求也要带 header：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -Headers @{ "X-Telegram-Bot-Api-Secret-Token" = "<same-as-TELEGRAM_WEBHOOK_SECRET>" } `
+  -ContentType "application/json" `
+  -Body '{"update_id":3,"message":{"message_id":3,"chat":{"id":1001},"text":"/signals"}}'
+```
+
+部署到公网 HTTPS 后设置 webhook：
+
+```powershell
+$BotToken = "<telegram-bot-token>"
+$WebhookUrl = "https://your-domain.example/telegram/webhook"
+$WebhookSecret = "<same-as-TELEGRAM_WEBHOOK_SECRET>"
+
+Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook" `
+  -Body @{ url = $WebhookUrl; secret_token = $WebhookSecret }
+```
+
+删除 webhook：
+
+```powershell
+Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/deleteWebhook"
+```
+
+Telegram 输出只用于关注、观察、风险和复盘；P0/P1/P2、生命周期和审查状态都来自后端服务结果。
+
+## 6. Celery Worker / Beat
 
 当前 Celery 已有配置壳，Redis 用作 broker/result。需要调试后台任务时再启动：
 
@@ -134,9 +196,9 @@ uv run celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
 
 如果只是手动采集和扫描，可以先不用 Celery，直接跑 `infra/scripts` 或 API。
 
-## 6. 数据库操作
+## 7. 数据库操作
 
-### 6.1 查看容器状态
+### 7.1 查看容器状态
 
 ```powershell
 docker compose ps
@@ -144,7 +206,7 @@ docker compose ps
 
 期望 `postgres` 和 `redis` 都是 `healthy`。
 
-### 6.2 进入 PostgreSQL
+### 7.2 进入 PostgreSQL
 
 ```powershell
 docker compose exec postgres psql -U baizefindb -d baizefindb
@@ -159,7 +221,7 @@ select id, endpoint, status, row_count, created_at from provider_fetch_logs orde
 select id, status, started_at, finished_at from radar_scan_batches order by id desc limit 10;
 ```
 
-### 6.3 重置本地数据库
+### 7.3 重置本地数据库
 
 会删除本地 Docker volume 内的数据，只在开发环境使用：
 
@@ -169,7 +231,7 @@ docker compose up -d postgres redis
 uv run alembic upgrade head
 ```
 
-## 7. Redis 操作
+## 8. Redis 操作
 
 进入 Redis：
 
@@ -183,7 +245,7 @@ docker compose exec redis redis-cli
 docker compose exec redis redis-cli FLUSHALL
 ```
 
-## 8. 常见故障
+## 9. 常见故障
 
 ### Docker Desktop 卡在 starting
 
@@ -232,7 +294,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 
 如果单个接口失败，Provider 采集应记录 `failure` 和数据质量标签，不应该拖垮主服务。
 
-## 9. 开发完成前检查
+## 10. 开发完成前检查
 
 每次提交前至少跑：
 
@@ -255,7 +317,7 @@ uv run alembic upgrade head --sql
 - 是否隐藏原始 URL、域名、原文摘录、内部证据细节。
 - 是否避免强买卖、保证收益、诱导交易语言。
 
-### 9.1 模块阶段完成后的 git 版本管理
+### 10.1 模块阶段完成后的 git 版本管理
 
 后续 AI 协作默认策略：模块设计或开发阶段完成后，AI 自动做 git commit，不再每次向用户确认；但不自动 push。
 

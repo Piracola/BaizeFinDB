@@ -1,6 +1,6 @@
 # 当前 API 文档
 
-本文档记录 M4 阶段已经可用的 API。示例默认 API 地址为 `http://127.0.0.1:8000`。
+本文档记录当前已经可用的 API。示例默认 API 地址为 `http://127.0.0.1:8000`。
 
 ## 1. 调用顺序
 
@@ -19,6 +19,8 @@ GET  /radar/signals/{signal_id}
 POST /radar/signals/{signal_id}/review
 GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
+GET  /telegram/status
+POST /telegram/webhook
 ```
 
 ## 2. 健康检查
@@ -347,15 +349,82 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 - 精确置信度。
 - 来源时间。
 
-## 6. 错误码约定
+## 6. Telegram Bot API
+
+Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期或审查状态。
+
+### `GET /telegram/status`
+
+用途：查看 Telegram 配置是否启用，不返回 token 或 secret 原文。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/telegram/status
+```
+
+示例响应：
+
+```json
+{
+  "bot_token_configured": false,
+  "allowed_chat_count": 0,
+  "webhook_secret_enabled": false
+}
+```
+
+### `POST /telegram/webhook`
+
+用途：接收 Telegram update JSON，处理 `message.text` 命令。
+
+支持命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| `/start`、`/help` | 查看命令说明和免责声明 |
+| `/health` | 查看 API、数据库、Redis 简要状态 |
+| `/radar` | 查看雷达总览：P0/P1/P2、最新扫描、主题数量 |
+| `/signals` | 查看最近信号折叠摘要 |
+| `/signal <id>` | 查看单个信号复盘、生命周期、审查状态和证据摘要 |
+
+本地不配置 `TELEGRAM_BOT_TOKEN` 时，接口返回 `preview`，不会调用 Telegram Bot API：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":1,"message":{"message_id":1,"chat":{"id":1001},"text":"/signals"}}'
+```
+
+配置 `TELEGRAM_WEBHOOK_SECRET` 后，请求必须携带 Telegram secret header：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -Headers @{ "X-Telegram-Bot-Api-Secret-Token" = "<same-as-TELEGRAM_WEBHOOK_SECRET>" } `
+  -ContentType "application/json" `
+  -Body '{"update_id":2,"message":{"message_id":2,"chat":{"id":1001},"text":"/radar"}}'
+```
+
+部署后设置 Telegram webhook：
+
+```powershell
+$BotToken = "<telegram-bot-token>"
+$WebhookUrl = "https://your-domain.example/telegram/webhook"
+$WebhookSecret = "<same-as-TELEGRAM_WEBHOOK_SECRET>"
+
+Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook" `
+  -Body @{ url = $WebhookUrl; secret_token = $WebhookSecret }
+```
+
+Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
+
+## 7. 错误码约定
 
 | 错误码 | 常见原因 | 调用方处理 |
 | --- | --- | --- |
 | `404` | 扫描或信号不存在；未知 endpoint | 提示用户资源不存在，必要时刷新列表 |
 | `409` | 信号不满足公开分享条件 | 调用 `share-preview` 查看阻断原因 |
+| `403` | Telegram webhook secret 不匹配 | 检查 `TELEGRAM_WEBHOOK_SECRET` 和请求 header |
 | `503` | PostgreSQL 或 Redis 不可用 | 检查 Docker、迁移和 `/health/ready` |
 
-## 7. 接 Telegram / Web / 报告时的推荐用法
+## 8. 接 Telegram / Web / 报告时的推荐用法
 
 - 首页/总览：用 `GET /radar/overview`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。

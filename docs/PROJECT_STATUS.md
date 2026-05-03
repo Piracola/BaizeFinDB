@@ -8,6 +8,8 @@
 
 项目已经具备后端骨架、AKShare 最小数据底座、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、Provider 数据质量透传、轻量规则审查、内部分享预检和公开分享 payload。
 
+Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要和单条信号复盘；Telegram 仍只消费后端结果，不重新计算雷达等级。
+
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
 下一阶段开发基线已修正为 **A 股 5 分钟资金主线雷达 MVP**。Telegram、Web、报告、持仓自选、日报周报和评分都围绕雷达结果展开，不再按 Telegram / 报告 / Web 三选一推进。
@@ -39,7 +41,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 未开始 | 先补雷达主线闭环、持仓自选、折叠推送、quick/standard 报告、Web 四页、日报周报和基础评分；Telegram/Web/报告只消费后端结果。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 和 Telegram Bot MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、折叠推送、quick/standard 报告、日报周报和基础评分。 |
 
 ## 当前可用 API
 
@@ -68,6 +70,11 @@ Radar：
 - `GET /radar/signals/{signal_id}/reviews`
 - `GET /radar/signals/{signal_id}/share-preview`
 - `GET /radar/signals/{signal_id}/share-payload`
+
+Telegram：
+
+- `GET /telegram/status`
+- `POST /telegram/webhook`
 
 ## 当前数据表
 

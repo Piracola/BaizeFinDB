@@ -1,0 +1,296 @@
+from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+from app.core.config import get_settings
+from app.db.base import Base
+from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
+from app.db.session import get_db_session
+from app.main import create_app
+from app.telegram.formatter import format_radar_overview, format_signal_detail, format_signals
+
+
+@pytest.fixture(autouse=True)
+def telegram_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest_asyncio.fixture
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    try:
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncClient]:
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_telegram_status_does_not_leak_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:secret-token")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001,1002")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "hook-secret")
+    get_settings.cache_clear()
+
+    response = await client.get("/telegram/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "bot_token_configured": True,
+        "allowed_chat_count": 2,
+        "webhook_secret_enabled": True,
+    }
+    assert "123456:secret-token" not in response.text
+    assert "hook-secret" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient) -> None:
+    response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["accepted"] is True
+    assert data["authorized"] is True
+    assert data["delivery"] == "preview"
+    assert data["sent"] is False
+    assert "可用命令" in data["preview"]
+    assert "不构成投资建议" in data["preview"]
+    for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
+        assert forbidden not in data["preview"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_unauthorized_chat_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001,1002")
+    get_settings.cache_clear()
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/help", chat_id=9999))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["accepted"] is False
+    assert data["authorized"] is False
+    assert data["delivery"] == "skipped"
+    assert data["sent"] is False
+    assert "白名单" in data["preview"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_webhook_secret_is_required_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "hook-secret")
+    get_settings.cache_clear()
+
+    forbidden_response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+    allowed_response = await client.post(
+        "/telegram/webhook",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "hook-secret"},
+        json=_telegram_update("/help"),
+    )
+
+    assert forbidden_response.status_code == 403
+    assert allowed_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_telegram_health_command_reports_dependency_status(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    async def ok_check() -> dict[str, str]:
+        return {"status": "ok"}
+
+    monkeypatch.setattr("app.telegram.service.check_database", ok_check)
+    monkeypatch.setattr("app.telegram.service.check_redis", ok_check)
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/health"))
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "健康状态" in preview
+    assert "API：正常" in preview
+    assert "数据库：正常" in preview
+    assert "Redis：正常" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_radar_command_handles_empty_data(client: AsyncClient) -> None:
+    response = await client.post("/telegram/webhook", json=_telegram_update("/radar"))
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "雷达总览" in preview
+    assert "P0：0 / P1：0 / P2：0" in preview
+    assert "最新扫描：暂无" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_signals_and_signal_detail_commands(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+
+    signals_response = await client.post("/telegram/webhook", json=_telegram_update("/signals"))
+    signal_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update(f"/signal {signal_id}"),
+    )
+
+    assert signals_response.status_code == 200
+    signals_preview = signals_response.json()["preview"]
+    assert "最近信号折叠摘要" in signals_preview
+    assert f"#{signal_id}" in signals_preview
+    assert "AI Applications" in signals_preview
+
+    assert signal_response.status_code == 200
+    signal_preview = signal_response.json()["preview"]
+    assert f"信号 #{signal_id} 复盘" in signal_preview
+    assert "生命周期：发展观察" in signal_preview
+    assert "审查状态：候选待审" in signal_preview
+    assert "证据数量：1 条" in signal_preview
+    assert "证据 1：市场快照" in signal_preview
+
+
+def test_telegram_formatter_accepts_enum_value_strings() -> None:
+    signal = SimpleNamespace(
+        id=7,
+        priority="P1",
+        subject_name="AI Applications",
+        lifecycle_stage="developing",
+        review_status="candidate",
+        evidences=[
+            SimpleNamespace(
+                evidence_type="market_snapshot",
+                source_name="akshare",
+                freshness="snapshot_latest",
+            ),
+        ],
+    )
+    overview = SimpleNamespace(
+        priority_counts={"P0": 0, "P1": 1, "P2": 0},
+        subject_count=1,
+        latest_scan=SimpleNamespace(
+            id=3,
+            status="success",
+            signals=[signal],
+            started_at=datetime(2026, 5, 3, 9, 30, tzinfo=UTC),
+        ),
+    )
+
+    signals_preview = format_signals([signal])
+    signal_preview = format_signal_detail(signal)
+    overview_preview = format_radar_overview(overview)
+
+    assert "生命周期：发展观察" in signals_preview
+    assert "审查：候选待审" in signals_preview
+    assert "生命周期：发展观察" in signal_preview
+    assert "审查状态：候选待审" in signal_preview
+    assert "最新扫描：#3 完成" in overview_preview
+
+
+def _telegram_update(text: str, chat_id: int = 1001) -> dict[str, object]:
+    return {
+        "update_id": 1,
+        "message": {
+            "message_id": 10,
+            "chat": {"id": chat_id},
+            "text": text,
+        },
+    }
+
+
+async def _seed_signal(session_factory: async_sessionmaker[AsyncSession]) -> int:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        scan = RadarScanBatch(
+            status="success",
+            started_at=now,
+            finished_at=now,
+            source_snapshot_ids=[],
+            summary={"priority_counts": {"P0": 0, "P1": 1, "P2": 0}},
+        )
+        session.add(scan)
+        await session.flush()
+
+        signal = RadarSignal(
+            batch_id=scan.id,
+            signal_key="akshare:test:AI Applications",
+            subject_type="sector_concept",
+            subject_code="GN001",
+            subject_name="AI Applications",
+            priority="P1",
+            lifecycle_stage="developing",
+            review_status="candidate",
+            title="P1 radar candidate",
+            summary="Ignored by Telegram formatter.",
+            metrics={"pct_change": 3.2},
+            evidence_count=1,
+        )
+        session.add(signal)
+        await session.flush()
+
+        session.add(
+            SignalEvidence(
+                signal_id=signal.id,
+                evidence_type="market_snapshot",
+                source_name="akshare",
+                source_ref="market_snapshot:1",
+                source_time=None,
+                collected_at=now,
+                raw_excerpt="internal raw excerpt",
+                normalized_summary="provider snapshot summary",
+                confidence=0.8,
+                freshness="snapshot_latest",
+                details={"endpoint": "stock_board_concept_name_em"},
+                public_share_policy="internal_summary_only",
+            ),
+        )
+        await session.commit()
+        return signal.id

@@ -36,6 +36,9 @@
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
+- Telegram Bot MVP Webhook 模块：只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2
+- `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
 - 雷达扫描失败会记录 `failure`、`error_message` 和失败摘要，避免普通异常留下 `running` 批次
@@ -57,7 +60,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 未开始 | 下一阶段基线是 A 股 5 分钟资金主线雷达闭环；Telegram、Web、报告、持仓自选、日报周报和评分围绕雷达结果展开。 |
+| M5 | 进行中 | 已有静态 Web 和 Telegram Bot MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、报告、日报周报和评分。 |
 
 ## 本地启动
 
@@ -89,6 +92,39 @@ uv run uvicorn app.main:app --reload
 如果 PostgreSQL / Redis 还没启动，`/health` 仍会正常，`/health/ready` 会显示依赖未就绪。
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
+
+## Telegram Bot MVP
+
+`.env` 可选配置：
+
+```dotenv
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ALLOWED_CHAT_IDS=
+TELEGRAM_WEBHOOK_SECRET=
+```
+
+- `TELEGRAM_BOT_TOKEN` 留空时，`POST /telegram/webhook` 不会调用 Telegram Bot API，而是返回 `preview`，方便本地测试。
+- `TELEGRAM_ALLOWED_CHAT_IDS` 可填逗号分隔的 chat id；配置后只有白名单 chat 会被处理。
+- `TELEGRAM_WEBHOOK_SECRET` 配置后，Webhook 必须携带 `X-Telegram-Bot-Api-Secret-Token`。
+
+本地 preview 示例：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":1,"message":{"message_id":1,"chat":{"id":1001},"text":"/radar"}}'
+```
+
+部署到公网 HTTPS 后，用占位 token 设置 Telegram webhook：
+
+```powershell
+$BotToken = "<telegram-bot-token>"
+$WebhookUrl = "https://your-domain.example/telegram/webhook"
+$WebhookSecret = "<same-as-TELEGRAM_WEBHOOK_SECRET>"
+
+Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook" `
+  -Body @{ url = $WebhookUrl; secret_token = $WebhookSecret }
+```
 
 ## 启动依赖服务
 
