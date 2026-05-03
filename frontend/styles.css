@@ -202,7 +202,7 @@ h3 {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 22px;
   border-bottom: 1px solid var(--line);
@@ -252,7 +252,8 @@ h3 {
 }
 
 .portfolio-panel,
-.reports-panel {
+.reports-panel,
+.analytics-panel {
   grid-column: 1 / -1;
 }
 
@@ -284,6 +285,7 @@ h3 {
 .evidence-card,
 .portfolio-card,
 .report-card,
+.score-card,
 .compact-form,
 .latest-scan,
 .kv {
@@ -370,10 +372,18 @@ h3 {
 }
 
 .portfolio-forms,
-.portfolio-columns {
+.portfolio-columns,
+.analytics-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.analytics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .compact-form {
@@ -400,6 +410,29 @@ h3 {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
+}
+
+.compact-subject {
+  margin-top: 10px;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.score-card {
+  display: grid;
+  gap: 4px;
+}
+
+.score-number {
+  color: #6d5316;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
 }
 
 details {
@@ -536,7 +569,7 @@ pre {
   }
 
   .module-nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .topbar,
@@ -547,7 +580,8 @@ pre {
   .detail-panel,
   .signals-panel,
   .portfolio-panel,
-  .reports-panel {
+  .reports-panel,
+  .analytics-panel {
     grid-column: auto;
     grid-row: auto;
   }
@@ -569,7 +603,9 @@ pre {
   .action-strip,
   .module-nav,
   .portfolio-forms,
-  .portfolio-columns {
+  .portfolio-columns,
+  .analytics-grid,
+  .score-grid {
     grid-template-columns: 1fr;
   }
 

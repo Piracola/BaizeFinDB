@@ -22,6 +22,7 @@
         <button type="button" data-scroll-target="detail-panel">DETAIL</button>
         <button type="button" data-scroll-target="portfolio-panel">PORTFOLIO</button>
         <button type="button" data-scroll-target="reports-panel">REPORTS</button>
+        <button type="button" data-scroll-target="analytics-panel">ANALYTICS</button>
       </nav>
     </aside>
 
@@ -38,7 +39,7 @@
             type="text"
             autocomplete="off"
             spellcheck="false"
-            placeholder="radar / scan / fetch / portfolio / reports"
+            placeholder="radar / scan / fetch / portfolio / reports / daily / score"
           />
           <button id="command-run-button" type="button">执行</button>
         </div>
@@ -51,6 +52,7 @@
         <button type="button" data-scroll-target="signals-panel">F4 信号</button>
         <button type="button" data-scroll-target="portfolio-panel">F5 持仓</button>
         <button type="button" data-scroll-target="reports-panel">F6 报告</button>
+        <button type="button" data-scroll-target="analytics-panel">F7 周期</button>
       </div>
 
       <main class="layout">
@@ -177,6 +179,28 @@
           <span class="muted">来自 /reports</span>
         </div>
         <div id="reports-list" class="report-list"></div>
+      </section>
+
+      <section id="analytics-panel" class="panel analytics-panel" aria-labelledby="analytics-title">
+        <div class="section-heading">
+          <h2 id="analytics-title">周期汇总 / 综合评分</h2>
+          <span class="muted">来自 /reports/periodic 与 /scores</span>
+        </div>
+        <div class="analytics-actions">
+          <button id="daily-report-button" type="button">生成日报</button>
+          <button id="weekly-report-button" type="button">生成周报</button>
+          <button id="score-signal-button" type="button">生成当前信号评分</button>
+        </div>
+        <div class="analytics-grid">
+          <section>
+            <h3>周期汇总</h3>
+            <div id="periodic-report" class="report-list"></div>
+          </section>
+          <section>
+            <h3>信号评分</h3>
+            <div id="score-run" class="report-list"></div>
+          </section>
+        </div>
       </section>
       </main>
 

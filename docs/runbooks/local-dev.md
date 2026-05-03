@@ -40,7 +40,7 @@ uv run uvicorn app.main:app --reload
 http://127.0.0.1:8000/
 ```
 
-Web 终端工作台当前可查看 API 状态、雷达总览、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告。顶部命令栏支持 `radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级。
+Web 终端工作台当前可查看 API 状态、雷达总览、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告、日报/周报汇总和单信号综合评分。顶部命令栏支持 `radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports`、`daily`、`weekly`、`score` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级或评分。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health

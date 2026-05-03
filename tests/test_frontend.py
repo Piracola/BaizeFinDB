@@ -15,6 +15,8 @@ def test_frontend_index_returns_static_page() -> None:
     assert "command-input" in response.text
     assert "持仓 / 自选" in response.text
     assert "报告列表" in response.text
+    assert "周期汇总 / 综合评分" in response.text
+    assert "daily / score" in response.text
 
 
 def test_frontend_assets_are_served() -> None:
@@ -27,6 +29,8 @@ def test_frontend_assets_are_served() -> None:
     assert "refreshAll" in js_response.text
     assert "loadPortfolio" in js_response.text
     assert "createReport" in js_response.text
+    assert "loadPeriodicReport" in js_response.text
+    assert "scoreSelectedSignal" in js_response.text
     assert "executeCommand" in js_response.text
     assert "scrollToPanel" in js_response.text
     assert css_response.status_code == 200
@@ -34,3 +38,5 @@ def test_frontend_assets_are_served() -> None:
     assert "status-panel" in css_response.text
     assert "portfolio-panel" in css_response.text
     assert "reports-panel" in css_response.text
+    assert "analytics-panel" in css_response.text
+    assert "score-grid" in css_response.text

@@ -6,6 +6,9 @@ const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   runScanButton: document.querySelector("#run-scan-button"),
   fetchAkshareButton: document.querySelector("#fetch-akshare-button"),
+  dailyReportButton: document.querySelector("#daily-report-button"),
+  weeklyReportButton: document.querySelector("#weekly-report-button"),
+  scoreSignalButton: document.querySelector("#score-signal-button"),
   commandInput: document.querySelector("#command-input"),
   commandRunButton: document.querySelector("#command-run-button"),
   lastUpdated: document.querySelector("#last-updated"),
@@ -22,12 +25,17 @@ const elements = {
   holdingsList: document.querySelector("#holdings-list"),
   watchlistList: document.querySelector("#watchlist-list"),
   reportsList: document.querySelector("#reports-list"),
+  periodicReport: document.querySelector("#periodic-report"),
+  scoreRun: document.querySelector("#score-run"),
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   elements.refreshButton.addEventListener("click", refreshAll);
   elements.runScanButton.addEventListener("click", runRadarScan);
   elements.fetchAkshareButton.addEventListener("click", fetchMinimalAkshare);
+  elements.dailyReportButton.addEventListener("click", () => loadPeriodicReport("daily"));
+  elements.weeklyReportButton.addEventListener("click", () => loadPeriodicReport("weekly"));
+  elements.scoreSignalButton.addEventListener("click", scoreSelectedSignal);
   elements.commandRunButton.addEventListener("click", executeCommand);
   elements.commandInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -40,6 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.portfolioUserKey.addEventListener("change", () => {
     loadPortfolio();
     loadReports();
+    loadPeriodicReport("daily");
   });
   elements.holdingForm.addEventListener("submit", addHolding);
   elements.watchlistForm.addEventListener("submit", addWatchlistItem);
@@ -52,7 +61,13 @@ async function refreshAll() {
 
   const isReady = await loadReadyStatus();
   if (isReady) {
-    await Promise.all([loadOverview(), loadSignals(), loadPortfolio(), loadReports()]);
+    await Promise.all([
+      loadOverview(),
+      loadSignals(),
+      loadPortfolio(),
+      loadReports(),
+      loadPeriodicReport("daily", { silent: true }),
+    ]);
     showMessage("info", "刷新完成。");
   } else {
     renderRadarUnavailable("API 依赖未就绪。确认 PostgreSQL、Redis 和迁移状态后再刷新。");
@@ -121,6 +136,21 @@ async function loadReports() {
   }
 }
 
+async function loadPeriodicReport(period, options = {}) {
+  try {
+    const report = await fetchJson(`/reports/periodic${periodicQuery(period)}`);
+    renderPeriodicReport(report);
+    if (!options.silent) {
+      showMessage("info", `${period === "weekly" ? "周报" : "日报"}汇总已生成。`);
+    }
+  } catch (error) {
+    elements.periodicReport.innerHTML = emptyState(`周期汇总暂不可用：${formatError(error)}`);
+    if (!options.silent) {
+      showMessage("error", `周期汇总失败：${formatError(error)}`);
+    }
+  }
+}
+
 function renderRadarUnavailable(reason) {
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.latestScan.innerHTML = emptyState("依赖服务恢复后，先触发采集或运行雷达扫描。");
@@ -129,6 +159,8 @@ function renderRadarUnavailable(reason) {
   elements.holdingsList.innerHTML = emptyState("依赖服务恢复后再读取持仓。");
   elements.watchlistList.innerHTML = emptyState("依赖服务恢复后再读取自选。");
   elements.reportsList.innerHTML = emptyState("依赖服务恢复后再读取报告。");
+  elements.periodicReport.innerHTML = emptyState("依赖服务恢复后再读取周期汇总。");
+  elements.scoreRun.innerHTML = emptyState("依赖服务恢复后再读取评分。");
 }
 
 async function loadSignalDetail(signalId) {
@@ -260,10 +292,31 @@ async function createReport(reportType) {
   }
 }
 
+async function scoreSelectedSignal() {
+  if (!state.selectedSignalId) {
+    showMessage("error", "请先选择一个信号。");
+    return;
+  }
+
+  setButtonsBusy(true);
+  showMessage("info", `正在生成信号 #${state.selectedSignalId} 综合评分。`);
+
+  try {
+    const scoreRun = await postJson(`/scores/signals/${encodeURIComponent(state.selectedSignalId)}`);
+    renderScores(scoreRun);
+    showMessage("info", `信号 #${state.selectedSignalId} 综合评分已生成。`);
+  } catch (error) {
+    elements.scoreRun.innerHTML = emptyState(`评分暂不可用：${formatError(error)}`);
+    showMessage("error", `生成评分失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports。");
+    showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score。");
     return;
   }
 
@@ -282,7 +335,16 @@ function executeCommand() {
     watchlist: () => scrollToPanel("portfolio-panel"),
     reports: () => scrollToPanel("reports-panel"),
     report: () => scrollToPanel("reports-panel"),
-    help: () => showMessage("info", "可执行命令：radar、scan、fetch、signals、portfolio、reports。"),
+    daily: () => loadPeriodicReport("daily"),
+    weekly: () => loadPeriodicReport("weekly"),
+    score: scoreSelectedSignal,
+    analytics: () => scrollToPanel("analytics-panel"),
+    summary: () => scrollToPanel("analytics-panel"),
+    help: () =>
+      showMessage(
+        "info",
+        "可执行命令：radar、scan、fetch、signals、portfolio、reports、daily、weekly、score。",
+      ),
   };
 
   const action = commands[name];
@@ -448,6 +510,7 @@ function renderSignalDetail(detail) {
       <div class="report-actions">
         <button type="button" data-report-type="quick">生成 Quick Report</button>
         <button type="button" data-report-type="standard">生成 Standard Report</button>
+        <button type="button" data-score-signal="true">生成综合评分</button>
       </div>
     </article>
     <div class="detail-grid">
@@ -489,6 +552,7 @@ function renderSignalDetail(detail) {
   elements.signalDetail.querySelectorAll("[data-report-type]").forEach((button) => {
     button.addEventListener("click", () => createReport(button.dataset.reportType));
   });
+  elements.signalDetail.querySelector("[data-score-signal]").addEventListener("click", scoreSelectedSignal);
 }
 
 function renderHoldings(holdings) {
@@ -578,6 +642,78 @@ function renderReports(reports) {
     .join("");
 }
 
+function renderPeriodicReport(report) {
+  const subjects = Array.isArray(report.top_subjects) ? report.top_subjects : [];
+  const counts = report.priority_counts || {};
+  elements.periodicReport.innerHTML = `
+    <article class="report-card">
+      <div class="meta-row">
+        <span class="badge">${escapeHtml(report.report_type === "weekly" ? "周报" : "日报")}</span>
+        <span class="badge">信号 ${escapeHtml(report.signal_count ?? 0)}</span>
+        <span class="badge">报告 ${escapeHtml(report.report_count ?? 0)}</span>
+        <span class="badge">推送 ${escapeHtml(report.push_count ?? 0)}</span>
+      </div>
+      <h3>${escapeHtml(report.report_type === "weekly" ? "周报汇总" : "日报汇总")}</h3>
+      <p class="summary">${escapeHtml(report.summary || "暂无摘要。")}</p>
+      <div class="meta-row">
+        <span class="badge badge-p0">P0 ${escapeHtml(counts.P0 ?? 0)}</span>
+        <span class="badge badge-p1">P1 ${escapeHtml(counts.P1 ?? 0)}</span>
+        <span class="badge badge-p2">P2 ${escapeHtml(counts.P2 ?? 0)}</span>
+      </div>
+      ${
+        subjects.length === 0
+          ? emptyState("暂无重点主题。")
+          : subjects
+              .map((subject) => {
+                return `
+                  <article class="subject-card compact-subject">
+                    <div class="meta-row">
+                      <span class="badge ${priorityBadgeClass(subject.priority)}">${escapeHtml(subject.priority)}</span>
+                      <span class="badge">${escapeHtml(label(subject.lifecycle_stage))}</span>
+                      <span class="badge">${escapeHtml(label(subject.review_status))}</span>
+                    </div>
+                    <h3>#${escapeHtml(subject.signal_id)} ${escapeHtml(subject.subject_name)}</h3>
+                  </article>
+                `;
+              })
+              .join("")
+      }
+    </article>
+  `;
+}
+
+function renderScores(scoreRun) {
+  const records = Array.isArray(scoreRun.records) ? scoreRun.records : [];
+  if (records.length === 0) {
+    elements.scoreRun.innerHTML = emptyState("暂无评分记录。");
+    return;
+  }
+
+  elements.scoreRun.innerHTML = `
+    <article class="report-card">
+      <div class="meta-row">
+        <span class="badge">信号 #${escapeHtml(scoreRun.signal_id)}</span>
+        <span class="badge">后端评分</span>
+      </div>
+      <h3>1d / 3d / 5d / 10d 综合评分</h3>
+      <div class="score-grid">
+        ${records
+          .map((record) => {
+            return `
+              <article class="score-card">
+                <strong>${escapeHtml(record.window_days)}d</strong>
+                <div class="score-number">${escapeHtml(formatScore(record.composite_score))}</div>
+                <span class="muted">${escapeHtml(label(record.score_status))}</span>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+      <p class="summary">评分综合优先级、生命周期、审查、证据和连续性；不是价格回测或交易建议。</p>
+    </article>
+  `;
+}
+
 async function fetchJson(path, options = {}) {
   const response = await fetch(path, {
     headers: { Accept: "application/json" },
@@ -595,15 +731,20 @@ async function fetchJson(path, options = {}) {
   return payload;
 }
 
-async function postJson(path, payload) {
-  return fetchJson(path, {
+async function postJson(path, payload = null) {
+  const options = {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
-  });
+  };
+
+  if (payload !== null) {
+    options.body = JSON.stringify(payload);
+  }
+
+  return fetchJson(path, options);
 }
 
 async function readPayload(response) {
@@ -623,6 +764,9 @@ function setButtonsBusy(isBusy) {
   elements.refreshButton.disabled = isBusy;
   elements.runScanButton.disabled = isBusy;
   elements.fetchAkshareButton.disabled = isBusy;
+  elements.dailyReportButton.disabled = isBusy;
+  elements.weeklyReportButton.disabled = isBusy;
+  elements.scoreSignalButton.disabled = isBusy;
   elements.commandRunButton.disabled = isBusy;
   elements.holdingForm.querySelector("button").disabled = isBusy;
   elements.watchlistForm.querySelector("button").disabled = isBusy;
@@ -656,6 +800,7 @@ function label(value) {
     blocked: "已阻断",
     needs_human_review: "需人工复核",
     generated: "已生成",
+    pending_window: "窗口未结束",
     ignition: "点火",
     developing: "发酵",
     divergence: "分歧",
@@ -674,6 +819,10 @@ function label(value) {
 function portfolioQuery() {
   const userKey = elements.portfolioUserKey.value.trim() || "default";
   return `?user_key=${encodeURIComponent(userKey)}`;
+}
+
+function periodicQuery(period) {
+  return `${portfolioQuery()}&period=${encodeURIComponent(period)}`;
 }
 
 function formPayload(form) {
@@ -714,6 +863,15 @@ function formatOptionalNumber(value) {
   }
 
   return Number(value).toString();
+}
+
+function formatScore(value) {
+  const score = Number(value);
+  if (Number.isNaN(score)) {
+    return "-";
+  }
+
+  return score.toFixed(2);
 }
 
 function formatDate(value) {

@@ -678,7 +678,8 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
-- 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告。
+- 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；用 `GET /reports/periodic` 展示日报/周报。
+- 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回结果。
 - 内部调试：用 `share-preview`。
 - 公开展示：只能用 `share-payload`。
 - 触发扫描：先保证 Provider 有最新快照，再调用 `POST /radar/scans/run`。
