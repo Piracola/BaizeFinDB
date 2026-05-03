@@ -9,6 +9,8 @@ def test_settings_defaults() -> None:
     assert settings.database_url.startswith("postgresql+asyncpg://")
     assert settings.effective_celery_broker_url == settings.redis_url
     assert settings.radar_scan_interval_seconds == 300
+    assert settings.radar_continuous_p1_trigger_count == 3
+    assert settings.radar_continuity_window_minutes == 30
     assert settings.telegram_bot_token is None
     assert settings.telegram_allowed_chat_id_set == set()
     assert not settings.telegram_bot_token_configured
@@ -18,10 +20,14 @@ def test_settings_defaults() -> None:
 
 def test_settings_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("RADAR_CONTINUOUS_P1_TRIGGER_COUNT", "2")
+    monkeypatch.setenv("RADAR_CONTINUITY_WINDOW_MINUTES", "15")
 
     settings = Settings()
 
     assert settings.app_env == "test"
+    assert settings.radar_continuous_p1_trigger_count == 2
+    assert settings.radar_continuity_window_minutes == 15
 
 
 def test_settings_reads_telegram_environment(monkeypatch) -> None:

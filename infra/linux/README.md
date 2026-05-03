@@ -48,6 +48,8 @@ Required notes:
 - `docker-compose.server.yml` overrides `DATABASE_URL` and `REDIS_URL` for the API container so it reaches `postgres` and `redis` by compose service name.
 - `SERVER_DATABASE_URL` and `SERVER_REDIS_URL` are optional escape hatches for a later hardened setup. Use placeholders in docs, never real values.
 - `RADAR_SCAN_INTERVAL_SECONDS` controls the Celery beat interval for the collect-then-scan task. The default is `300`.
+- `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` controls how many consecutive P1 scans create a quick-report candidate. The default is `3`.
+- `RADAR_CONTINUITY_WINDOW_MINUTES` controls the continuity window for repeated P1 checks. The default is `30`.
 - `TELEGRAM_PUSH_ENABLED=true` makes the collect-then-scan task send a folded Telegram radar push after each successful scan. Keep it `false` until token, chat whitelist, and webhook secret are ready.
 
 Example placeholders:
@@ -61,6 +63,8 @@ TELEGRAM_PUSH_ENABLED=false
 SERVER_DATABASE_URL=postgresql+asyncpg://<db-user>:<db-password>@postgres:5432/<db-name>
 SERVER_REDIS_URL=redis://redis:6379/0
 RADAR_SCAN_INTERVAL_SECONDS=300
+RADAR_CONTINUOUS_P1_TRIGGER_COUNT=3
+RADAR_CONTINUITY_WINDOW_MINUTES=30
 ```
 
 For the current skeleton, the bundled PostgreSQL service still uses the existing

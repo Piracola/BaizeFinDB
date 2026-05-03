@@ -27,6 +27,16 @@ class Settings(BaseSettings):
         gt=0,
         alias="RADAR_SCAN_INTERVAL_SECONDS",
     )
+    radar_continuous_p1_trigger_count: int = Field(
+        default=3,
+        gt=0,
+        alias="RADAR_CONTINUOUS_P1_TRIGGER_COUNT",
+    )
+    radar_continuity_window_minutes: int = Field(
+        default=30,
+        gt=0,
+        alias="RADAR_CONTINUITY_WINDOW_MINUTES",
+    )
     tushare_token: str | None = Field(default=None, alias="TUSHARE_TOKEN")
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_allowed_chat_ids: str | None = Field(

@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.provider_models import DataQualityCheck, MarketSnapshot
 from app.db.radar_models import RadarScanBatch, RadarSignal
@@ -646,6 +647,56 @@ async def test_radar_scan_marks_consecutive_p1_quick_report_candidate(
     assert continuity["consecutive_p1_count"] == 3
     assert continuity["quick_report_candidate"] is True
     assert "continuous_p1_trigger" in continuity["continuity_reasons"]
+
+
+@pytest.mark.asyncio
+async def test_radar_scan_uses_configured_p1_trigger_count(
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RADAR_CONTINUOUS_P1_TRIGGER_COUNT", "2")
+    get_settings.cache_clear()
+
+    try:
+        async with session_factory() as session:
+            session.add(
+                MarketSnapshot(
+                    provider_name="akshare",
+                    endpoint="stock_board_concept_name_em",
+                    market="A_SHARE",
+                    snapshot_type="sector_concept",
+                    source_time=None,
+                    collected_at=datetime.now(UTC),
+                    row_count=1,
+                    raw_summary={"columns": []},
+                    normalized_rows=[
+                        {
+                            "sector_code": "GN001",
+                            "sector_name": "AI Applications",
+                            "pct_change": 3.2,
+                            "turnover_rate": 3.1,
+                            "rising_count": 18,
+                            "falling_count": 8,
+                            "leading_stock": "Example AI",
+                            "leading_stock_pct_change": 7.5,
+                        }
+                    ],
+                    normalization_version="test",
+                )
+            )
+            await session.commit()
+
+            await run_radar_scan(session)
+            scan = await run_radar_scan(session)
+    finally:
+        get_settings.cache_clear()
+
+    assert scan.summary["continuous_p1_trigger_count"] == 2
+    assert scan.summary["quick_report_candidate_count"] == 1
+    assert scan.signals[0].priority == RadarPriority.P1
+    continuity = scan.signals[0].metrics["continuity"]
+    assert continuity["consecutive_p1_count"] == 2
+    assert continuity["quick_report_candidate"] is True
 
 
 @pytest.mark.asyncio

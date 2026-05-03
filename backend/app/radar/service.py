@@ -6,6 +6,7 @@ from sqlalchemy import desc, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.provider_models import DataQualityCheck, MarketSnapshot
 from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
 from app.radar.rules import RadarRuleResult, classify_sector_movement
@@ -27,8 +28,6 @@ RADAR_SOURCE_ENDPOINTS = (
     "stock_board_concept_name_em",
 )
 MAX_SIGNALS_PER_SCAN = 20
-CONTINUOUS_P1_TRIGGER_COUNT = 3
-CONTINUITY_WINDOW_MINUTES = 30
 P2_OBSERVATION_WINDOW_DAYS = 7
 MAX_ERROR_MESSAGE_LENGTH = 300
 
@@ -383,8 +382,8 @@ def _scan_success_summary(
         ),
         "lifecycle_transition_counts": _lifecycle_transition_counts(continuities),
         "max_signals_per_scan": MAX_SIGNALS_PER_SCAN,
-        "continuous_p1_trigger_count": CONTINUOUS_P1_TRIGGER_COUNT,
-        "continuity_window_minutes": CONTINUITY_WINDOW_MINUTES,
+        "continuous_p1_trigger_count": _continuous_p1_trigger_count(),
+        "continuity_window_minutes": _continuity_window_minutes(),
     }
 
 
@@ -557,7 +556,7 @@ async def _candidate_continuity(
             reasons.append("lifecycle_adjusted_by_previous_scan")
 
     consecutive_p1_count = _consecutive_p1_count(history, candidate, scanned_at)
-    quick_report_candidate = consecutive_p1_count >= CONTINUOUS_P1_TRIGGER_COUNT
+    quick_report_candidate = consecutive_p1_count >= _continuous_p1_trigger_count()
 
     if quick_report_candidate:
         reasons.append("continuous_p1_trigger")
@@ -784,8 +783,16 @@ def _consecutive_p1_count(
 
 def _within_continuity_window(created_at: datetime, scanned_at: datetime) -> bool:
     return _as_utc(scanned_at) - _as_utc(created_at) <= timedelta(
-        minutes=CONTINUITY_WINDOW_MINUTES
+        minutes=_continuity_window_minutes()
     )
+
+
+def _continuous_p1_trigger_count() -> int:
+    return get_settings().radar_continuous_p1_trigger_count
+
+
+def _continuity_window_minutes() -> int:
+    return get_settings().radar_continuity_window_minutes
 
 
 def _as_utc(value: datetime) -> datetime:

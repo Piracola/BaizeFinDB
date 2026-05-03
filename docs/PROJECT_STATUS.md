@@ -129,6 +129,8 @@ Windows 客户端：
 - `baizefindb.radar.collect_and_scan`：Celery beat 默认每 300 秒触发，先采集 AKShare 最小数据，再运行雷达扫描；`TELEGRAM_PUSH_ENABLED=true` 时追加 Telegram 折叠推送。
 - `baizefindb.telegram.push_latest_radar`：手动触发最新扫描的 Telegram 折叠推送。
 - `RADAR_SCAN_INTERVAL_SECONDS`：调度间隔环境变量，默认 `300`。
+- `RADAR_CONTINUOUS_P1_TRIGGER_COUNT`：连续 P1 快报候选触发次数，默认 `3`。
+- `RADAR_CONTINUITY_WINDOW_MINUTES`：连续 P1 计算窗口，默认 `30`。
 
 ## 当前数据表
 
@@ -158,7 +160,7 @@ Windows 客户端：
 - 基于涨幅和联动宽度初判生命周期：`ignition`、`developing`、`climax`。
 - 强度等级和生命周期必须分开处理，AI 只能解释、补证据和提示分歧，不能覆盖规则定级。
 - 根据同一板块/概念的历史信号记录连续性。
-- 当前实现为 30 分钟窗口内连续 3 次 P1 会标记为 `quick_report_candidate`；M5 设计基线里的 2-3 次触发口径还需要后续实现和测试确认。
+- 当前实现为默认 30 分钟窗口内连续 3 次 P1 会标记为 `quick_report_candidate`；触发次数和窗口可通过环境变量调参。
 - P2 默认保留 7 天观察：`/radar/overview` 和 `/radar/signals` 默认隐藏超出观察窗口的 P2；历史排查可在信号列表使用 `include_expired_p2=true`。
 - 前后扫描走弱会记录生命周期转移，例如 `climax_to_divergence`。
 - 总览 API 基于最新扫描生成当前活跃信号、P0/P1/P2 聚合和按板块/概念去重视图。
