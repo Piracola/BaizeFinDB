@@ -10,7 +10,7 @@
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选和报告列表；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级。
 
-Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级，也不是完整安装包。
+Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级，也不是完整安装包。
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
@@ -53,7 +53,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、Web 报告视图、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补日报周报和基础评分。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP（含报告摘要）、Celery 5 分钟采集后扫描调度入口、持仓/自选最小 API 和 Web 维护视图、quick/standard 报告 MVP、Web 报告视图、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补日报周报和基础评分。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、worker/beat、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API

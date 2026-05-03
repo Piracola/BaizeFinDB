@@ -216,3 +216,55 @@ def test_format_holdings_and_watchlist_keep_personal_context_separate() -> None:
     assert "SZ000001 平安银行" in watchlist_text
     assert "提醒：关闭" in watchlist_text
     assert "不构成投资建议" in watchlist_text
+
+
+def test_fetch_reports_uses_user_key_query_and_report_type() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["timeout"] = timeout
+        return FakeResponse(
+            '[{"id":3,"report_type":"standard","title":"Standard Report：主线"}]',
+        )
+
+    reports = client_api.fetch_reports(
+        "http://localhost:8000",
+        user_key="telegram-1001",
+        report_type="standard",
+        opener=opener,
+    )
+
+    assert reports[0]["title"] == "Standard Report：主线"
+    assert calls == {
+        "url": (
+            "http://localhost:8000/reports?"
+            "user_key=telegram-1001&report_type=standard&limit=20"
+        ),
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
+def test_format_reports_lists_report_summaries_without_body() -> None:
+    text = client_api.format_reports(
+        [
+            {
+                "id": 3,
+                "report_type": "standard",
+                "status": "generated",
+                "title": "Standard Report：主线",
+                "summary": "主线当前为 P0 观察信号。",
+                "suggestion_label": "重点关注",
+                "review_status": "approved",
+                "body_markdown": "internal report body",
+            }
+        ],
+    )
+
+    assert "#3 [standard] Standard Report：主线" in text
+    assert "状态：generated" in text
+    assert "审查：已通过" in text
+    assert "标签：重点关注" in text
+    assert "主线当前为 P0 观察信号。" in text
+    assert "internal report body" not in text
+    assert "不构成投资建议" in text

@@ -15,6 +15,7 @@ DEFAULT_TIMEOUT_SECONDS = 10
 SIGNALS_PREVIEW_LIMIT = 20
 PORTFOLIO_PREVIEW_LIMIT = 20
 SUBJECTS_PREVIEW_LIMIT = 8
+REPORT_PREVIEW_LIMIT = 20
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 
@@ -224,6 +225,30 @@ def fetch_watchlist(
     return [_expect_object(item, "/portfolio/watchlist item") for item in payload]
 
 
+def fetch_reports(
+    base_url: str | None,
+    *,
+    user_key: str = DEFAULT_USER_KEY,
+    report_type: str | None = None,
+    limit: int = REPORT_PREVIEW_LIMIT,
+    opener: UrlOpener | None = None,
+) -> list[JsonObject]:
+    payload = get_json(
+        base_url,
+        "/reports",
+        query={
+            "user_key": _user_key(user_key),
+            "report_type": report_type,
+            "limit": limit,
+        },
+        opener=opener,
+    )
+    if not isinstance(payload, list):
+        msg = "/reports did not return a list"
+        raise BaizeApiError(msg, payload=payload)
+    return [_expect_object(item, "/reports item") for item in payload]
+
+
 def format_health(payload: Mapping[str, Any]) -> str:
     checks = _mapping(payload.get("checks"))
     lines = [
@@ -426,6 +451,52 @@ def format_watchlist(items: Sequence[Mapping[str, Any]]) -> str:
     lines.extend(
         [
             "自选只用于个人提醒、展示排序和报告上下文，不改变市场雷达等级。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def format_reports(reports: Sequence[Mapping[str, Any]]) -> str:
+    if not reports:
+        return _trim_text(
+            "\n".join(
+                [
+                    "报告列表",
+                    "暂无报告。",
+                    "报告只用于关注、观察、风险和复盘，不构成投资建议。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["报告列表"]
+    for report in reports[:REPORT_PREVIEW_LIMIT]:
+        lines.extend(
+            [
+                (
+                    f"#{_text(report.get('id'), '-')} "
+                    f"[{_text(report.get('report_type'), '-')}] "
+                    f"{_text(report.get('title'), '未命名报告')}"
+                ),
+                (
+                    "  "
+                    f"状态：{_text(report.get('status'), '-')} | "
+                    f"审查：{_review_label(report.get('review_status'))} | "
+                    f"标签：{_text(report.get('suggestion_label'), '-')}"
+                ),
+                f"  {_text(report.get('summary'), '暂无摘要。')}",
+            ],
+        )
+
+    if len(reports) > REPORT_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(reports) - REPORT_PREVIEW_LIMIT} 份更多报告。")
+
+    lines.extend(
+        [
+            "报告正文请在 Web/API 中查看；Windows 客户端只展示摘要。",
             "",
             DISCLAIMER,
         ],

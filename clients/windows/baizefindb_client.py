@@ -60,6 +60,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "查看信号", self.view_signals)
         self._add_button(button_frame, "查看持仓", self.view_holdings)
         self._add_button(button_frame, "查看自选", self.view_watchlist)
+        self._add_button(button_frame, "查看报告", self.view_reports)
         self._add_button(button_frame, "打开 Web 面板", self.open_web_panel)
 
         self.output = scrolledtext.ScrolledText(main, wrap=tk.WORD, height=24)
@@ -125,6 +126,16 @@ class BaizeFinDBClientApp:
             return client_api.format_watchlist(items)
 
         self._run_worker("读取自选", worker)
+
+    def view_reports(self) -> None:
+        def worker() -> str:
+            reports = client_api.fetch_reports(
+                self._normalized_server_url(),
+                user_key=self._normalized_user_key(),
+            )
+            return client_api.format_reports(reports)
+
+        self._run_worker("读取报告", worker)
 
     def open_web_panel(self) -> None:
         try:
