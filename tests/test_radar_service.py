@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.provider_models import DataQualityCheck, MarketSnapshot
+from app.db.radar_models import RadarScanBatch, RadarSignal
 from app.radar import service as radar_service
 from app.radar.schemas import RadarPriority, RadarScanStatus
 from app.radar.service import (
@@ -488,6 +489,122 @@ async def test_radar_overview_uses_latest_scan_only(
 
 
 @pytest.mark.asyncio
+async def test_radar_signal_list_hides_expired_p2_by_default(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+
+    async with session_factory() as session:
+        scan = RadarScanBatch(
+            status="success",
+            started_at=now,
+            finished_at=now,
+            source_snapshot_ids=[],
+            summary={"priority_counts": {"P0": 0, "P1": 1, "P2": 2}},
+        )
+        session.add(scan)
+        await session.flush()
+        session.add_all(
+            [
+                _manual_signal(
+                    batch_id=scan.id,
+                    signal_key="test:p2:expired",
+                    subject_name="Expired P2 Theme",
+                    priority="P2",
+                    created_at=now - timedelta(days=8),
+                ),
+                _manual_signal(
+                    batch_id=scan.id,
+                    signal_key="test:p2:recent",
+                    subject_name="Recent P2 Theme",
+                    priority="P2",
+                    created_at=now - timedelta(days=6, hours=23),
+                ),
+                _manual_signal(
+                    batch_id=scan.id,
+                    signal_key="test:p1:old",
+                    subject_name="Old P1 Theme",
+                    priority="P1",
+                    created_at=now - timedelta(days=30),
+                ),
+            ]
+        )
+        await session.commit()
+
+        default_signals = await list_radar_signals(session, as_of=now)
+        p2_signals = await list_radar_signals(
+            session,
+            priority=RadarPriority.P2,
+            as_of=now,
+        )
+        historical_signals = await list_radar_signals(
+            session,
+            priority=RadarPriority.P2,
+            include_expired_p2=True,
+            as_of=now,
+        )
+
+    assert {signal.subject_name for signal in default_signals} == {
+        "Recent P2 Theme",
+        "Old P1 Theme",
+    }
+    assert [signal.subject_name for signal in p2_signals] == ["Recent P2 Theme"]
+    assert {signal.subject_name for signal in historical_signals} == {
+        "Expired P2 Theme",
+        "Recent P2 Theme",
+    }
+
+
+@pytest.mark.asyncio
+async def test_radar_overview_hides_expired_p2_from_current_view(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime(2026, 1, 10, tzinfo=UTC)
+
+    async with session_factory() as session:
+        scan = RadarScanBatch(
+            status="success",
+            started_at=now - timedelta(days=8),
+            finished_at=now - timedelta(days=8),
+            source_snapshot_ids=[],
+            summary={"priority_counts": {"P0": 0, "P1": 1, "P2": 1}},
+        )
+        session.add(scan)
+        await session.flush()
+        session.add_all(
+            [
+                _manual_signal(
+                    batch_id=scan.id,
+                    signal_key="test:p2:expired-overview",
+                    subject_name="Expired P2 Theme",
+                    priority="P2",
+                    created_at=now - timedelta(days=8),
+                ),
+                _manual_signal(
+                    batch_id=scan.id,
+                    signal_key="test:p1:old-overview",
+                    subject_name="Old P1 Theme",
+                    priority="P1",
+                    created_at=now - timedelta(days=8),
+                ),
+            ]
+        )
+        await session.commit()
+
+        overview = await get_radar_overview(session, as_of=now)
+
+    assert overview.latest_scan is not None
+    assert [signal.subject_name for signal in overview.latest_scan.signals] == [
+        "Old P1 Theme"
+    ]
+    assert overview.subject_count == 1
+    assert overview.priority_counts == {"P0": 0, "P1": 1, "P2": 0}
+    assert [subject.subject_name for subject in overview.current_subjects] == [
+        "Old P1 Theme"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_radar_scan_marks_consecutive_p1_quick_report_candidate(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -600,3 +717,28 @@ async def test_radar_scan_adjusts_lifecycle_from_previous_signal(
     assert continuity["previous_lifecycle_stage"] == "climax"
     assert continuity["lifecycle_transition"] == "climax_to_divergence"
     assert continuity["pct_change_delta"] < 0
+
+
+def _manual_signal(
+    *,
+    batch_id: int,
+    signal_key: str,
+    subject_name: str,
+    priority: str,
+    created_at: datetime,
+) -> RadarSignal:
+    return RadarSignal(
+        batch_id=batch_id,
+        signal_key=signal_key,
+        subject_type="sector_concept",
+        subject_code=None,
+        subject_name=subject_name,
+        priority=priority,
+        lifecycle_stage="developing",
+        review_status="candidate",
+        title=f"{priority} radar candidate: {subject_name}",
+        summary="Manual signal for retention tests.",
+        metrics={"pct_change": 1.2},
+        evidence_count=0,
+        created_at=created_at,
+    )

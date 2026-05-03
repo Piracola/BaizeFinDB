@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.provider_models import MarketSnapshot
+from app.db.radar_models import RadarScanBatch, RadarSignal
 from app.db.session import get_db_session
 from app.main import create_app
 
@@ -109,3 +110,95 @@ async def test_radar_api_runs_scan_and_reads_signals(
 
     assert missing_scan_response.status_code == 404
     assert missing_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_radar_signals_api_can_include_expired_p2(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime.now(UTC)
+
+    async with session_factory() as session:
+        scan = RadarScanBatch(
+            status="success",
+            started_at=now,
+            finished_at=now,
+            source_snapshot_ids=[],
+            summary={"priority_counts": {"P0": 0, "P1": 0, "P2": 2}},
+        )
+        session.add(scan)
+        await session.flush()
+        session.add_all(
+            [
+                _signal(
+                    batch_id=scan.id,
+                    signal_key="test:p2:api-expired",
+                    subject_name="Expired P2 Theme",
+                    created_at=now - timedelta(days=8),
+                ),
+                _signal(
+                    batch_id=scan.id,
+                    signal_key="test:p2:api-recent",
+                    subject_name="Recent P2 Theme",
+                    created_at=now - timedelta(days=1),
+                ),
+            ]
+        )
+        await session.commit()
+
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            default_response = await client.get(
+                "/radar/signals",
+                params={"priority": "P2"},
+            )
+            historical_response = await client.get(
+                "/radar/signals",
+                params={"priority": "P2", "include_expired_p2": True},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert default_response.status_code == 200
+    assert [signal["subject_name"] for signal in default_response.json()] == [
+        "Recent P2 Theme"
+    ]
+
+    assert historical_response.status_code == 200
+    assert {signal["subject_name"] for signal in historical_response.json()} == {
+        "Expired P2 Theme",
+        "Recent P2 Theme",
+    }
+
+
+def _signal(
+    *,
+    batch_id: int,
+    signal_key: str,
+    subject_name: str,
+    created_at: datetime,
+) -> RadarSignal:
+    return RadarSignal(
+        batch_id=batch_id,
+        signal_key=signal_key,
+        subject_type="sector_concept",
+        subject_code=None,
+        subject_name=subject_name,
+        priority="P2",
+        lifecycle_stage="developing",
+        review_status="candidate",
+        title=f"P2 radar candidate: {subject_name}",
+        summary="Manual signal for API retention tests.",
+        metrics={"pct_change": 1.2},
+        evidence_count=0,
+        created_at=created_at,
+    )

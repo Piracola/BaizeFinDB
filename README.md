@@ -54,6 +54,7 @@
 - Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要、日报/周报、单信号评分，维护 Telegram chat 绑定/白名单并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
+- P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含
 - 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
 - 雷达扫描失败会记录 `failure`、`error_message` 和失败摘要，避免普通异常留下 `running` 批次
 - 轻量审查层：拦截诱导交易语言、证据缺失、低置信度证据、失败/降级数据质量，并标记证据冲突、重复触发和来源过期

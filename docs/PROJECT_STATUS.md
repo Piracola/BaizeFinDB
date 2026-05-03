@@ -159,6 +159,7 @@ Windows 客户端：
 - 强度等级和生命周期必须分开处理，AI 只能解释、补证据和提示分歧，不能覆盖规则定级。
 - 根据同一板块/概念的历史信号记录连续性。
 - 当前实现为 30 分钟窗口内连续 3 次 P1 会标记为 `quick_report_candidate`；M5 设计基线里的 2-3 次触发口径还需要后续实现和测试确认。
+- P2 默认保留 7 天观察：`/radar/overview` 和 `/radar/signals` 默认隐藏超出观察窗口的 P2；历史排查可在信号列表使用 `include_expired_p2=true`。
 - 前后扫描走弱会记录生命周期转移，例如 `climax_to_divergence`。
 - 总览 API 基于最新扫描生成当前活跃信号、P0/P1/P2 聚合和按板块/概念去重视图。
 - 雷达扫描 summary、信号 metrics 和 evidence details 会携带 Provider 数据质量摘要。
@@ -197,7 +198,7 @@ uv run uvicorn app.main:app --reload
 
 建议进入 **M5 A 股 5 分钟资金主线雷达 MVP**，范围继续保持轻量：
 
-- 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则、生命周期和 P2 7 天观察。
+- 继续巩固后端雷达计算、调度状态记录、P0/P1/P2 规则和生命周期。
 - 将持仓/自选接入 Telegram/Web 展示和报告上下文；继续保持只影响个人优先级，不改变市场主线等级。
 - Telegram 推送已能按 P0/P1/P2 折叠汇总、过滤 blocked、记录 `push_logs`，并在 P0 推送后为对应聊天用户生成 standard report。
 - Web MVP 已改为雷达终端工作台外壳，具备左侧模块导航、顶部命令栏、F-key 操作条、雷达总览、信号详情、持仓/自选维护、报告列表、日报/周报、单信号评分和 Telegram 绑定管理。

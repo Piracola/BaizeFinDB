@@ -88,9 +88,15 @@ async def signals(
     session: SessionDep,
     priority: RadarPriority | None = None,
     limit: LimitQuery = 50,
+    include_expired_p2: bool = False,
 ) -> list[RadarSignalRead]:
     try:
-        return await list_radar_signals(session, priority=priority, limit=limit)
+        return await list_radar_signals(
+            session,
+            priority=priority,
+            limit=limit,
+            include_expired_p2=include_expired_p2,
+        )
     except SQLAlchemyError as exc:
         raise _database_unavailable("reading radar signals", exc) from exc
 

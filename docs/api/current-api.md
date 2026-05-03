@@ -235,7 +235,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/scans/1
 
 ### `GET /radar/overview`
 
-用途：查看当前雷达总览、活跃信号、优先级聚合和按板块/概念去重视图。
+用途：查看当前雷达总览、活跃信号、优先级聚合和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
@@ -256,6 +256,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals
 Invoke-RestMethod "http://127.0.0.1:8000/radar/signals?priority=P1&limit=20"
+Invoke-RestMethod "http://127.0.0.1:8000/radar/signals?priority=P2&include_expired_p2=true"
 ```
 
 可选参数：
@@ -264,6 +265,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/signals?priority=P1&limit=20"
 | --- | --- |
 | `priority` | `P0`、`P1`、`P2` |
 | `limit` | 1 到 100，默认 50 |
+| `include_expired_p2` | 默认 `false`；`true` 时包含超过 7 天观察窗口的历史 P2 |
 
 ### `GET /radar/signals/{signal_id}`
 

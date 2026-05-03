@@ -2,7 +2,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,7 @@ RADAR_SOURCE_ENDPOINTS = (
 MAX_SIGNALS_PER_SCAN = 20
 CONTINUOUS_P1_TRIGGER_COUNT = 3
 CONTINUITY_WINDOW_MINUTES = 30
+P2_OBSERVATION_WINDOW_DAYS = 7
 MAX_ERROR_MESSAGE_LENGTH = 300
 
 
@@ -165,9 +166,17 @@ async def get_radar_scan(session: AsyncSession, scan_id: int) -> RadarScanRead |
 async def get_radar_overview(
     session: AsyncSession,
     limit: int = 50,
+    as_of: datetime | None = None,
 ) -> RadarOverviewRead:
     latest_scan = await get_latest_radar_scan(session)
-    current_signals = _dedupe_subject_signals(latest_scan.signals if latest_scan else [])
+    visible_signals = _filter_visible_signals(
+        latest_scan.signals if latest_scan else [],
+        as_of=as_of,
+    )
+    if latest_scan is not None:
+        latest_scan = latest_scan.model_copy(update={"signals": visible_signals})
+
+    current_signals = _dedupe_subject_signals(visible_signals)
     active_signals = current_signals[:limit]
 
     return RadarOverviewRead(
@@ -192,11 +201,21 @@ async def list_radar_signals(
     session: AsyncSession,
     priority: RadarPriority | None = None,
     limit: int = 50,
+    include_expired_p2: bool = False,
+    as_of: datetime | None = None,
 ) -> list[RadarSignalRead]:
     statement = select(RadarSignal)
 
     if priority is not None:
         statement = statement.where(RadarSignal.priority == priority.value)
+
+    if not include_expired_p2:
+        statement = statement.where(
+            or_(
+                RadarSignal.priority != RadarPriority.P2.value,
+                RadarSignal.created_at >= _p2_observation_cutoff(as_of),
+            )
+        )
 
     statement = statement.order_by(
         desc(RadarSignal.created_at),
@@ -323,6 +342,24 @@ def _dedupe_subject_signals(signals: list[RadarSignalRead]) -> list[RadarSignalR
         deduped.append(signal)
 
     return deduped
+
+
+def _filter_visible_signals(
+    signals: list[RadarSignalRead],
+    *,
+    as_of: datetime | None = None,
+) -> list[RadarSignalRead]:
+    cutoff = _p2_observation_cutoff(as_of)
+    return [
+        signal
+        for signal in signals
+        if signal.priority != RadarPriority.P2 or _as_utc(signal.created_at) >= cutoff
+    ]
+
+
+def _p2_observation_cutoff(as_of: datetime | None = None) -> datetime:
+    reference_time = _as_utc(as_of or datetime.now(UTC))
+    return reference_time - timedelta(days=P2_OBSERVATION_WINDOW_DAYS)
 
 
 def _scan_success_summary(
