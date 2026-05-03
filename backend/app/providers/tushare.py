@@ -1,7 +1,23 @@
+import asyncio
+import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from app.core.config import Settings, get_settings
-from app.providers.schemas import TushareEndpointInfo, TushareProviderStatusResponse
+from app.providers.schemas import (
+    DataQuality,
+    DataQualityStatus,
+    ProviderDataset,
+    TushareEndpointInfo,
+    TushareProviderStatusResponse,
+)
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+
+NORMALIZATION_VERSION = "tushare_pro_v1"
 
 
 @dataclass(frozen=True)
@@ -14,6 +30,8 @@ class TushareEndpointSpec:
     purpose: str
     permission_note: str
     implemented: bool = False
+    fields: tuple[str, ...] = ()
+    query_params: dict[str, object] | None = None
 
 
 TUSHARE_ENDPOINTS: dict[str, TushareEndpointSpec] = {
@@ -43,8 +61,66 @@ TUSHARE_ENDPOINTS: dict[str, TushareEndpointSpec] = {
         required_fields=("ts_code", "symbol", "name", "market", "list_date"),
         purpose="补充证券主数据，后续用于代码映射和跨源标准化。",
         permission_note="Tushare Pro 接口，真实抓取前需要 token 和对应权限。",
+        implemented=True,
+        fields=(
+            "ts_code",
+            "symbol",
+            "name",
+            "area",
+            "industry",
+            "market",
+            "exchange",
+            "list_status",
+            "list_date",
+            "is_hs",
+        ),
+        query_params={"exchange": "", "list_status": "L"},
     ),
 }
+
+
+class TushareClient:
+    def __init__(self, token: str) -> None:
+        self.token = token
+
+    def fetch_dataframe(self, endpoint: str, **kwargs: object) -> "pd.DataFrame":
+        import tushare as ts
+
+        pro_client = ts.pro_api(self.token)
+        fetcher = getattr(pro_client, endpoint)
+        return fetcher(**kwargs)
+
+
+class TushareProvider:
+    provider_name = "tushare"
+
+    def __init__(
+        self,
+        client: TushareClient | None = None,
+        settings: Settings | None = None,
+    ) -> None:
+        self.client = client
+        self.settings = settings or get_settings()
+
+    async def fetch(self, endpoint: str) -> ProviderDataset:
+        spec = TUSHARE_ENDPOINTS[endpoint]
+        if not spec.implemented:
+            raise NotImplementedError(f"tushare endpoint is not implemented: {endpoint}")
+
+        client = self.client or TushareClient(self._require_token())
+        dataframe = await asyncio.to_thread(
+            client.fetch_dataframe,
+            spec.endpoint,
+            **_fetcher_kwargs(spec),
+        )
+        return normalize_dataframe(dataframe, spec)
+
+    def _require_token(self) -> str:
+        token = self.settings.tushare_token
+        if token is None or not token.strip():
+            raise RuntimeError("TUSHARE_TOKEN is not configured")
+
+        return token.strip()
 
 
 def list_tushare_endpoints() -> list[TushareEndpointInfo]:
@@ -88,3 +164,65 @@ def _status_message(token_configured: bool, implemented_endpoint_count: int) -> 
         return "TUSHARE_TOKEN is required before enabling Tushare fetch."
 
     return "Tushare token is configured and implemented endpoints can be enabled."
+
+
+def normalize_dataframe(dataframe: "pd.DataFrame", spec: TushareEndpointSpec) -> ProviderDataset:
+    missing_fields = [field for field in spec.required_fields if field not in dataframe.columns]
+    selected_columns = [field for field in spec.fields if field in dataframe.columns]
+    normalized_rows = _dataframe_to_records(dataframe[selected_columns].copy())
+    row_count = len(dataframe)
+
+    return ProviderDataset(
+        provider_name="tushare",
+        endpoint=spec.endpoint,
+        market=spec.market,
+        snapshot_type=spec.snapshot_type,
+        collected_at=datetime.now(UTC),
+        row_count=row_count,
+        raw_summary={
+            "columns": list(dataframe.columns),
+            "sample": _dataframe_to_records(dataframe.head(5)),
+        },
+        normalized_rows=normalized_rows,
+        normalization_version=NORMALIZATION_VERSION,
+        quality=DataQuality(
+            status=_quality_status(row_count, missing_fields),
+            confidence=_confidence(row_count, len(spec.required_fields), len(missing_fields)),
+            freshness="reference_data",
+            missing_fields=missing_fields,
+        ),
+    )
+
+
+def _fetcher_kwargs(spec: TushareEndpointSpec) -> dict[str, object]:
+    kwargs = dict(spec.query_params or {})
+    if spec.fields:
+        kwargs["fields"] = ",".join(spec.fields)
+
+    return kwargs
+
+
+def _dataframe_to_records(dataframe: "pd.DataFrame") -> list[dict[str, object]]:
+    if dataframe.empty:
+        return []
+
+    json_text = dataframe.to_json(orient="records", force_ascii=False, date_format="iso")
+    return json.loads(json_text)
+
+
+def _quality_status(row_count: int, missing_fields: list[str]) -> DataQualityStatus:
+    if row_count <= 0 or missing_fields:
+        return DataQualityStatus.DEGRADED
+
+    return DataQualityStatus.OK
+
+
+def _confidence(row_count: int, required_count: int, missing_count: int) -> float:
+    if row_count <= 0:
+        return 0.25
+
+    if missing_count <= 0:
+        return 0.95
+
+    present_ratio = max(required_count - missing_count, 0) / max(required_count, 1)
+    return round(max(0.45, present_ratio), 2)

@@ -1,7 +1,7 @@
 import pytest
 
 from app.providers.schemas import DataQualityStatus, ProviderStatus
-from app.providers.service import collect_akshare_endpoint
+from app.providers.service import collect_akshare_endpoint, collect_tushare_endpoint
 
 
 class FakeSession:
@@ -45,4 +45,21 @@ async def test_provider_failure_is_recorded_without_raising() -> None:
     assert session.rolled_back is True
     assert session.committed is True
     assert len(session.objects) == 2
+
+
+@pytest.mark.asyncio
+async def test_tushare_provider_failure_is_recorded_with_provider_name() -> None:
+    session = FakeSession()
+
+    result = await collect_tushare_endpoint(session, FailingProvider(), "stock_basic")
+
+    assert result.status == ProviderStatus.FAILURE
+    assert result.quality_status == DataQualityStatus.FAILED
+    assert result.fetch_log_id == 1
+    assert session.rolled_back is True
+    assert session.committed is True
+    assert len(session.objects) == 2
+    assert session.objects[0].provider_name == "tushare"
+    assert session.objects[0].normalization_version == "tushare_pro_v1"
+    assert session.objects[1].provider_name == "tushare"
 

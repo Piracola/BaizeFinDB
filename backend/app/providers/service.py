@@ -9,11 +9,19 @@ from app.providers.schemas import (
     AkshareCollectionResponse,
     DataQualityStatus,
     ProviderCollectionStatusResponse,
+    ProviderDataset,
     ProviderEndpointCollectionStatus,
     ProviderEndpointResult,
     ProviderFetchLogRead,
     ProviderSnapshotSummary,
     ProviderStatus,
+)
+from app.providers.tushare import (
+    NORMALIZATION_VERSION as TUSHARE_NORMALIZATION_VERSION,
+)
+from app.providers.tushare import (
+    TUSHARE_ENDPOINTS,
+    TushareProvider,
 )
 
 
@@ -31,6 +39,14 @@ async def collect_minimal_akshare(
     return AkshareCollectionResponse(results=results)
 
 
+async def collect_tushare_stock_basic(
+    session: AsyncSession,
+    provider: TushareProvider | None = None,
+) -> ProviderEndpointResult:
+    tushare_provider = provider or TushareProvider()
+    return await collect_tushare_endpoint(session, tushare_provider, "stock_basic")
+
+
 async def collect_akshare_endpoint(
     session: AsyncSession,
     provider: AkshareProvider,
@@ -41,7 +57,45 @@ async def collect_akshare_endpoint(
     try:
         dataset = await provider.fetch(endpoint)
     except Exception as exc:
-        return await _record_failure(session, endpoint, started_at, exc)
+        return await _record_failure(
+            session,
+            "akshare",
+            endpoint,
+            started_at,
+            exc,
+            NORMALIZATION_VERSION,
+        )
+
+    return await _record_success(session, dataset, started_at)
+
+
+async def collect_tushare_endpoint(
+    session: AsyncSession,
+    provider: TushareProvider,
+    endpoint: str,
+) -> ProviderEndpointResult:
+    started_at = datetime.now(UTC)
+
+    try:
+        dataset = await provider.fetch(endpoint)
+    except Exception as exc:
+        return await _record_failure(
+            session,
+            "tushare",
+            endpoint,
+            started_at,
+            exc,
+            TUSHARE_NORMALIZATION_VERSION,
+        )
+
+    return await _record_success(session, dataset, started_at)
+
+
+async def _record_success(
+    session: AsyncSession,
+    dataset: ProviderDataset,
+    started_at: datetime,
+) -> ProviderEndpointResult:
 
     snapshot = MarketSnapshot(
         provider_name=dataset.provider_name,
@@ -129,7 +183,9 @@ async def list_latest_provider_snapshots(
     provider_name: str = "akshare",
     endpoint: str | None = None,
 ) -> list[ProviderSnapshotSummary]:
-    endpoints = [endpoint] if endpoint is not None else list(AKSHARE_ENDPOINTS)
+    endpoints = (
+        [endpoint] if endpoint is not None else list(_known_provider_endpoints(provider_name))
+    )
     snapshots: list[ProviderSnapshotSummary] = []
 
     for current_endpoint in endpoints:
@@ -208,15 +264,17 @@ async def get_akshare_collection_status(
 
 async def _record_failure(
     session: AsyncSession,
+    provider_name: str,
     endpoint: str,
     started_at: datetime,
     exc: Exception,
+    normalization_version: str,
 ) -> ProviderEndpointResult:
     await session.rollback()
     error_message = f"{exc.__class__.__name__}: {str(exc)[:800]}"
 
     fetch_log = ProviderFetchLog(
-        provider_name="akshare",
+        provider_name=provider_name,
         endpoint=endpoint,
         status=ProviderStatus.FAILURE.value,
         fetch_started_at=started_at,
@@ -226,13 +284,13 @@ async def _record_failure(
         freshness="unavailable",
         confidence=0.0,
         missing_fields=[],
-        normalization_version=NORMALIZATION_VERSION,
+        normalization_version=normalization_version,
     )
     session.add(fetch_log)
     await session.flush()
 
     quality_check = DataQualityCheck(
-        provider_name="akshare",
+        provider_name=provider_name,
         endpoint=endpoint,
         check_name="provider_fetch",
         status=DataQualityStatus.FAILED.value,
@@ -273,10 +331,11 @@ def _snapshot_summary(snapshot: MarketSnapshot) -> ProviderSnapshotSummary:
 async def _latest_fetch_log(
     session: AsyncSession,
     endpoint: str,
+    provider_name: str = "akshare",
     status: str | None = None,
 ) -> ProviderFetchLog | None:
     statement = select(ProviderFetchLog).where(
-        ProviderFetchLog.provider_name == "akshare",
+        ProviderFetchLog.provider_name == provider_name,
         ProviderFetchLog.endpoint == endpoint,
     )
 
@@ -288,6 +347,16 @@ async def _latest_fetch_log(
         desc(ProviderFetchLog.id),
     ).limit(1)
     return await session.scalar(statement)
+
+
+def _known_provider_endpoints(provider_name: str) -> dict[str, object]:
+    if provider_name == "akshare":
+        return AKSHARE_ENDPOINTS
+
+    if provider_name == "tushare":
+        return TUSHARE_ENDPOINTS
+
+    return {}
 
 
 async def _latest_quality_check(

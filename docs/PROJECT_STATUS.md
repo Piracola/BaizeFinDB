@@ -6,7 +6,7 @@
 
 当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
-项目已经具备后端骨架、AKShare 最小数据底座、Tushare Provider 预留壳、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态汇总、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
+项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic` 手动抓取能力、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态汇总、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态或评分。
 
@@ -54,7 +54,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | 阶段 | 状态 | 内容 |
 | --- | --- | --- |
 | M1 工程骨架 | 已完成 | FastAPI、配置系统、健康检查、SQLAlchemy async、Alembic、Docker Compose、Celery 壳、pytest。 |
-| M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API；Tushare Provider 壳已登记 token 状态和计划端点，真实抓取尚未启用。 |
+| M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API；Tushare `stock_basic` 已支持手动抓取、失败记录、日志和快照查询，公告和公司信息仍是预留。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
 | M5 A 股 5 分钟资金主线雷达 MVP | 验收项完成 | 静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、Celery 5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计、运行状态汇总和只读 M5 smoke check 已接入。 |
@@ -76,6 +76,9 @@ Provider：
 - `GET /providers/akshare/endpoints`
 - `GET /providers/tushare/endpoints`
 - `GET /providers/tushare/status`
+- `POST /providers/tushare/fetch/stock-basic`
+- `GET /providers/tushare/fetch-logs`
+- `GET /providers/tushare/snapshots/latest`
 - `POST /providers/akshare/fetch/minimal`
 - `GET /providers/akshare/status`
 - `GET /providers/akshare/fetch-logs`
@@ -213,7 +216,7 @@ uv run uvicorn app.main:app --reload
 
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移和只读 M5 smoke check。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
-- Tushare 当前只有 `/providers/tushare/endpoints` 和 `/providers/tushare/status` 能力声明；后续真实抓取需要先补依赖、权限失败记录、标准化入库和测试。
+- Tushare 当前已支持 `stock_basic` 手动抓取；后续再接公告和公司信息，并决定是否纳入调度。
 - 增加运行可观测性：`/ops/overview` 已汇总扫描耗时、失败率、推送结果、模型降级和数据质量状态，Web 状态面板、Windows 客户端和 Telegram `/ops` 已展示该摘要；后续再接趋势图、告警和服务器监控。
 - 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

@@ -14,9 +14,16 @@ from app.providers.akshare import AKSHARE_ENDPOINTS, normalize_dataframe
 from app.providers.schemas import DataQualityStatus, ProviderStatus
 from app.providers.service import (
     collect_akshare_endpoint,
+    collect_tushare_endpoint,
     get_akshare_collection_status,
     list_latest_provider_snapshots,
     list_provider_fetch_logs,
+)
+from app.providers.tushare import (
+    TUSHARE_ENDPOINTS,
+)
+from app.providers.tushare import (
+    normalize_dataframe as normalize_tushare_dataframe,
 )
 
 
@@ -35,6 +42,27 @@ class SuccessfulStockProvider:
             ]
         )
         return normalize_dataframe(dataframe, AKSHARE_ENDPOINTS[endpoint])
+
+
+class SuccessfulTushareStockProvider:
+    async def fetch(self, endpoint: str):
+        dataframe = pd.DataFrame(
+            [
+                {
+                    "ts_code": "600000.SH",
+                    "symbol": "600000",
+                    "name": "浦发银行",
+                    "area": "上海",
+                    "industry": "银行",
+                    "market": "主板",
+                    "exchange": "SSE",
+                    "list_status": "L",
+                    "list_date": "19991110",
+                    "is_hs": "H",
+                }
+            ]
+        )
+        return normalize_tushare_dataframe(dataframe, TUSHARE_ENDPOINTS[endpoint])
 
 
 @pytest_asyncio.fixture
@@ -134,5 +162,53 @@ async def test_provider_query_api_returns_database_state(
 
     assert snapshots_response.status_code == 200
     assert snapshots_response.json()[0]["preview_rows"][0]["symbol"] == "600000"
+
+    assert unknown_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_tushare_query_api_returns_database_state(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        await collect_tushare_endpoint(
+            session,
+            SuccessfulTushareStockProvider(),
+            "stock_basic",
+        )
+
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            logs_response = await client.get(
+                "/providers/tushare/fetch-logs",
+                params={"endpoint": "stock_basic"},
+            )
+            snapshots_response = await client.get(
+                "/providers/tushare/snapshots/latest",
+                params={"endpoint": "stock_basic"},
+            )
+            unknown_response = await client.get(
+                "/providers/tushare/fetch-logs",
+                params={"endpoint": "not_real"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert logs_response.status_code == 200
+    assert logs_response.json()[0]["provider_name"] == "tushare"
+    assert logs_response.json()[0]["endpoint"] == "stock_basic"
+
+    assert snapshots_response.status_code == 200
+    assert snapshots_response.json()[0]["provider_name"] == "tushare"
+    assert snapshots_response.json()[0]["preview_rows"][0]["ts_code"] == "600000.SH"
 
     assert unknown_response.status_code == 404
