@@ -1,4 +1,5 @@
 import io
+import json
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -58,6 +59,23 @@ def test_get_json_uses_mockable_opener() -> None:
         "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
         "accept": "application/json",
     }
+
+
+def test_get_json_can_send_telegram_secret_header() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["secret"] = _telegram_secret_header(request)
+        return FakeResponse('{"status":"ok"}')
+
+    client_api.get_json(
+        "http://localhost:8000",
+        "/telegram/bindings",
+        secret_token="hook-secret",
+        opener=opener,
+    )
+
+    assert calls["secret"] == "hook-secret"
 
 
 def test_get_json_raises_api_error_with_parsed_http_payload() -> None:
@@ -380,3 +398,120 @@ def test_format_scores_lists_score_windows_without_trading_instruction() -> None
     assert "3d：76.00" in text
     assert "不是价格回测或交易建议" in text
     assert "买入" not in text
+
+
+def test_fetch_telegram_bindings_uses_secret_and_limit() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["secret"] = _telegram_secret_header(request)
+        return FakeResponse('[{"id":1,"chat_id":1001,"user_key":"telegram-1001"}]')
+
+    bindings = client_api.fetch_telegram_bindings(
+        "http://localhost:8000",
+        secret_token="hook-secret",
+        limit=10,
+        opener=opener,
+    )
+
+    assert bindings[0]["chat_id"] == 1001
+    assert calls == {
+        "url": "http://localhost:8000/telegram/bindings?limit=10",
+        "secret": "hook-secret",
+    }
+
+
+def test_upsert_telegram_binding_posts_payload() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["method"] = request.get_method()
+        calls["payload"] = json.loads(request.data.decode("utf-8"))
+        calls["secret"] = _telegram_secret_header(request)
+        return FakeResponse(
+            '{"id":1,"chat_id":1001,"user_key":"telegram-1001","is_allowed":true}',
+        )
+
+    binding = client_api.upsert_telegram_binding(
+        "http://localhost:8000",
+        chat_id=1001,
+        user_key="telegram-1001",
+        display_name="desktop",
+        secret_token="hook-secret",
+        opener=opener,
+    )
+
+    assert binding["is_allowed"] is True
+    assert calls == {
+        "url": "http://localhost:8000/telegram/bindings",
+        "method": "POST",
+        "payload": {
+            "chat_id": 1001,
+            "user_key": "telegram-1001",
+            "display_name": "desktop",
+            "is_allowed": True,
+        },
+        "secret": "hook-secret",
+    }
+
+
+def test_update_telegram_binding_patches_allowed_state() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["method"] = request.get_method()
+        calls["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse(
+            '{"id":1,"chat_id":1001,"user_key":"telegram-1001","is_allowed":false}',
+        )
+
+    binding = client_api.update_telegram_binding(
+        "http://localhost:8000",
+        chat_id=1001,
+        is_allowed=False,
+        opener=opener,
+    )
+
+    assert binding["is_allowed"] is False
+    assert calls == {
+        "url": "http://localhost:8000/telegram/bindings/1001",
+        "method": "PATCH",
+        "payload": {"is_allowed": False},
+    }
+
+
+def test_format_telegram_bindings_lists_allowed_state() -> None:
+    text = client_api.format_telegram_bindings(
+        [
+            {
+                "id": 1,
+                "chat_id": 1001,
+                "user_key": "telegram-1001",
+                "display_name": "primary chat",
+                "is_allowed": True,
+                "source": "manual",
+            },
+            {
+                "id": 2,
+                "chat_id": -2002,
+                "user_key": "telegram--2002",
+                "display_name": "blocked group",
+                "is_allowed": False,
+                "source": "manual",
+            },
+        ],
+    )
+
+    assert "Telegram 绑定" in text
+    assert "chat=1001" in text
+    assert "状态：允许" in text
+    assert "chat=-2002" in text
+    assert "状态：禁用" in text
+    assert "环境白名单存在时仍会先过滤" in text
+
+
+def _telegram_secret_header(request: object) -> str | None:
+    return request.get_header("X-telegram-bot-api-secret-token")

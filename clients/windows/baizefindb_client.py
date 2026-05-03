@@ -30,6 +30,10 @@ class BaizeFinDBClientApp:
             value=os.environ.get("BAIZEFINDB_USER_KEY", client_api.DEFAULT_USER_KEY),
         )
         self.signal_id = tk.StringVar(value=os.environ.get("BAIZEFINDB_SIGNAL_ID", "1"))
+        self.telegram_chat_id = tk.StringVar(
+            value=os.environ.get("BAIZEFINDB_TELEGRAM_CHAT_ID", ""),
+        )
+        self.telegram_secret = tk.StringVar(value=os.environ.get("BAIZEFINDB_TELEGRAM_SECRET", ""))
         self.status_text = tk.StringVar(value="就绪")
         self.buttons: list[ttk.Button] = []
         self._button_index = 0
@@ -44,7 +48,7 @@ class BaizeFinDBClientApp:
         main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
         main.columnconfigure(1, weight=1)
-        main.rowconfigure(4, weight=1)
+        main.rowconfigure(6, weight=1)
 
         ttk.Label(main, text="Server URL").grid(row=0, column=0, sticky=tk.W, padx=(0, 8))
         url_entry = ttk.Entry(main, textvariable=self.server_url)
@@ -58,8 +62,26 @@ class BaizeFinDBClientApp:
         signal_entry = ttk.Entry(main, textvariable=self.signal_id, width=18)
         signal_entry.grid(row=2, column=1, sticky=tk.W)
 
+        ttk.Label(main, text="Telegram Chat ID").grid(
+            row=3,
+            column=0,
+            sticky=tk.W,
+            padx=(0, 8),
+        )
+        chat_entry = ttk.Entry(main, textvariable=self.telegram_chat_id, width=24)
+        chat_entry.grid(row=3, column=1, sticky=tk.W)
+
+        ttk.Label(main, text="Telegram Secret").grid(
+            row=4,
+            column=0,
+            sticky=tk.W,
+            padx=(0, 8),
+        )
+        secret_entry = ttk.Entry(main, textvariable=self.telegram_secret, show="*")
+        secret_entry.grid(row=4, column=1, sticky=tk.EW)
+
         button_frame = ttk.Frame(main)
-        button_frame.grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
+        button_frame.grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
 
         self._add_button(button_frame, "检查状态", self.check_status)
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
@@ -70,10 +92,13 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "查看日报", self.view_daily_report)
         self._add_button(button_frame, "查看周报", self.view_weekly_report)
         self._add_button(button_frame, "生成评分", self.view_signal_scores)
+        self._add_button(button_frame, "查看绑定", self.view_telegram_bindings)
+        self._add_button(button_frame, "绑定 Chat", self.bind_telegram_chat)
+        self._add_button(button_frame, "禁用 Chat", self.disable_telegram_chat)
         self._add_button(button_frame, "打开 Web 面板", self.open_web_panel)
 
         self.output = scrolledtext.ScrolledText(main, wrap=tk.WORD, height=24)
-        self.output.grid(row=4, column=0, columnspan=2, sticky=tk.NSEW)
+        self.output.grid(row=6, column=0, columnspan=2, sticky=tk.NSEW)
         self.output.insert(
             tk.END,
             "BaizeFinDB Windows 客户端 MVP\n\n"
@@ -82,7 +107,7 @@ class BaizeFinDBClientApp:
         self.output.configure(state=tk.DISABLED)
 
         status_bar = ttk.Label(main, textvariable=self.status_text, anchor=tk.W)
-        status_bar.grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
+        status_bar.grid(row=7, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
 
     def _add_button(self, parent: ttk.Frame, label: str, command: Callable[[], None]) -> None:
         button = ttk.Button(parent, text=label, command=command)
@@ -181,6 +206,54 @@ class BaizeFinDBClientApp:
 
         self._run_worker(f"生成信号 #{signal_id} 评分", worker)
 
+    def view_telegram_bindings(self) -> None:
+        def worker() -> str:
+            bindings = client_api.fetch_telegram_bindings(
+                self._normalized_server_url(),
+                secret_token=self._normalized_telegram_secret(),
+            )
+            return client_api.format_telegram_bindings(bindings)
+
+        self._run_worker("读取 Telegram 绑定", worker)
+
+    def bind_telegram_chat(self) -> None:
+        try:
+            chat_id = self._normalized_telegram_chat_id()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        def worker() -> str:
+            binding = client_api.upsert_telegram_binding(
+                self._normalized_server_url(),
+                chat_id=chat_id,
+                user_key=self._normalized_user_key(),
+                display_name="Windows client",
+                is_allowed=True,
+                secret_token=self._normalized_telegram_secret(),
+            )
+            return client_api.format_telegram_bindings([binding])
+
+        self._run_worker(f"绑定 Telegram chat {chat_id}", worker)
+
+    def disable_telegram_chat(self) -> None:
+        try:
+            chat_id = self._normalized_telegram_chat_id()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        def worker() -> str:
+            binding = client_api.update_telegram_binding(
+                self._normalized_server_url(),
+                chat_id=chat_id,
+                is_allowed=False,
+                secret_token=self._normalized_telegram_secret(),
+            )
+            return client_api.format_telegram_bindings([binding])
+
+        self._run_worker(f"禁用 Telegram chat {chat_id}", worker)
+
     def open_web_panel(self) -> None:
         try:
             url = client_api.build_url(self._normalized_server_url(), "/")
@@ -211,6 +284,24 @@ class BaizeFinDBClientApp:
             raise ValueError(msg)
 
         return signal_id
+
+    def _normalized_telegram_chat_id(self) -> int:
+        value = self.telegram_chat_id.get().strip()
+        try:
+            chat_id = int(value)
+        except ValueError as exc:
+            msg = "Telegram Chat ID 必须是非零整数。"
+            raise ValueError(msg) from exc
+
+        if chat_id == 0:
+            msg = "Telegram Chat ID 必须是非零整数。"
+            raise ValueError(msg)
+
+        return chat_id
+
+    def _normalized_telegram_secret(self) -> str | None:
+        value = self.telegram_secret.get().strip()
+        return value or None
 
     def _run_worker(self, action: str, worker: Callable[[], str]) -> None:
         try:

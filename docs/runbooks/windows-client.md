@@ -12,10 +12,11 @@
 - 查看报告摘要：`GET /reports`。
 - 查看日报/周报汇总：`GET /reports/periodic`。
 - 生成并查看单信号综合评分：`POST /scores/signals/{signal_id}`。
+- 查看、绑定和禁用 Telegram chat：`GET/POST/PATCH /telegram/bindings`。
 - 打开现有 Web 面板：`/`。
 - P0/P1/P2、生命周期、审查状态和计数都来自后端 API，客户端不重新计算。
 - 日报/周报和评分结果也来自后端，客户端不做本地评分或规则推断。
-- 不保存 token、secret、持仓截图或个人数据。
+- 不保存 token、secret、持仓截图或个人数据；Telegram Secret 输入框只用于本次 API header。
 - 不保存报告导出文件；报告正文继续在 Web/API 查看。
 - 不提供买卖建议、不接自动交易、不承诺收益。
 - 持仓/自选只作为个人提醒、展示排序和报告上下文，不改变市场雷达等级。
@@ -75,7 +76,12 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 查看日报 | 调用 `/reports/periodic?period=daily`，按 User Key 显示周期汇总。 |
 | 查看周报 | 调用 `/reports/periodic?period=weekly`，按 User Key 显示周期汇总。 |
 | 生成评分 | 读取窗口里的 Signal ID，调用 `/scores/signals/{signal_id}` 生成并显示 1d/3d/5d/10d 综合评分。 |
+| 查看绑定 | 调用 `/telegram/bindings` 显示当前 Telegram chat 绑定和允许/禁用状态。 |
+| 绑定 Chat | 读取 Telegram Chat ID 和 User Key，调用 `/telegram/bindings` 新增或启用绑定。 |
+| 禁用 Chat | 读取 Telegram Chat ID，调用 `/telegram/bindings/{chat_id}` 禁用该 chat。 |
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
+
+如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。
 
 ## 6. 常见问题
 

@@ -51,7 +51,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要、日报/周报、单信号评分并打开 Web 面板
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表、持仓、自选、报告摘要、日报/周报、单信号评分，维护 Telegram chat 绑定/白名单并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
@@ -75,7 +75,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示）、Telegram Bot MVP、Windows 客户端 MVP（含报告、日报/周报、评分展示）、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补评分校准和生产化部署。 |
+| M5 | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示）、Telegram Bot MVP、Windows 客户端 MVP（含报告、日报/周报、评分展示和 Telegram 绑定管理）、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补评分校准和生产化部署。 |
 
 ## 本地启动
 
@@ -126,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
 
-客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、审查状态或评分；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；不保存 token、secret、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
+客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、审查状态或评分；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 
 ## Telegram Bot MVP
 

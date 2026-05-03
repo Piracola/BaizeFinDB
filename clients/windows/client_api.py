@@ -16,8 +16,10 @@ SIGNALS_PREVIEW_LIMIT = 20
 PORTFOLIO_PREVIEW_LIMIT = 20
 SUBJECTS_PREVIEW_LIMIT = 8
 REPORT_PREVIEW_LIMIT = 20
+TELEGRAM_BINDING_PREVIEW_LIMIT = 20
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
+TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
 
 JsonObject = dict[str, Any]
 JsonPayload = JsonObject | list[Any]
@@ -136,13 +138,14 @@ def get_json(
     path: str,
     *,
     query: Mapping[str, str | int | None] | None = None,
+    secret_token: str | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     opener: UrlOpener | None = None,
 ) -> JsonPayload:
     """GET an API endpoint and parse the JSON response."""
 
     url = build_url(base_url, path, query)
-    request = Request(url, headers={"Accept": "application/json"}, method="GET")
+    request = Request(url, headers=_request_headers(secret_token), method="GET")
     return _send_json_request(request, url, timeout=timeout, opener=opener)
 
 
@@ -152,13 +155,14 @@ def post_json(
     *,
     query: Mapping[str, str | int | None] | None = None,
     json_body: JsonPayload | None = None,
+    secret_token: str | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     opener: UrlOpener | None = None,
 ) -> JsonPayload:
     """POST an API endpoint and parse the JSON response."""
 
     url = build_url(base_url, path, query)
-    headers = {"Accept": "application/json"}
+    headers = _request_headers(secret_token)
     data = None
     if json_body is not None:
         headers["Content-Type"] = "application/json"
@@ -166,6 +170,37 @@ def post_json(
 
     request = Request(url, data=data, headers=headers, method="POST")
     return _send_json_request(request, url, timeout=timeout, opener=opener)
+
+
+def patch_json(
+    base_url: str | None,
+    path: str,
+    *,
+    query: Mapping[str, str | int | None] | None = None,
+    json_body: JsonPayload | None = None,
+    secret_token: str | None = None,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    opener: UrlOpener | None = None,
+) -> JsonPayload:
+    """PATCH an API endpoint and parse the JSON response."""
+
+    url = build_url(base_url, path, query)
+    headers = _request_headers(secret_token)
+    data = None
+    if json_body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(json_body).encode("utf-8")
+
+    request = Request(url, data=data, headers=headers, method="PATCH")
+    return _send_json_request(request, url, timeout=timeout, opener=opener)
+
+
+def _request_headers(secret_token: str | None = None) -> dict[str, str]:
+    headers = {"Accept": "application/json"}
+    normalized_secret = (secret_token or "").strip()
+    if normalized_secret:
+        headers[TELEGRAM_SECRET_HEADER] = normalized_secret
+    return headers
 
 
 def _send_json_request(
@@ -337,6 +372,71 @@ def fetch_signal_scores(
         opener=opener,
     )
     return _expect_object(payload, "/scores/signals/{signal_id}")
+
+
+def fetch_telegram_bindings(
+    base_url: str | None,
+    *,
+    secret_token: str | None = None,
+    limit: int = TELEGRAM_BINDING_PREVIEW_LIMIT,
+    opener: UrlOpener | None = None,
+) -> list[JsonObject]:
+    payload = get_json(
+        base_url,
+        "/telegram/bindings",
+        query={"limit": limit},
+        secret_token=secret_token,
+        opener=opener,
+    )
+    if not isinstance(payload, list):
+        msg = "/telegram/bindings did not return a list"
+        raise BaizeApiError(msg, payload=payload)
+    return [_expect_object(item, "/telegram/bindings item") for item in payload]
+
+
+def upsert_telegram_binding(
+    base_url: str | None,
+    *,
+    chat_id: int,
+    user_key: str = DEFAULT_USER_KEY,
+    display_name: str = "",
+    is_allowed: bool = True,
+    secret_token: str | None = None,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_chat_id = _nonzero_int(chat_id, "chat_id")
+    payload = post_json(
+        base_url,
+        "/telegram/bindings",
+        json_body={
+            "chat_id": normalized_chat_id,
+            "user_key": _user_key(user_key),
+            "display_name": display_name.strip(),
+            "is_allowed": is_allowed,
+        },
+        secret_token=secret_token,
+        opener=opener,
+    )
+    return _expect_object(payload, "/telegram/bindings")
+
+
+def update_telegram_binding(
+    base_url: str | None,
+    *,
+    chat_id: int,
+    is_allowed: bool,
+    secret_token: str | None = None,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_chat_id = _nonzero_int(chat_id, "chat_id")
+    payload = patch_json(
+        base_url,
+        f"/telegram/bindings/{normalized_chat_id}",
+        json_body={"is_allowed": is_allowed},
+        secret_token=secret_token,
+        opener=opener,
+    )
+    return _expect_object(payload, "/telegram/bindings/{chat_id}")
 
 
 def format_health(payload: Mapping[str, Any]) -> str:
@@ -685,6 +785,50 @@ def format_scores(score_run: Mapping[str, Any]) -> str:
     return _trim_text("\n".join(lines))
 
 
+def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:
+    if not bindings:
+        return _trim_text(
+            "\n".join(
+                [
+                    "Telegram 绑定",
+                    "暂无数据库绑定。未配置环境白名单时，本地 webhook 仍保持开放模式。",
+                    "",
+                    DISCLAIMER,
+                ],
+            ),
+        )
+
+    lines = ["Telegram 绑定"]
+    for binding in bindings[:TELEGRAM_BINDING_PREVIEW_LIMIT]:
+        lines.extend(
+            [
+                (
+                    f"#{_text(binding.get('id'), '-')} "
+                    f"chat={_text(binding.get('chat_id'), '-')} "
+                    f"user_key={_text(binding.get('user_key'), '-')}"
+                ),
+                (
+                    "  "
+                    f"状态：{_allowed_label(binding.get('is_allowed'))} | "
+                    f"来源：{_text(binding.get('source'), '-')} | "
+                    f"备注：{_text(binding.get('display_name'), '无')}"
+                ),
+            ],
+        )
+
+    if len(bindings) > TELEGRAM_BINDING_PREVIEW_LIMIT:
+        lines.append(f"已折叠 {len(bindings) - TELEGRAM_BINDING_PREVIEW_LIMIT} 条更多绑定。")
+
+    lines.extend(
+        [
+            "环境白名单存在时仍会先过滤；数据库绑定只在硬过滤范围内允许或禁用。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
 def format_api_error(error: BaseException) -> str:
     if isinstance(error, BaizeApiError):
         details = [_text(error, "请求失败")]
@@ -809,9 +953,27 @@ def _enabled_label(value: Any) -> str:
     return "开启" if value is True else "关闭"
 
 
+def _allowed_label(value: Any) -> str:
+    return "允许" if value is True else "禁用"
+
+
 def _user_key(value: str | None) -> str:
     normalized = (value or DEFAULT_USER_KEY).strip()
     return normalized or DEFAULT_USER_KEY
+
+
+def _nonzero_int(value: int, field: str) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        msg = f"{field} must be a non-zero integer"
+        raise ValueError(msg) from exc
+
+    if normalized == 0:
+        msg = f"{field} must be a non-zero integer"
+        raise ValueError(msg)
+
+    return normalized
 
 
 def _positive_int(value: int, field: str) -> int:
