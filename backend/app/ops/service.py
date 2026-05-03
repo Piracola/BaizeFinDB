@@ -5,6 +5,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import psutil
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +46,12 @@ async def get_ops_overview(
         disk_check_path=settings.ops_disk_check_path,
         disk_free_percent_alert_threshold=(
             settings.ops_disk_free_percent_alert_threshold
+        ),
+        cpu_usage_percent_alert_threshold=(
+            settings.ops_cpu_usage_percent_alert_threshold
+        ),
+        memory_used_percent_alert_threshold=(
+            settings.ops_memory_used_percent_alert_threshold
         ),
     )
     radar = await _radar_summary(
@@ -167,6 +174,8 @@ def _readiness_checks(
 ) -> list[OpsReadinessCheckRead]:
     return [
         _server_disk_readiness(overview.server),
+        _server_cpu_readiness(overview.server),
+        _server_memory_readiness(overview.server),
         _radar_freshness_readiness(overview.radar),
         _radar_failure_readiness(overview.radar),
         _count_summary_readiness(
@@ -219,6 +228,65 @@ def _server_disk_readiness(server: OpsServerSummary) -> OpsReadinessCheckRead:
         "服务端磁盘空间充足。",
         disk_free_percent=server.disk_free_percent,
         disk_path=server.disk_path,
+    )
+
+
+def _server_cpu_readiness(server: OpsServerSummary) -> OpsReadinessCheckRead:
+    if server.cpu_error:
+        return _readiness_check(
+            "server_cpu",
+            "warning",
+            "服务端 CPU 指标不可用。",
+            cpu_error=server.cpu_error,
+            cpu_logical_count=server.cpu_logical_count,
+        )
+
+    if server.is_cpu_pressure_high:
+        return _readiness_check(
+            "server_cpu",
+            "warning",
+            "服务端 CPU 压力偏高。",
+            cpu_usage_percent=server.cpu_usage_percent,
+            cpu_logical_count=server.cpu_logical_count,
+            cpu_load_1m=server.cpu_load_1m,
+        )
+
+    return _readiness_check(
+        "server_cpu",
+        "ok",
+        "服务端 CPU 压力正常。",
+        cpu_usage_percent=server.cpu_usage_percent,
+        cpu_logical_count=server.cpu_logical_count,
+        cpu_load_1m=server.cpu_load_1m,
+    )
+
+
+def _server_memory_readiness(server: OpsServerSummary) -> OpsReadinessCheckRead:
+    if server.memory_error:
+        return _readiness_check(
+            "server_memory",
+            "warning",
+            "服务端内存指标不可用。",
+            memory_error=server.memory_error,
+        )
+
+    if server.is_memory_pressure_high:
+        return _readiness_check(
+            "server_memory",
+            "warning",
+            "服务端内存压力偏高。",
+            memory_used_percent=server.memory_used_percent,
+            memory_available_bytes=server.memory_available_bytes,
+            memory_total_bytes=server.memory_total_bytes,
+        )
+
+    return _readiness_check(
+        "server_memory",
+        "ok",
+        "服务端内存余量正常。",
+        memory_used_percent=server.memory_used_percent,
+        memory_available_bytes=server.memory_available_bytes,
+        memory_total_bytes=server.memory_total_bytes,
     )
 
 
@@ -678,9 +746,11 @@ def _server_summary(
     now: datetime,
     disk_check_path: str,
     disk_free_percent_alert_threshold: float,
+    cpu_usage_percent_alert_threshold: float,
+    memory_used_percent_alert_threshold: float,
 ) -> OpsServerSummary:
     disk_path = disk_check_path.strip() or "."
-    base_payload: dict[str, Any] = {
+    payload: dict[str, Any] = {
         "process_id": os.getpid(),
         "process_started_at": PROCESS_STARTED_AT,
         "process_uptime_seconds": _seconds_between(PROCESS_STARTED_AT, now) or 0.0,
@@ -689,14 +759,38 @@ def _server_summary(
         "disk_path": disk_path,
     }
 
+    payload.update(
+        _disk_summary(
+            disk_path=disk_path,
+            disk_free_percent_alert_threshold=disk_free_percent_alert_threshold,
+        ),
+    )
+    payload.update(
+        _cpu_summary(
+            cpu_usage_percent_alert_threshold=cpu_usage_percent_alert_threshold,
+        ),
+    )
+    payload.update(
+        _memory_summary(
+            memory_used_percent_alert_threshold=memory_used_percent_alert_threshold,
+        ),
+    )
+
+    return OpsServerSummary(**payload)
+
+
+def _disk_summary(
+    *,
+    disk_path: str,
+    disk_free_percent_alert_threshold: float,
+) -> dict[str, Any]:
     try:
         usage = shutil.disk_usage(disk_path)
     except OSError as exc:
-        return OpsServerSummary(
-            **base_payload,
-            is_disk_space_low=False,
-            disk_error=f"{exc.__class__.__name__}: {exc}",
-        )
+        return {
+            "is_disk_space_low": False,
+            "disk_error": f"{exc.__class__.__name__}: {exc}",
+        }
 
     total = int(usage.total)
     used = int(usage.used)
@@ -704,18 +798,76 @@ def _server_summary(
     free_percent = _percent(free, total)
     used_percent = _percent(used, total)
 
-    return OpsServerSummary(
-        **base_payload,
-        disk_total_bytes=total,
-        disk_used_bytes=used,
-        disk_free_bytes=free,
-        disk_used_percent=used_percent,
-        disk_free_percent=free_percent,
-        is_disk_space_low=(
+    return {
+        "disk_total_bytes": total,
+        "disk_used_bytes": used,
+        "disk_free_bytes": free,
+        "disk_used_percent": used_percent,
+        "disk_free_percent": free_percent,
+        "is_disk_space_low": (
             free_percent is not None
             and free_percent <= disk_free_percent_alert_threshold
         ),
+    }
+
+
+def _cpu_summary(*, cpu_usage_percent_alert_threshold: float) -> dict[str, Any]:
+    payload: dict[str, Any] = {"is_cpu_pressure_high": False}
+
+    try:
+        payload["cpu_logical_count"] = psutil.cpu_count(logical=True)
+        cpu_usage_percent = _bounded_percent(psutil.cpu_percent(interval=None))
+    except (OSError, RuntimeError, ValueError) as exc:
+        payload["cpu_error"] = f"{exc.__class__.__name__}: {exc}"
+        return payload
+
+    payload["cpu_usage_percent"] = cpu_usage_percent
+    payload["is_cpu_pressure_high"] = (
+        cpu_usage_percent is not None
+        and cpu_usage_percent >= cpu_usage_percent_alert_threshold
     )
+    payload.update(_cpu_load_summary())
+    return payload
+
+
+def _cpu_load_summary() -> dict[str, Any]:
+    try:
+        load_1m, load_5m, load_15m = psutil.getloadavg()
+    except (AttributeError, OSError, RuntimeError):
+        return {}
+
+    return {
+        "cpu_load_1m": round(float(load_1m), 3),
+        "cpu_load_5m": round(float(load_5m), 3),
+        "cpu_load_15m": round(float(load_15m), 3),
+    }
+
+
+def _memory_summary(*, memory_used_percent_alert_threshold: float) -> dict[str, Any]:
+    try:
+        memory = psutil.virtual_memory()
+    except (OSError, RuntimeError, ValueError) as exc:
+        return {
+            "is_memory_pressure_high": False,
+            "memory_error": f"{exc.__class__.__name__}: {exc}",
+        }
+
+    total = int(memory.total)
+    available = int(memory.available)
+    used = int(memory.used)
+    used_percent = _bounded_percent(memory.percent)
+
+    return {
+        "memory_total_bytes": total,
+        "memory_available_bytes": available,
+        "memory_used_bytes": used,
+        "memory_used_percent": used_percent,
+        "memory_available_percent": _percent(available, total),
+        "is_memory_pressure_high": (
+            used_percent is not None
+            and used_percent >= memory_used_percent_alert_threshold
+        ),
+    }
 
 
 async def _radar_summary(
@@ -850,6 +1002,40 @@ def _ops_alerts(
             ),
         )
 
+    if server.cpu_error:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="server_cpu_check_failed",
+                message="服务器 CPU 指标不可用。",
+            ),
+        )
+    elif server.is_cpu_pressure_high:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="server_cpu_pressure_high",
+                message="服务器 CPU 压力偏高。",
+            ),
+        )
+
+    if server.memory_error:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="server_memory_check_failed",
+                message="服务器内存指标不可用。",
+            ),
+        )
+    elif server.is_memory_pressure_high:
+        alerts.append(
+            OpsAlertRead(
+                severity="warning",
+                code="server_memory_pressure_high",
+                message="服务器内存压力偏高。",
+            ),
+        )
+
     return alerts
 
 
@@ -895,6 +1081,15 @@ def _percent(numerator: int, denominator: int) -> float | None:
         return None
 
     return round((numerator / denominator) * 100, 2)
+
+
+def _bounded_percent(value: object) -> float | None:
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return round(max(0.0, min(100.0, percent)), 2)
 
 
 def _summary_value(summary: dict[str, object], key: str) -> object:

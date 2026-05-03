@@ -19,10 +19,22 @@ from app.main import create_app
 
 
 @pytest.fixture(autouse=True)
-def stable_disk_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+def stable_server_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.ops.service.shutil.disk_usage",
         lambda path: SimpleNamespace(total=1_000_000, used=400_000, free=600_000),
+    )
+    monkeypatch.setattr("app.ops.service.psutil.cpu_count", lambda logical=True: 8)
+    monkeypatch.setattr("app.ops.service.psutil.cpu_percent", lambda interval=None: 12.5)
+    monkeypatch.setattr("app.ops.service.psutil.getloadavg", lambda: (1.0, 0.8, 0.5))
+    monkeypatch.setattr(
+        "app.ops.service.psutil.virtual_memory",
+        lambda: SimpleNamespace(
+            total=16_000_000,
+            available=9_600_000,
+            used=6_400_000,
+            percent=40.0,
+        ),
     )
 
 
@@ -214,6 +226,14 @@ async def test_ops_overview_summarizes_recent_runtime_signals(
     assert payload["server"]["process_id"] >= 0
     assert payload["server"]["disk_free_percent"] == 60.0
     assert payload["server"]["is_disk_space_low"] is False
+    assert payload["server"]["cpu_logical_count"] == 8
+    assert payload["server"]["cpu_usage_percent"] == 12.5
+    assert payload["server"]["cpu_load_1m"] == 1.0
+    assert payload["server"]["is_cpu_pressure_high"] is False
+    assert payload["server"]["memory_total_bytes"] == 16_000_000
+    assert payload["server"]["memory_available_bytes"] == 9_600_000
+    assert payload["server"]["memory_used_percent"] == 40.0
+    assert payload["server"]["is_memory_pressure_high"] is False
     assert payload["radar"]["latest_scan_id"] == latest_scan_id
     assert payload["radar"]["latest_scan_status"] == "success"
     assert payload["radar"]["latest_scan_duration_seconds"] == 60.0
@@ -426,6 +446,8 @@ async def test_ops_readiness_reports_ready_when_core_runtime_is_healthy(
     assert payload["status"] == "ready"
     checks = {check["name"]: check for check in payload["checks"]}
     assert checks["server_disk"]["status"] == "ok"
+    assert checks["server_cpu"]["status"] == "ok"
+    assert checks["server_memory"]["status"] == "ok"
     assert checks["radar_freshness"]["status"] == "ok"
     assert checks["radar_failure_rate"]["status"] == "ok"
     assert checks["provider_fetch"]["status"] == "ok"
@@ -468,6 +490,98 @@ async def test_ops_overview_alerts_when_server_disk_space_is_low(
     assert "server_disk_space_low" in [alert["code"] for alert in payload["alerts"]]
 
 
+@pytest.mark.asyncio
+async def test_ops_overview_degrades_when_resource_metrics_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    def cpu_unavailable(interval: object = None) -> float:
+        raise OSError("cpu counters unavailable")
+
+    def memory_unavailable() -> object:
+        raise OSError("memory counters unavailable")
+
+    monkeypatch.setattr("app.ops.service.psutil.cpu_percent", cpu_unavailable)
+    monkeypatch.setattr("app.ops.service.psutil.virtual_memory", memory_unavailable)
+
+    response = await _get_ops_overview(session_factory, lookback_hours=1)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["server"]["cpu_usage_percent"] is None
+    assert payload["server"]["cpu_error"] == "OSError: cpu counters unavailable"
+    assert payload["server"]["is_cpu_pressure_high"] is False
+    assert payload["server"]["memory_used_percent"] is None
+    assert payload["server"]["memory_error"] == "OSError: memory counters unavailable"
+    assert payload["server"]["is_memory_pressure_high"] is False
+    assert "server_cpu_check_failed" in [alert["code"] for alert in payload["alerts"]]
+    assert "server_memory_check_failed" in [alert["code"] for alert in payload["alerts"]]
+
+
+@pytest.mark.asyncio
+async def test_ops_readiness_warns_when_server_resources_are_under_pressure(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    monkeypatch.setattr("app.ops.service.psutil.cpu_percent", lambda interval=None: 95.0)
+    monkeypatch.setattr(
+        "app.ops.service.psutil.virtual_memory",
+        lambda: SimpleNamespace(
+            total=16_000_000,
+            available=1_280_000,
+            used=14_720_000,
+            percent=92.0,
+        ),
+    )
+    await _seed_ready_runtime(session_factory)
+
+    response = await _get_ops_readiness(session_factory, lookback_hours=24)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "warning"
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert checks["server_cpu"]["status"] == "warning"
+    assert checks["server_cpu"]["metadata"]["cpu_usage_percent"] == 95.0
+    assert checks["server_memory"]["status"] == "warning"
+    assert checks["server_memory"]["metadata"]["memory_used_percent"] == 92.0
+
+
+@pytest.mark.asyncio
+async def test_ops_readiness_warns_but_does_not_block_when_resource_metrics_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    def cpu_unavailable(interval: object = None) -> float:
+        raise OSError("cpu counters unavailable")
+
+    def memory_unavailable() -> object:
+        raise OSError("memory counters unavailable")
+
+    monkeypatch.setattr("app.ops.service.psutil.cpu_percent", cpu_unavailable)
+    monkeypatch.setattr("app.ops.service.psutil.virtual_memory", memory_unavailable)
+    await _seed_ready_runtime(session_factory)
+
+    response = await _get_ops_readiness(session_factory, lookback_hours=24)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "warning"
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert checks["server_cpu"]["status"] == "warning"
+    assert checks["server_cpu"]["metadata"]["cpu_error"] == "OSError: cpu counters unavailable"
+    assert checks["server_memory"]["status"] == "warning"
+    assert (
+        checks["server_memory"]["metadata"]["memory_error"]
+        == "OSError: memory counters unavailable"
+    )
+    assert all(
+        check["status"] != "fail"
+        for name, check in checks.items()
+        if name in {"server_cpu", "server_memory"}
+    )
+
+
 async def _get_ops_overview(
     session_factory: async_sessionmaker[AsyncSession],
     *,
@@ -490,6 +604,50 @@ async def _get_ops_overview(
             )
     finally:
         app.dependency_overrides.clear()
+
+
+async def _seed_ready_runtime(session_factory: async_sessionmaker[AsyncSession]) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add(
+            RadarScanBatch(
+                status="success",
+                started_at=now - timedelta(minutes=5),
+                finished_at=now - timedelta(minutes=4),
+                source_snapshot_ids=[1],
+                summary={"signal_count": 2},
+            ),
+        )
+        session.add(
+            ProviderFetchLog(
+                provider_name="akshare",
+                endpoint="stock_zh_a_spot_em",
+                status="success",
+                fetch_started_at=now - timedelta(minutes=8),
+                fetch_finished_at=now - timedelta(minutes=7),
+                source_time=None,
+                row_count=100,
+                error_message=None,
+                freshness="unknown_source_time",
+                confidence=0.95,
+                missing_fields=[],
+                raw_snapshot_id=None,
+                normalization_version="test",
+            ),
+        )
+        session.add(
+            DataQualityCheck(
+                provider_name="akshare",
+                endpoint="stock_zh_a_spot_em",
+                check_name="normalization",
+                status="ok",
+                confidence=0.95,
+                missing_fields=[],
+                details={},
+                created_at=now - timedelta(minutes=7),
+            ),
+        )
+        await session.commit()
 
 
 async def _get_ops_history(

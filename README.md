@@ -19,9 +19,9 @@
 - FastAPI 后端入口
 - `/health` 存活检查
 - `/health/ready` PostgreSQL / Redis 就绪检查
-- `/ops/overview` 只读运行状态汇总：服务端进程、磁盘空间、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要
+- `/ops/overview` 只读运行状态汇总：服务端进程、磁盘/CPU/内存资源、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要
 - `/ops/history` 只读运维历史：最近扫描、Provider 异常、数据质量异常、Telegram 推送异常、模型降级/失败事件和异常汇总
-- `/ops/readiness` 只读运行就绪自检：基于服务端磁盘、雷达新鲜度、扫描失败率、Provider、数据质量、推送和模型调用给出 `ready` / `warning` / `blocked`
+- `/ops/readiness` 只读运行就绪自检：基于服务端磁盘/CPU/内存、雷达新鲜度、扫描失败率、Provider、数据质量、推送和模型调用给出 `ready` / `warning` / `blocked`
 - AKShare 最小 Provider：A 股行情、行业板块、概念板块
 - AKShare 情绪 Provider：涨停股池、跌停股池、炸板股池
 - Tushare Provider：可查看 token 配置状态和计划端点，`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取并写入 Provider 快照；`anns_d` 中明显重大风险公告可在后续雷达扫描中映射为 risk P0
@@ -45,7 +45,7 @@
 - `/reports` 查看当前 `user_key` 的报告列表
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
-- 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘摘要、运维历史、运行就绪自检、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单
+- 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -63,7 +63,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含
@@ -155,6 +155,8 @@ TELEGRAM_WEBHOOK_SECRET=
 TELEGRAM_PUSH_ENABLED=false
 OPS_DISK_CHECK_PATH=.
 OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD=10
+OPS_CPU_USAGE_PERCENT_ALERT_THRESHOLD=90
+OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD=90
 ```
 
 - `TELEGRAM_BOT_TOKEN` 留空时，`POST /telegram/webhook` 不会调用 Telegram Bot API，而是返回 `preview`，方便本地测试。
@@ -164,7 +166,7 @@ OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD=10
 - P0 信号完成折叠推送后，会为对应 `user_key=telegram-<chat_id>` 自动生成一份 `standard` report；重复推送同一扫描不会重复生成。
 - `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤。
 - `/health` 返回 API、数据库、Redis 和最近一次雷达扫描摘要。
-- `/ops` 返回服务端运行时、磁盘空间、最近运行状态、扫描失败率、Provider、数据质量、推送、模型调用和告警摘要。
+- `/ops` 返回服务端运行时、磁盘/CPU/内存、最近运行状态、扫描失败率、Provider、数据质量、推送、模型调用和告警摘要。
 - `/ops_history` 返回最近运维异常历史和异常汇总，不触发采集、扫描、推送或模型调用。
 - `/ops_ready` 返回运行就绪自检，不触发采集、扫描、推送或模型调用。
 - `/tushare` 返回 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取。

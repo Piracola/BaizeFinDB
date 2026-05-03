@@ -136,8 +136,9 @@ curl -fsS "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 ```
 
 `/health/ready` should only return ready when PostgreSQL and Redis are reachable.
-`/ops/overview` is read-only and summarizes recent radar scans, provider fetches,
-data quality, Telegram push logs, and model degradation logs.
+`/ops/overview` is read-only and summarizes server disk/CPU/memory resources,
+recent radar scans, provider fetches, data quality, Telegram push logs, and
+model degradation logs.
 
 The same checks can be run through the bundled preflight:
 

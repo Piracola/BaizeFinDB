@@ -59,6 +59,18 @@ class Settings(BaseSettings):
         le=100,
         alias="OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD",
     )
+    ops_cpu_usage_percent_alert_threshold: float = Field(
+        default=90.0,
+        ge=0,
+        le=100,
+        alias="OPS_CPU_USAGE_PERCENT_ALERT_THRESHOLD",
+    )
+    ops_memory_used_percent_alert_threshold: float = Field(
+        default=90.0,
+        ge=0,
+        le=100,
+        alias="OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD",
+    )
 
     @property
     def effective_celery_broker_url(self) -> str:

@@ -624,8 +624,16 @@ function renderOpsOverview(overview) {
     },
     {
       name: "服务端",
-      status: server.is_disk_space_low || server.disk_error ? "fail" : "ok",
-      value: formatOpsServerDisk(server),
+      status:
+        server.is_disk_space_low ||
+        server.disk_error ||
+        server.is_cpu_pressure_high ||
+        server.cpu_error ||
+        server.is_memory_pressure_high ||
+        server.memory_error
+          ? "fail"
+          : "ok",
+      value: formatOpsServerResources(server),
       detail: formatOpsServerDetail(server),
     },
     opsCountCard("Provider", providerFetch),
@@ -654,27 +662,39 @@ function formatOpsAlerts(alerts) {
   return alerts.map((alert) => alert.message || alert.code || "未返回告警说明").join(" / ");
 }
 
-function formatOpsServerDisk(server) {
-  if (server.disk_error) {
-    return "磁盘检查失败";
-  }
-
-  const freePercent = Number(server.disk_free_percent);
-  if (Number.isNaN(freePercent)) {
-    return "未返回";
-  }
-
-  return `可用 ${freePercent.toFixed(1).replace(/\.0$/, "")}%`;
+function formatOpsServerResources(server) {
+  return [
+    `磁盘 ${server.disk_error ? "不可用" : formatPercent(server.disk_free_percent)}`,
+    `CPU ${server.cpu_error ? "不可用" : formatPercent(server.cpu_usage_percent)}`,
+    `内存 ${server.memory_error ? "不可用" : formatPercent(server.memory_used_percent)}`,
+  ].join(" / ");
 }
 
 function formatOpsServerDetail(server) {
+  const parts = [`运行 ${formatDuration(server.process_uptime_seconds)}`];
   if (server.disk_error) {
-    return server.disk_error;
+    parts.push(`磁盘：${server.disk_error}`);
+  } else {
+    parts.push(
+      `磁盘可用 ${formatBytes(server.disk_free_bytes)}/${formatBytes(server.disk_total_bytes)}`,
+    );
   }
 
-  return `运行 ${formatDuration(server.process_uptime_seconds)} / 可用 ${formatBytes(
-    server.disk_free_bytes,
-  )}/${formatBytes(server.disk_total_bytes)}`;
+  if (server.cpu_error) {
+    parts.push(`CPU：${server.cpu_error}`);
+  } else {
+    parts.push(`CPU 核心 ${server.cpu_logical_count ?? "-"}`);
+  }
+
+  if (server.memory_error) {
+    parts.push(`内存：${server.memory_error}`);
+  } else {
+    parts.push(
+      `内存可用 ${formatBytes(server.memory_available_bytes)}/${formatBytes(server.memory_total_bytes)}`,
+    );
+  }
+
+  return parts.join(" / ");
 }
 
 function renderOpsUnavailable(reason) {
@@ -1566,6 +1586,15 @@ function formatRate(value) {
   }
 
   return `${(rate * 100).toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+function formatPercent(value) {
+  const percent = Number(value);
+  if (Number.isNaN(percent)) {
+    return "-";
+  }
+
+  return `${percent.toFixed(1).replace(/\.0$/, "")}%`;
 }
 
 function formatDuration(value) {

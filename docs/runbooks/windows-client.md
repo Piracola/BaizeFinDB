@@ -5,7 +5,7 @@
 ## 1. 功能边界
 
 - 查看 API 就绪状态：`GET /health/ready`。
-- 查看运行状态和服务端磁盘摘要：`GET /ops/overview`。
+- 查看运行状态和服务端磁盘/CPU/内存摘要：`GET /ops/overview`。
 - 查看只读运维历史：`GET /ops/history`。
 - 查看运行就绪自检：`GET /ops/readiness`。
 - 查看 Tushare 数据源状态：`GET /providers/tushare/status`，只返回 token 是否配置和端点实现状态，不返回 token 原文。
@@ -74,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 按钮 | 行为 |
 | --- | --- |
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
-| 运行状态 | 调用 `/ops/overview`，显示服务端运行时、磁盘可用空间、最近扫描、失败率、Provider、数据质量、推送、模型调用和告警摘要。 |
+| 运行状态 | 调用 `/ops/overview`，显示服务端运行时、磁盘可用空间、CPU、内存、最近扫描、失败率、Provider、数据质量、推送、模型调用和告警摘要。 |
 | 运维历史 | 调用 `/ops/history`，显示最近扫描和运行异常历史，以及异常汇总。 |
 | 就绪自检 | 调用 `/ops/readiness`，显示部署/运行自检总体状态和逐项检查。 |
 | 数据源状态 | 调用 `/providers/tushare/status`，显示 Tushare token 配置、手动抓取启用状态和已实现端点数；不触发真实抓取。 |

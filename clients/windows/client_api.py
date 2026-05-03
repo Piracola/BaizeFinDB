@@ -1210,6 +1210,8 @@ def _ops_kind_label(value: Any) -> str:
 def _ops_check_label(value: Any) -> str:
     labels = {
         "server_disk": "服务端磁盘",
+        "server_cpu": "服务端 CPU",
+        "server_memory": "服务端内存",
         "radar_freshness": "雷达新鲜度",
         "radar_failure_rate": "扫描失败率",
         "provider_fetch": "Provider",
@@ -1245,10 +1247,24 @@ def _ops_server_text(server: Mapping[str, Any]) -> str:
     else:
         disk_text = f"磁盘可用={_percent_text(server.get('disk_free_percent'))}"
 
+    cpu_error = _text(server.get("cpu_error"), "")
+    if cpu_error:
+        cpu_text = "CPU=不可用"
+    else:
+        cpu_text = f"CPU={_percent_text(server.get('cpu_usage_percent'))}"
+
+    memory_error = _text(server.get("memory_error"), "")
+    if memory_error:
+        memory_text = "内存=不可用"
+    else:
+        memory_text = f"内存={_percent_text(server.get('memory_used_percent'))}"
+
     return (
         "服务端："
         f"运行={_duration_text(server.get('process_uptime_seconds'))} / "
-        f"{disk_text}"
+        f"{disk_text} / "
+        f"{cpu_text} / "
+        f"{memory_text}"
     )
 
 

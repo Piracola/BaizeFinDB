@@ -277,6 +277,13 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
                 "disk_free_bytes": 4_194_304,
                 "disk_total_bytes": 10_485_760,
                 "is_disk_space_low": False,
+                "cpu_logical_count": 8,
+                "cpu_usage_percent": 18.5,
+                "is_cpu_pressure_high": False,
+                "memory_total_bytes": 16_777_216,
+                "memory_available_bytes": 8_388_608,
+                "memory_used_percent": 50.0,
+                "is_memory_pressure_high": False,
             },
             "provider_fetch": {
                 "total_count": 6,
@@ -312,7 +319,7 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
     assert "统计窗口：最近 24 小时" in text
     assert "雷达扫描：#7 成功 | 新鲜度：6 分钟 | 正常" in text
     assert "扫描失败率：12.5% (1/8)" in text
-    assert "服务端：运行=2 小时 / 磁盘可用=42.5%" in text
+    assert "服务端：运行=2 小时 / 磁盘可用=42.5% / CPU=18.5% / 内存=50%" in text
     assert "Provider：异常=1 / 总数=6 / 最新=失败" in text
     assert "模型调用：异常=1 / 总数=2 / 最新=降级切换" in text
     assert "告警：Provider 拉取存在 1 条异常记录。" in text
@@ -361,6 +368,12 @@ def test_format_ops_readiness_outputs_checks() -> None:
                     "status": "warning",
                     "message": "最新雷达扫描已超过预期调度间隔。",
                     "metadata": {"latest_scan_id": 7},
+                },
+                {
+                    "name": "server_cpu",
+                    "status": "warning",
+                    "message": "服务端 CPU 压力偏高。",
+                    "metadata": {"cpu_usage_percent": 95.0},
                 }
             ],
         },
@@ -369,6 +382,7 @@ def test_format_ops_readiness_outputs_checks() -> None:
     assert "运行就绪自检" in text
     assert "状态：有警告" in text
     assert "雷达新鲜度：警告，最新雷达扫描已超过预期调度间隔。" in text
+    assert "服务端 CPU：警告，服务端 CPU 压力偏高。" in text
     assert "只读取已有运行记录" in text
 
 

@@ -46,6 +46,20 @@ class OpsServerSummary(BaseModel):
     disk_free_percent: float | None = Field(default=None, ge=0, le=100)
     is_disk_space_low: bool
     disk_error: str | None = None
+    cpu_logical_count: int | None = Field(default=None, ge=0)
+    cpu_usage_percent: float | None = Field(default=None, ge=0, le=100)
+    cpu_load_1m: float | None = Field(default=None, ge=0)
+    cpu_load_5m: float | None = Field(default=None, ge=0)
+    cpu_load_15m: float | None = Field(default=None, ge=0)
+    is_cpu_pressure_high: bool
+    cpu_error: str | None = None
+    memory_total_bytes: int | None = Field(default=None, ge=0)
+    memory_available_bytes: int | None = Field(default=None, ge=0)
+    memory_used_bytes: int | None = Field(default=None, ge=0)
+    memory_used_percent: float | None = Field(default=None, ge=0, le=100)
+    memory_available_percent: float | None = Field(default=None, ge=0, le=100)
+    is_memory_pressure_high: bool
+    memory_error: str | None = None
 
 
 class OpsOverviewRead(BaseModel):

@@ -497,7 +497,7 @@ uv run alembic upgrade head
 
 ### 查看最近运行状态
 
-本地或服务器 API 启动后，可以用只读运维接口查看服务端进程、磁盘空间、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要：
+本地或服务器 API 启动后，可以用只读运维接口查看服务端进程、磁盘/CPU/内存资源、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要：
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
@@ -505,7 +505,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20"
 Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 ```
 
-这些接口只聚合已有记录和 API 进程运行信息，不会触发采集、扫描、推送或模型调用。磁盘空间检查默认读取当前工作目录，可通过 `OPS_DISK_CHECK_PATH` 和 `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD` 调整；运维历史重点看 `recent_events` 和 `failure_summary`，就绪自检重点看 `status` 和 `checks`。
+这些接口只聚合已有记录和 API 进程运行信息，不会触发采集、扫描、推送或模型调用。磁盘空间检查默认读取当前工作目录，可通过 `OPS_DISK_CHECK_PATH` 和 `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD` 调整；CPU/内存压力阈值可通过 `OPS_CPU_USAGE_PERCENT_ALERT_THRESHOLD` 和 `OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD` 调整；运维历史重点看 `recent_events` 和 `failure_summary`，就绪自检重点看 `status` 和 `checks`。
 
 ### AKShare 采集失败
 

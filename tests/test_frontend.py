@@ -51,7 +51,10 @@ def test_frontend_assets_are_served() -> None:
     assert "/ops/readiness" in js_response.text
     assert "formatOpsAlerts" in js_response.text
     assert "formatOpsServerDetail" in js_response.text
+    assert "formatOpsServerResources" in js_response.text
     assert "disk_free_percent" in js_response.text
+    assert "cpu_usage_percent" in js_response.text
+    assert "memory_used_percent" in js_response.text
     assert "loadTushareStatus" in js_response.text
     assert "/providers/tushare/status" in js_response.text
     assert "/providers/tushare/readiness" in js_response.text

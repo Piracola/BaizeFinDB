@@ -278,9 +278,21 @@ async def test_telegram_health_command_reports_latest_scan(
 
 @pytest.mark.asyncio
 async def test_telegram_ops_command_reports_runtime_overview(
+    monkeypatch: pytest.MonkeyPatch,
     session_factory: async_sessionmaker[AsyncSession],
     client: AsyncClient,
 ) -> None:
+    monkeypatch.setattr("app.ops.service.psutil.cpu_count", lambda logical=True: 8)
+    monkeypatch.setattr("app.ops.service.psutil.cpu_percent", lambda interval=None: 18.5)
+    monkeypatch.setattr(
+        "app.ops.service.psutil.virtual_memory",
+        lambda: SimpleNamespace(
+            total=16_000_000,
+            available=8_000_000,
+            used=8_000_000,
+            percent=50.0,
+        ),
+    )
     now = datetime.now(UTC)
     async with session_factory() as session:
         session.add_all(
@@ -315,6 +327,8 @@ async def test_telegram_ops_command_reports_runtime_overview(
     assert "扫描失败率：50% (1/2)" in preview
     assert "服务端：运行" in preview
     assert "磁盘可用" in preview
+    assert "CPU 18.5%" in preview
+    assert "内存 50%" in preview
     assert "Provider：异常 0 / 总数 0 / 最新 暂无" in preview
     assert "告警：最近雷达扫描失败率偏高。" in preview
     assert "该视图只读取已有运行记录" in preview
