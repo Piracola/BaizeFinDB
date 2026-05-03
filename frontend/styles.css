@@ -273,13 +273,15 @@ h3 {
 
 .status-grid,
 .priority-grid,
-.lifecycle-grid {
+.lifecycle-grid,
+.sentiment-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.lifecycle-grid {
+.lifecycle-grid,
+.sentiment-grid {
   margin-top: 10px;
 }
 
@@ -664,6 +666,7 @@ pre {
   .status-grid,
   .priority-grid,
   .lifecycle-grid,
+  .sentiment-grid,
   .detail-grid,
   .form-grid,
   .signal-card,

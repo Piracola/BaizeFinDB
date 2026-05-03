@@ -157,10 +157,12 @@ def format_radar_overview(overview: RadarOverviewRead) -> str:
     stock_backtrace_text = _stock_backtrace_text(
         getattr(overview, "stock_backtrace_evidences", []),
     )
+    market_sentiment_text = _market_sentiment_text(_overview_market_sentiment(overview))
     lines = [
         "雷达总览",
         f"P0：{counts.get('P0', 0)} / P1：{counts.get('P1', 0)} / P2：{counts.get('P2', 0)}",
         f"生命周期：{_lifecycle_counts_text(overview.lifecycle_counts)}",
+        f"市场情绪：{market_sentiment_text}",
         f"个股回推：{stock_backtrace_text}",
         f"当前主题：{overview.subject_count} 个",
     ]
@@ -418,6 +420,42 @@ def _stock_backtrace_text(evidences: list[object]) -> str:
         parts.append(f"等 {len(evidences)} 条")
 
     return " / ".join(parts)
+
+
+def _overview_market_sentiment(overview: RadarOverviewRead) -> dict[str, object]:
+    latest_scan = getattr(overview, "latest_scan", None)
+    if latest_scan is None:
+        return {}
+
+    summary = _field(latest_scan, "summary", {})
+    if not isinstance(summary, dict):
+        return {}
+
+    sentiment = summary.get("market_sentiment")
+    return sentiment if isinstance(sentiment, dict) else {}
+
+
+def _market_sentiment_text(sentiment: dict[str, object]) -> str:
+    if not sentiment:
+        return "暂无"
+
+    return (
+        f"涨停 {_field(sentiment, 'limit_up_count', 0)} / "
+        f"跌停 {_field(sentiment, 'limit_down_count', 0)} / "
+        f"炸板 {_field(sentiment, 'broken_limit_up_count', 0)} / "
+        f"净压力 {_field(sentiment, 'net_limit_pressure', 0)} / "
+        f"偏向：{_sentiment_bias_label(_field(sentiment, 'sentiment_bias', 'unknown'))}"
+    )
+
+
+def _sentiment_bias_label(value: object) -> str:
+    labels = {
+        "positive": "偏强",
+        "negative": "偏弱",
+        "mixed": "分歧",
+        "unknown": "未知",
+    }
+    return labels.get(_value(value), _value(value))
 
 
 def format_scores(score_run: ScoreRunRead) -> str:

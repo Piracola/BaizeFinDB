@@ -482,6 +482,15 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
             status="success",
             signals=[signal],
             started_at=datetime(2026, 5, 3, 9, 30, tzinfo=UTC),
+            summary={
+                "market_sentiment": {
+                    "limit_up_count": 12,
+                    "limit_down_count": 2,
+                    "broken_limit_up_count": 3,
+                    "net_limit_pressure": 7,
+                    "sentiment_bias": "positive",
+                },
+            },
         ),
     )
 
@@ -498,6 +507,7 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     assert "审查状态：候选待审" in signal_preview
     assert "最新扫描：#3 完成" in overview_preview
     assert "生命周期：发展观察 1" in overview_preview
+    assert "市场情绪：涨停 12 / 跌停 2 / 炸板 3 / 净压力 7 / 偏向：偏强" in overview_preview
     assert "个股回推：Example AI +7.5% -> AI Applications" in overview_preview
     assert "暂未维护持仓" in holdings_preview
     assert "暂未维护自选" in watchlist_preview

@@ -498,6 +498,8 @@ def format_radar_overview(overview: Mapping[str, Any]) -> str:
     lifecycle_counts = _mapping(overview.get("lifecycle_counts"))
     stock_backtrace_evidences = _sequence(overview.get("stock_backtrace_evidences"))
     latest_scan = _mapping(overview.get("latest_scan"))
+    latest_summary = _mapping(latest_scan.get("summary"))
+    market_sentiment = _mapping(latest_summary.get("market_sentiment"))
     current_subjects = _sequence(overview.get("current_subjects"))
     lines = [
         "雷达总览",
@@ -508,12 +510,12 @@ def format_radar_overview(overview: Mapping[str, Any]) -> str:
             f"P2={_int_text(counts.get('P2'))}"
         ),
         f"后端生命周期分布：{_lifecycle_counts_text(lifecycle_counts)}",
+        f"后端市场情绪：{_market_sentiment_text(market_sentiment)}",
         f"后端个股回推：{_stock_backtrace_text(stock_backtrace_evidences)}",
         f"当前主题：{_int_text(overview.get('subject_count'))} 个",
     ]
 
     if latest_scan:
-        summary = _mapping(latest_scan.get("summary"))
         lines.extend(
             [
                 (
@@ -523,7 +525,7 @@ def format_radar_overview(overview: Mapping[str, Any]) -> str:
                 ),
                 f"开始时间：{_text(latest_scan.get('started_at'), '未返回')}",
                 f"完成时间：{_text(latest_scan.get('finished_at'), '未返回')}",
-                f"信号数量：{_int_text(summary.get('signal_count'))}",
+                f"信号数量：{_int_text(latest_summary.get('signal_count'))}",
             ],
         )
         if latest_scan.get("error_message"):
@@ -868,6 +870,29 @@ def _stock_backtrace_text(evidences: Sequence[Any]) -> str:
         parts.append(f"等 {len(evidences)} 条")
 
     return " / ".join(parts)
+
+
+def _market_sentiment_text(sentiment: Mapping[str, Any]) -> str:
+    if not sentiment:
+        return "暂无"
+
+    return (
+        f"涨停={_int_text(sentiment.get('limit_up_count'))} / "
+        f"跌停={_int_text(sentiment.get('limit_down_count'))} / "
+        f"炸板={_int_text(sentiment.get('broken_limit_up_count'))} / "
+        f"净压力={_int_text(sentiment.get('net_limit_pressure'))} / "
+        f"偏向={_sentiment_bias_label(sentiment.get('sentiment_bias'))}"
+    )
+
+
+def _sentiment_bias_label(value: Any) -> str:
+    labels = {
+        "positive": "偏强",
+        "negative": "偏弱",
+        "mixed": "分歧",
+        "unknown": "未知",
+    }
+    return labels.get(_text(value, "unknown"), _text(value, "unknown"))
 
 
 def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:

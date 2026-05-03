@@ -143,7 +143,16 @@ def test_format_radar_overview_uses_backend_priority_counts() -> None:
                 "status": "success",
                 "started_at": "2026-05-03T09:30:00Z",
                 "finished_at": "2026-05-03T09:30:05Z",
-                "summary": {"signal_count": 9},
+                "summary": {
+                    "signal_count": 9,
+                    "market_sentiment": {
+                        "limit_up_count": 12,
+                        "limit_down_count": 2,
+                        "broken_limit_up_count": 3,
+                        "net_limit_pressure": 7,
+                        "sentiment_bias": "positive",
+                    },
+                },
             },
             "current_subjects": [
                 {
@@ -160,6 +169,7 @@ def test_format_radar_overview_uses_backend_priority_counts() -> None:
 
     assert "P0=2 / P1=1 / P2=0" in text
     assert "后端生命周期分布：点火=1 / 发酵=2" in text
+    assert "后端市场情绪：涨停=12 / 跌停=2 / 炸板=3 / 净压力=7 / 偏向=偏强" in text
     assert "后端个股回推：Example AI +7.5% -> AI Applications" in text
     assert "最新扫描：#7 成功" in text
     assert "[P1] AI Applications" in text

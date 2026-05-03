@@ -41,6 +41,7 @@ const elements = {
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
   lifecycleCounts: document.querySelector("#lifecycle-counts"),
+  marketSentiment: document.querySelector("#market-sentiment"),
   latestScan: document.querySelector("#latest-scan"),
   stockBacktraceEvidences: document.querySelector("#stock-backtrace-evidences"),
   currentSubjects: document.querySelector("#current-subjects"),
@@ -124,14 +125,17 @@ async function loadReadyStatus() {
 async function loadOverview() {
   try {
     const overview = await fetchJson("/radar/overview");
+    const latestScan = overview.latest_scan;
     renderPriorityCounts(overview.priority_counts || {});
     renderLifecycleCounts(overview.lifecycle_counts || {});
-    renderLatestScan(overview.latest_scan);
+    renderMarketSentiment(latestScan?.summary?.market_sentiment);
+    renderLatestScan(latestScan);
     renderStockBacktraceEvidences(overview.stock_backtrace_evidences || []);
     renderCurrentSubjects(overview.current_subjects || []);
   } catch (error) {
     elements.priorityCounts.innerHTML = emptyState(`雷达总览暂不可用：${formatError(error)}`);
     elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
+    elements.marketSentiment.innerHTML = emptyState("暂无市场情绪摘要。");
     elements.latestScan.innerHTML = emptyState("确认数据库迁移和依赖服务后再刷新。");
     elements.stockBacktraceEvidences.innerHTML = emptyState("暂无个股回推证据。");
     elements.currentSubjects.innerHTML = emptyState("暂无当前主题。可先触发采集，再运行雷达扫描。");
@@ -206,6 +210,7 @@ async function loadPeriodicReport(period, options = {}) {
 function renderRadarUnavailable(reason) {
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
+  elements.marketSentiment.innerHTML = emptyState("暂无市场情绪摘要。");
   elements.latestScan.innerHTML = emptyState("依赖服务恢复后，先触发采集或运行雷达扫描。");
   elements.stockBacktraceEvidences.innerHTML = emptyState("暂无个股回推证据。");
   elements.currentSubjects.innerHTML = emptyState("暂无当前主题。");
@@ -533,6 +538,32 @@ function renderLifecycleCounts(counts) {
           <strong>${escapeHtml(label(stage))}</strong>
           <div class="priority-number">${escapeHtml(value)}</div>
           <div class="muted">生命周期计数</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderMarketSentiment(sentiment) {
+  if (!sentiment || typeof sentiment !== "object") {
+    elements.marketSentiment.innerHTML = emptyState("暂无市场情绪摘要。");
+    return;
+  }
+
+  const cards = [
+    ["涨停", sentiment.limit_up_count ?? 0, "涨停池"],
+    ["跌停", sentiment.limit_down_count ?? 0, "跌停池"],
+    ["炸板", sentiment.broken_limit_up_count ?? 0, "炸板池"],
+    ["净压力", sentiment.net_limit_pressure ?? 0, "涨停-跌停-炸板"],
+    ["偏向", sentimentBiasLabel(sentiment.sentiment_bias), "后端判定"],
+  ];
+  elements.marketSentiment.innerHTML = cards
+    .map(([name, value, note]) => {
+      return `
+        <article class="priority-card">
+          <strong>${escapeHtml(name)}</strong>
+          <div class="priority-number">${escapeHtml(value)}</div>
+          <div class="muted">${escapeHtml(note)}</div>
         </article>
       `;
     })
@@ -1027,6 +1058,17 @@ function label(value) {
   };
 
   return labels[value] || String(value ?? "-");
+}
+
+function sentimentBiasLabel(value) {
+  const labels = {
+    positive: "偏强",
+    negative: "偏弱",
+    mixed: "分歧",
+    unknown: "未知",
+  };
+
+  return labels[value] || label(value);
 }
 
 function portfolioQuery() {

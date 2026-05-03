@@ -235,9 +235,9 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/scans/1
 
 ### `GET /radar/overview`
 
-用途：查看当前雷达总览、活跃信号、优先级聚合、生命周期分布、个股回推证据和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
+用途：查看当前雷达总览、活跃信号、优先级聚合、生命周期分布、市场情绪摘要、个股回推证据和按板块/概念去重视图。默认当前视图不展示超过 7 天观察窗口的 P2。
 
-`latest_scan.summary.market_sentiment` 会透传后端从涨停、跌停和炸板池快照计算的情绪摘要；主线信号的 `metrics.market_sentiment` 和 `metrics.sentiment_confirmation` 只由后端雷达生成，前端和 Telegram 不重算。
+`latest_scan.summary.market_sentiment` 会透传后端从涨停、跌停和炸板池快照计算的情绪摘要；主线信号的 `metrics.market_sentiment` 和 `metrics.sentiment_confirmation` 只由后端雷达生成，Web、Telegram 和 Windows 客户端只展示，不重算。
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
@@ -560,7 +560,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 
 ## 9. Telegram Bot API
 
-Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期或审查状态。
+Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪或审查状态。
 
 ### `GET /telegram/status`
 
