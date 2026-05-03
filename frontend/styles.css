@@ -273,6 +273,7 @@ h3 {
 
 .status-grid,
 .ops-grid,
+.tushare-grid,
 .priority-grid,
 .lifecycle-grid,
 .sentiment-grid {
@@ -282,6 +283,7 @@ h3 {
 }
 
 .ops-grid,
+.tushare-grid,
 .lifecycle-grid,
 .sentiment-grid {
   margin-top: 10px;

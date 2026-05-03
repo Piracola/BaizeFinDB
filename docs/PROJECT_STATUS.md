@@ -14,6 +14,8 @@ M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻�
 
 Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、运行状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级、运行状态或评分，也不是完整安装包。
 
+Web 雷达终端工作台已在 OPS 面板展示 Tushare token 状态、手动抓取启用状态和已实现端点数；`tushare` 命令只刷新只读状态，不触发真实抓取。
+
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性，并可执行只读 M5 smoke check 验证健康、Ops、AKShare Provider、Tushare Provider、Radar 和 Telegram 状态接口 JSON 契约。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。

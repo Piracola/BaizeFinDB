@@ -39,6 +39,7 @@ const elements = {
   lastUpdated: document.querySelector("#last-updated"),
   readyStatus: document.querySelector("#ready-status"),
   opsOverview: document.querySelector("#ops-overview"),
+  tushareStatus: document.querySelector("#tushare-status"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
   lifecycleCounts: document.querySelector("#lifecycle-counts"),
@@ -95,6 +96,7 @@ async function refreshAll() {
   if (isReady) {
     await Promise.all([
       loadOpsOverview(),
+      loadTushareStatus(),
       loadOverview(),
       loadSignals(),
       loadPortfolio(),
@@ -131,6 +133,15 @@ async function loadOpsOverview() {
     renderOpsOverview(overview);
   } catch (error) {
     renderOpsUnavailable(`运行状态暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadTushareStatus() {
+  try {
+    const status = await fetchJson("/providers/tushare/status");
+    renderTushareStatus(status);
+  } catch (error) {
+    renderTushareUnavailable(`Tushare 状态暂不可用：${formatError(error)}`);
   }
 }
 
@@ -221,6 +232,7 @@ async function loadPeriodicReport(period, options = {}) {
 
 function renderRadarUnavailable(reason) {
   renderOpsUnavailable("依赖服务恢复后再读取运行状态。");
+  renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
   elements.marketSentiment.innerHTML = emptyState("暂无市场情绪摘要。");
@@ -438,7 +450,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -446,6 +458,14 @@ function executeCommand() {
   const commands = {
     ops: () => scrollToPanel("status-panel"),
     status: () => scrollToPanel("status-panel"),
+    tushare: () => {
+      scrollToPanel("status-panel");
+      loadTushareStatus();
+    },
+    provider: () => {
+      scrollToPanel("status-panel");
+      loadTushareStatus();
+    },
     radar: refreshAll,
     refresh: refreshAll,
     scan: runRadarScan,
@@ -469,7 +489,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -569,6 +589,49 @@ function renderOpsOverview(overview) {
 
 function renderOpsUnavailable(reason) {
   elements.opsOverview.innerHTML = emptyState(reason);
+}
+
+function renderTushareStatus(status) {
+  const tokenConfigured = Boolean(status?.token_configured);
+  const fetchEnabled = Boolean(status?.fetch_enabled);
+  const endpointCount = Number(status?.endpoint_count ?? 0);
+  const implementedCount = Number(status?.implemented_endpoint_count ?? 0);
+  const cards = [
+    {
+      name: "Tushare Token",
+      status: tokenConfigured ? "ok" : "fail",
+      value: tokenConfigured ? "已配置" : "未配置",
+      detail: "前端不显示 token 原文",
+    },
+    {
+      name: "Tushare 抓取",
+      status: fetchEnabled ? "ok" : "fail",
+      value: fetchEnabled ? "可手动抓取" : "未启用",
+      detail: `已实现 ${implementedCount}/${endpointCount} 个端点`,
+    },
+    {
+      name: "Tushare 状态",
+      status: status?.status === "configured" ? "ok" : "fail",
+      value: label(status?.status || "unknown"),
+      detail: status?.message || "未返回状态说明",
+    },
+  ];
+
+  elements.tushareStatus.innerHTML = cards
+    .map((card) => {
+      return `
+        <article class="status-card ${card.status === "ok" ? "status-ok" : "status-fail"}">
+          <strong>${escapeHtml(card.name)}</strong>
+          <div>${escapeHtml(card.value)}</div>
+          <div class="muted">${escapeHtml(card.detail)}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderTushareUnavailable(reason) {
+  elements.tushareStatus.innerHTML = emptyState(reason);
 }
 
 function opsCountCard(name, summary) {

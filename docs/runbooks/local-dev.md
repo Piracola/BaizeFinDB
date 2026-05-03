@@ -40,7 +40,7 @@ uv run uvicorn app.main:app --reload
 http://127.0.0.1:8000/
 ```
 
-Web 终端工作台当前可查看 API 状态、运行状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告、日报/周报汇总、单信号 v2 综合评分明细和 Telegram chat 绑定/白名单。顶部命令栏支持 `ops`、`radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports`、`daily`、`weekly`、`score`、`telegram` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级、生命周期、市场情绪、运行状态、个股回推或评分。
+Web 终端工作台当前可查看 API 状态、运行状态、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号列表/详情，维护指定 `user_key` 的持仓和自选，并从信号详情生成 quick/standard 报告、日报/周报汇总、单信号 v2 综合评分明细和 Telegram chat 绑定/白名单。顶部命令栏支持 `ops`、`tushare`、`radar`、`scan`、`fetch`、`signals`、`portfolio`、`reports`、`daily`、`weekly`、`score`、`telegram` 等轻量命令；这些命令只触发已有后端 API 或页面跳转，不在前端重算雷达等级、生命周期、市场情绪、运行状态、个股回推或评分。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
