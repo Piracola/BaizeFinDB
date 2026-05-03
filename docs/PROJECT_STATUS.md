@@ -200,6 +200,8 @@ Docker / PostgreSQL 可用后：
 docker compose up -d postgres redis
 uv run alembic upgrade head
 uv run python infra/scripts/collect_akshare_minimal.py
+uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/run_radar_scan.py
 uv run python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql
 ```

@@ -127,6 +127,8 @@ TUSHARE_TOKEN=
 手动抓取股票基础信息：
 
 ```powershell
+uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/collect_tushare_stock_basic.py
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/stock-basic
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
@@ -492,6 +494,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 先确认 `.env` 已配置 `TUSHARE_TOKEN`，再看抓取日志：
 
 ```powershell
+uv run python infra/scripts/verify_tushare_stock_basic.py
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic&limit=5"
 ```

@@ -71,6 +71,18 @@ uv run python infra/scripts/server_deploy_check.py --check-containers --check-ap
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
 ```
 
+验证 Tushare `stock_basic` token 和字段稳定性，不写数据库：
+
+```powershell
+uv run python infra/scripts/verify_tushare_stock_basic.py
+```
+
+手动写入 Tushare 股票基础信息快照：
+
+```powershell
+uv run python infra/scripts/collect_tushare_stock_basic.py
+```
+
 验证 Postgres 容器内 `pg_dump` 可用：
 
 ```powershell

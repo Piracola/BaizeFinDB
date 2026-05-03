@@ -207,10 +207,17 @@ uv run alembic upgrade head
 uv run python infra/scripts/verify_akshare_minimal.py
 ```
 
+验证 Tushare `stock_basic`，不写数据库：
+
+```powershell
+uv run python infra/scripts/verify_tushare_stock_basic.py
+```
+
 PostgreSQL 迁移完成后，手动采集并写入数据库：
 
 ```powershell
 uv run python infra/scripts/collect_akshare_minimal.py
+uv run python infra/scripts/collect_tushare_stock_basic.py
 ```
 
 基于已入库快照手动运行雷达扫描：
