@@ -9,6 +9,7 @@
 - [开发文档导航](docs/README.md)
 - [本地开发 Runbook](docs/runbooks/local-dev.md)
 - [Linux 服务端部署骨架 Runbook](docs/runbooks/linux-server.md)
+- [Windows 客户端 MVP Runbook](docs/runbooks/windows-client.md)
 - [当前 API 文档](docs/api/current-api.md)
 - [当前数据模型说明](docs/specs/current-data-model.md)
 - [M5 A 股 5 分钟资金主线雷达 MVP PRD](docs/prd/m5-next-step.md)
@@ -40,6 +41,7 @@
 - Telegram Bot MVP Webhook 模块：只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
 - `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/health`、`/radar`、`/signals`、`/signal <id>`
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、雷达总览、信号列表并打开 Web 面板
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - 雷达扫描会携带 Provider 数据质量摘要，信号和证据也会保留对应质量标签
 - 雷达扫描失败会记录 `failure`、`error_message` 和失败摘要，避免普通异常留下 `running` 批次
@@ -96,6 +98,24 @@ uv run uvicorn app.main:app --reload
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
 Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web 和 Telegram webhook，不代表完整生产部署已经完成。
+
+## Windows 客户端 MVP
+
+Windows 客户端位于 [clients/windows/](clients/windows/)，当前是源码运行版，不是 exe 或安装包。
+
+本地连接：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000
+```
+
+连接服务器：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
+```
+
+客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期或审查状态；不保存 token、secret、持仓截图或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 
 ## Telegram Bot MVP
 

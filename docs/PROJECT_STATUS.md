@@ -10,6 +10,8 @@
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要和单条信号复盘；Telegram 仍只消费后端结果，不重新计算雷达等级。
 
+Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、信号列表，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级，也不是完整安装包。
+
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例。该状态只代表部署骨架完成，不代表完整生产部署完成。
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
@@ -32,6 +34,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 - [开发文档导航](README.md)
 - [本地开发 Runbook](runbooks/local-dev.md)
 - [Linux 服务端部署骨架 Runbook](runbooks/linux-server.md)
+- [Windows 客户端 MVP Runbook](runbooks/windows-client.md)
 - [当前 API 文档](api/current-api.md)
 - [当前数据模型说明](specs/current-data-model.md)
 - [M5 A 股 5 分钟资金主线雷达 MVP PRD](prd/m5-next-step.md)
@@ -44,7 +47,7 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 | M2 数据底座 | 已完成早期闭环 | AKShare 行情/行业/概念最小 Provider，采集日志、快照、质量检查、Provider 查询 API。 |
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
-| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 和 Telegram Bot MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、折叠推送、quick/standard 报告、日报周报和基础评分。 |
+| M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web、Telegram Bot MVP 和 Windows 客户端 MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、折叠推送、quick/standard 报告、日报周报和基础评分。 |
 | Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
@@ -79,6 +82,12 @@ Telegram：
 
 - `GET /telegram/status`
 - `POST /telegram/webhook`
+
+Windows 客户端：
+
+- `clients/windows/run-client.ps1`
+- `clients/windows/baizefindb_client.py`
+- `clients/windows/client_api.py`
 
 ## 当前数据表
 
