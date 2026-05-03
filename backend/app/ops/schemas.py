@@ -58,3 +58,28 @@ class OpsOverviewRead(BaseModel):
     telegram_push: OpsCountSummary
     model_calls: OpsCountSummary
     alerts: list[OpsAlertRead] = Field(default_factory=list)
+
+
+class OpsHistoryEventRead(BaseModel):
+    id: int = Field(ge=0)
+    kind: str
+    status: str
+    occurred_at: datetime
+    duration_seconds: float | None = Field(default=None, ge=0)
+    title: str
+    detail: str | None = None
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class OpsFailureSummaryRead(BaseModel):
+    kind: str
+    key: str
+    count: int = Field(ge=0)
+
+
+class OpsHistoryRead(BaseModel):
+    generated_at: datetime
+    lookback_hours: int = Field(ge=1, le=168)
+    limit: int = Field(ge=1, le=100)
+    recent_events: list[OpsHistoryEventRead] = Field(default_factory=list)
+    failure_summary: list[OpsFailureSummaryRead] = Field(default_factory=list)

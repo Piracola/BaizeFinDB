@@ -6,6 +6,7 @@
 
 - 查看 API 就绪状态：`GET /health/ready`。
 - 查看运行状态和服务端磁盘摘要：`GET /ops/overview`。
+- 查看只读运维历史：`GET /ops/history`。
 - 查看 Tushare 数据源状态：`GET /providers/tushare/status`，只返回 token 是否配置和端点实现状态，不返回 token 原文。
 - 查看雷达总览、优先级、生命周期分布、市场情绪摘要和个股回推证据：`GET /radar/overview`。
 - 查看信号列表：`GET /radar/signals`。
@@ -72,6 +73,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | --- | --- |
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
 | 运行状态 | 调用 `/ops/overview`，显示服务端运行时、磁盘可用空间、最近扫描、失败率、Provider、数据质量、推送、模型调用和告警摘要。 |
+| 运维历史 | 调用 `/ops/history`，显示最近扫描和运行异常历史，以及异常汇总。 |
 | 数据源状态 | 调用 `/providers/tushare/status`，显示 Tushare token 配置、手动抓取启用状态和已实现端点数；不触发真实抓取。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |

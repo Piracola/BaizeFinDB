@@ -17,6 +17,7 @@ PORTFOLIO_PREVIEW_LIMIT = 20
 SUBJECTS_PREVIEW_LIMIT = 8
 REPORT_PREVIEW_LIMIT = 20
 TELEGRAM_BINDING_PREVIEW_LIMIT = 20
+OPS_HISTORY_PREVIEW_LIMIT = 12
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
@@ -291,6 +292,25 @@ def fetch_ops_overview(
     return _expect_object(payload, "/ops/overview")
 
 
+def fetch_ops_history(
+    base_url: str | None,
+    *,
+    lookback_hours: int = 24,
+    limit: int = 20,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(
+        base_url,
+        "/ops/history",
+        query={
+            "lookback_hours": _positive_int(lookback_hours, "lookback_hours"),
+            "limit": _positive_int(limit, "limit"),
+        },
+        opener=opener,
+    )
+    return _expect_object(payload, "/ops/history")
+
+
 def fetch_tushare_status(
     base_url: str | None,
     *,
@@ -548,6 +568,44 @@ def format_ops_overview(payload: Mapping[str, Any]) -> str:
         _ops_count_text("模型调用", _mapping(payload.get("model_calls"))),
         f"告警：{_ops_alerts_text(_sequence(payload.get('alerts')))}",
     ]
+
+    lines.extend(
+        [
+            "该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def format_ops_history(payload: Mapping[str, Any]) -> str:
+    events = _sequence(payload.get("recent_events"))
+    failure_summary = _sequence(payload.get("failure_summary"))
+    lines = [
+        "运维历史",
+        f"统计窗口：最近 {_int_text(payload.get('lookback_hours'))} 小时",
+        f"事件：{len(events)} 条 / Top {_int_text(payload.get('limit'))}",
+        f"异常汇总：{_ops_failure_summary_text(failure_summary)}",
+    ]
+
+    if events:
+        lines.append("最近事件：")
+        for event in events[:OPS_HISTORY_PREVIEW_LIMIT]:
+            event_map = _mapping(event)
+            detail = _text(event_map.get("detail"), "")
+            detail_suffix = f" | {detail}" if detail else ""
+            lines.append(
+                (
+                    f"- {_ops_kind_label(event_map.get('kind'))} "
+                    f"#{_text(event_map.get('id'), '-')} "
+                    f"{_ops_status_label(event_map.get('status'))} | "
+                    f"{_text(event_map.get('occurred_at'), '未返回')}"
+                    f"{detail_suffix}"
+                ),
+            )
+    else:
+        lines.append("最近事件：暂无")
 
     lines.extend(
         [
@@ -1011,6 +1069,34 @@ def _ops_alerts_text(alerts: Sequence[Any]) -> str:
     return " / ".join(
         _text(_mapping(alert).get("message"), "未返回告警说明") for alert in alerts
     )
+
+
+def _ops_failure_summary_text(items: Sequence[Any]) -> str:
+    if not items:
+        return "暂无"
+
+    parts = []
+    for item in items[:OPS_HISTORY_PREVIEW_LIMIT]:
+        item_map = _mapping(item)
+        parts.append(
+            (
+                f"{_ops_kind_label(item_map.get('kind'))} "
+                f"{_text(item_map.get('key'), 'unknown')}="
+                f"{_int_text(item_map.get('count'))}"
+            ),
+        )
+    return " / ".join(parts)
+
+
+def _ops_kind_label(value: Any) -> str:
+    labels = {
+        "radar_scan": "雷达",
+        "provider_fetch": "Provider",
+        "data_quality": "数据质量",
+        "telegram_push": "推送",
+        "model_call": "模型",
+    }
+    return labels.get(_text(value, ""), _text(value, "-"))
 
 
 def _ops_server_text(server: Mapping[str, Any]) -> str:

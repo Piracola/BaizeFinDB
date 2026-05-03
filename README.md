@@ -20,6 +20,7 @@
 - `/health` 存活检查
 - `/health/ready` PostgreSQL / Redis 就绪检查
 - `/ops/overview` 只读运行状态汇总：服务端进程、磁盘空间、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要
+- `/ops/history` 只读运维历史：最近扫描、Provider 异常、数据质量异常、Telegram 推送异常、模型降级/失败事件和异常汇总
 - AKShare 最小 Provider：A 股行情、行业板块、概念板块
 - AKShare 情绪 Provider：涨停股池、跌停股池、炸板股池
 - Tushare Provider：可查看 token 配置状态和计划端点，`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取并写入 Provider 快照；`anns_d` 中明显重大风险公告可在后续雷达扫描中映射为 risk P0
@@ -42,7 +43,7 @@
 - `/reports` 查看当前 `user_key` 的报告列表
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
-- 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘摘要、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单
+- 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘摘要、运维历史、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -54,13 +55,13 @@
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
-- Telegram Bot MVP Webhook 模块：只消费健康检查、运行状态、Tushare 数据源状态、雷达、报告和评分后端结果，`/ops` 展示后端运行状态摘要，`/tushare` 展示 Tushare 只读配置状态，`/radar` 展示后端市场情绪摘要，不重新计算 P0/P1/P2 或评分
+- Telegram Bot MVP Webhook 模块：只消费健康检查、运行状态、运维历史、Tushare 数据源状态、雷达、报告和评分后端结果，`/ops` 展示后端运行状态摘要，`/ops_history` 展示只读运维异常历史，`/tushare` 展示 Tushare 只读配置状态，`/radar` 展示后端市场情绪摘要，不重新计算 P0/P1/P2 或评分
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
-- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/ops`、`/tushare`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/tushare` 只读展示 Tushare token 配置和端点实现状态，`/score` 展示后端 v2 评分档位和组件明细
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/tushare`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/tushare` 只读展示 Tushare token 配置和端点实现状态，`/score` 展示后端 v2 评分档位和组件明细
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘摘要、Tushare 数据源状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、Tushare 数据源状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含
@@ -114,12 +115,13 @@ uv run uvicorn app.main:app --reload
 - `http://127.0.0.1:8000/health`
 - `http://127.0.0.1:8000/health/ready`
 - `http://127.0.0.1:8000/ops/overview?lookback_hours=24`
+- `http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20`
 
 如果 PostgreSQL / Redis 还没启动，`/health` 仍会正常，`/health/ready` 会显示依赖未就绪。
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
-Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、Tushare 状态契约和 `pg_dump` 可用性，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、Tushare 状态契约和 `pg_dump` 可用性，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
 
 ## Windows 客户端 MVP
 
@@ -160,6 +162,7 @@ OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD=10
 - `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤。
 - `/health` 返回 API、数据库、Redis 和最近一次雷达扫描摘要。
 - `/ops` 返回服务端运行时、磁盘空间、最近运行状态、扫描失败率、Provider、数据质量、推送、模型调用和告警摘要。
+- `/ops_history` 返回最近运维异常历史和异常汇总，不触发采集、扫描、推送或模型调用。
 - `/tushare` 返回 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取。
 - `/holding` 和 `/watchlist` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的个人持仓/自选，只用于个人提醒和复盘上下文。
 - `/reports` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的报告列表。

@@ -9,6 +9,7 @@
 ```text
 GET  /health/ready
 GET  /ops/overview
+GET  /ops/history
 GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
 GET  /providers/tushare/status
@@ -114,6 +115,24 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 
 - `OPS_DISK_CHECK_PATH`：磁盘空间检查路径，默认 `.`。
 - `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD`：磁盘可用空间告警阈值百分比，默认 `10`。
+
+### `GET /ops/history`
+
+用途：读取只读运维历史，用于定位最近扫描、Provider、数据质量、Telegram 推送和模型调用异常。该接口不触发采集、扫描、推送或模型调用。
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20"
+```
+
+响应重点：
+
+- `recent_events`：按时间倒序返回最近运维事件。雷达扫描包含所有状态；Provider、数据质量、Telegram 推送和模型调用只返回 unhealthy / failure / degraded 类事件。
+- `failure_summary`：按类型和 key 汇总最近异常次数，例如 Provider 端点失败、数据质量降级、推送失败、模型 fallback。
+
+查询参数：
+
+- `lookback_hours`：统计窗口，范围 1 到 168，默认 24。
+- `limit`：最多返回事件数，范围 1 到 100，默认 30。
 
 ## 3. Provider API
 
@@ -784,6 +803,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/id`、`/chatid` | 查看当前聊天 ID；未进入白名单时也允许返回这个 ID，便于绑定 |
 | `/health` | 查看 API、数据库、Redis 和最近一次雷达扫描摘要 |
 | `/ops` | 查看服务端运行时、磁盘空间、最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要 |
+| `/ops_history` | 查看最近运维异常历史和异常汇总 |
 | `/tushare` | 查看 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取 |
 | `/radar` | 查看雷达总览：P0/P1/P2、生命周期分布、最新扫描、主题数量 |
 | `/signals` | 查看最近信号折叠摘要 |
@@ -921,7 +941,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 ## 11. 接 Telegram / Web / 报告时的推荐用法
 
-- 状态面板：用 `GET /health/ready` 和 `GET /ops/overview`，展示依赖就绪、服务端磁盘摘要、扫描新鲜度、失败率、数据质量、推送和模型调用摘要。
+- 状态面板：用 `GET /health/ready`、`GET /ops/overview` 和 `GET /ops/history`，展示依赖就绪、服务端磁盘摘要、扫描新鲜度、失败率、数据质量、推送、模型调用和最近运维异常历史。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。

@@ -107,6 +107,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "可用命令" in data["preview"]
     assert "/id" in data["preview"]
     assert "/ops" in data["preview"]
+    assert "/ops_history" in data["preview"]
     assert "/tushare" in data["preview"]
     assert "/holding" in data["preview"]
     assert "/watchlist" in data["preview"]
@@ -315,6 +316,38 @@ async def test_telegram_ops_command_reports_runtime_overview(
     assert "Provider：异常 0 / 总数 0 / 最新 暂无" in preview
     assert "告警：最近雷达扫描失败率偏高。" in preview
     assert "该视图只读取已有运行记录" in preview
+    assert "不构成投资建议" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_ops_history_command_reports_recent_events(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add(
+            RadarScanBatch(
+                status="failure",
+                started_at=now - timedelta(minutes=10),
+                finished_at=now - timedelta(minutes=9),
+                source_snapshot_ids=[],
+                summary={"error_type": "ProviderError"},
+                error_message="provider down",
+            ),
+        )
+        await session.commit()
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/ops_history"))
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "运维历史" in preview
+    assert "统计窗口：最近 24 小时" in preview
+    assert "异常汇总：雷达 failure=1" in preview
+    assert "最近事件：" in preview
+    assert "雷达 #" in preview
+    assert "异常" in preview
     assert "不构成投资建议" in preview
 
 

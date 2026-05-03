@@ -65,7 +65,7 @@ uv run python infra/scripts/server_deploy_check.py
 uv run python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
-验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态、服务端磁盘摘要、AKShare 状态和 Tushare 状态：
+验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态、服务端磁盘摘要、`/ops/history` 运维历史、AKShare 状态和 Tushare 状态：
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
@@ -124,6 +124,14 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/overview?lookback_hours=24"
 ```
 
 该接口只读聚合已有数据库记录和 API 进程运行信息，不触发采集、扫描、推送或模型调用。重点看 `alerts`、`server.disk_free_percent`、`server.is_disk_space_low`、`radar.recent_scan_failure_rate`、`radar.is_latest_scan_stale`、`provider_fetch.unhealthy_count`、`data_quality.unhealthy_count`、`telegram_push.unhealthy_count` 和 `model_calls.unhealthy_count`。可用 `OPS_DISK_CHECK_PATH` 指定磁盘检查路径，用 `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD` 调整低磁盘空间告警阈值。
+
+查看最近运行异常历史：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20"
+```
+
+重点看 `recent_events` 和 `failure_summary`。该接口同样只读，不触发采集、扫描、推送或模型调用。
 
 ## Secrets 边界
 

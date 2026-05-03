@@ -20,6 +20,7 @@ def test_frontend_index_returns_static_page() -> None:
     assert "Telegram 绑定 / 白名单" in response.text
     assert "tushare / radar" in response.text
     assert "ops-overview" in response.text
+    assert "ops-history" in response.text
     assert "tushare-status" in response.text
     assert "lifecycle-counts" in response.text
     assert "market-sentiment" in response.text
@@ -42,7 +43,9 @@ def test_frontend_assets_are_served() -> None:
     assert js_response.status_code == 200
     assert "refreshAll" in js_response.text
     assert "loadOpsOverview" in js_response.text
+    assert "loadOpsHistory" in js_response.text
     assert "/ops/overview" in js_response.text
+    assert "/ops/history" in js_response.text
     assert "formatOpsAlerts" in js_response.text
     assert "formatOpsServerDetail" in js_response.text
     assert "disk_free_percent" in js_response.text

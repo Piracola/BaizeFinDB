@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.ops.schemas import OpsOverviewRead
+from app.ops.schemas import OpsHistoryRead, OpsOverviewRead
 from app.portfolio.schemas import HoldingRead, WatchlistItemRead
 from app.providers.schemas import TushareProviderStatusResponse
 from app.radar.schemas import (
@@ -106,6 +106,7 @@ def format_help() -> str:
                 "/id - 查看当前聊天 ID，用于绑定白名单",
                 "/health - 查看 API、数据库、Redis 和最近扫描状态",
                 "/ops - 查看最近运行状态、失败率和降级摘要",
+                "/ops_history - 查看最近运维异常历史",
                 "/tushare - 查看 Tushare 数据源配置状态",
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
@@ -184,6 +185,42 @@ def format_ops_overview(overview: OpsOverviewRead) -> str:
         "",
         DISCLAIMER,
     ]
+    return _trim_message("\n".join(lines))
+
+
+def format_ops_history(history: OpsHistoryRead) -> str:
+    lines = [
+        "运维历史",
+        f"统计窗口：最近 {history.lookback_hours} 小时",
+        f"事件：{len(history.recent_events)} 条 / Top {history.limit}",
+    ]
+
+    if history.failure_summary:
+        lines.append(
+            "异常汇总："
+            + " / ".join(
+                f"{_ops_kind_label(item.kind)} {item.key}={item.count}"
+                for item in history.failure_summary[:5]
+            ),
+        )
+    else:
+        lines.append("异常汇总：暂无")
+
+    if history.recent_events:
+        lines.append("最近事件：")
+        for event in history.recent_events[:5]:
+            detail = f" | {event.detail}" if event.detail else ""
+            lines.append(
+                (
+                    f"- {_ops_kind_label(event.kind)} #{event.id} "
+                    f"{_ops_status_label(event.status)} | "
+                    f"{_format_time(event.occurred_at)}{detail}"
+                ),
+            )
+    else:
+        lines.append("最近事件：暂无")
+
+    lines.extend(["该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。", "", DISCLAIMER])
     return _trim_message("\n".join(lines))
 
 
@@ -533,6 +570,17 @@ def _ops_status_label(value: object) -> str:
     }
     raw_value = _value(value) if value is not None else "unknown"
     return labels.get(raw_value, "暂无" if value is None else raw_value)
+
+
+def _ops_kind_label(value: object) -> str:
+    labels = {
+        "radar_scan": "雷达",
+        "provider_fetch": "Provider",
+        "data_quality": "数据质量",
+        "telegram_push": "推送",
+        "model_call": "模型",
+    }
+    return labels.get(_value(value), _value(value))
 
 
 def _ops_alerts_text(alerts: list[object]) -> str:

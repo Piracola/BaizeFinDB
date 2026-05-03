@@ -264,6 +264,116 @@ async def test_ops_overview_handles_empty_database(
 
 
 @pytest.mark.asyncio
+async def test_ops_history_lists_recent_runtime_failures(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        user = UserProfile(user_key="ops-history-user", display_name="Ops History User")
+        session.add(user)
+        await session.flush()
+        session.add_all(
+            [
+                RadarScanBatch(
+                    status="success",
+                    started_at=now - timedelta(minutes=5),
+                    finished_at=now - timedelta(minutes=4),
+                    source_snapshot_ids=[1, 2],
+                    summary={"signal_count": 3},
+                ),
+                RadarScanBatch(
+                    status="failure",
+                    started_at=now - timedelta(minutes=15),
+                    finished_at=now - timedelta(minutes=14),
+                    source_snapshot_ids=[],
+                    summary={"error_type": "ProviderError"},
+                    error_message="provider unavailable",
+                ),
+                ProviderFetchLog(
+                    provider_name="akshare",
+                    endpoint="stock_board_concept_name_em",
+                    status="failure",
+                    fetch_started_at=now - timedelta(minutes=12),
+                    fetch_finished_at=now - timedelta(minutes=11),
+                    source_time=None,
+                    row_count=0,
+                    error_message="network",
+                    freshness="unavailable",
+                    confidence=0.0,
+                    missing_fields=[],
+                    raw_snapshot_id=None,
+                    normalization_version="test",
+                ),
+                DataQualityCheck(
+                    provider_name="akshare",
+                    endpoint="stock_zh_a_spot_em",
+                    check_name="normalization",
+                    status="degraded",
+                    confidence=0.4,
+                    missing_fields=["amount"],
+                    details={},
+                    created_at=now - timedelta(minutes=10),
+                ),
+                PushLog(
+                    user_id=user.id,
+                    channel="telegram",
+                    target_ref="1001",
+                    source_kind="radar_scan",
+                    source_id=1,
+                    status="failure",
+                    title="push failed",
+                    message_text="failed",
+                    included_signal_ids=[],
+                    blocked_signal_ids=[],
+                    needs_human_review_signal_ids=[],
+                    delivery_details={},
+                    created_at=now - timedelta(minutes=9),
+                ),
+                ModelCallLog(
+                    call_site="review",
+                    primary_model="primary",
+                    fallback_model="fallback",
+                    status="fallback",
+                    error_type="RateLimitError",
+                    error_message="rate limit",
+                    prompt_hash="c" * 64,
+                    prompt_length=100,
+                    raw_prompt=None,
+                    response_excerpt=None,
+                    details={},
+                    created_at=now - timedelta(minutes=8),
+                ),
+            ],
+        )
+        await session.commit()
+
+    response = await _get_ops_history(session_factory, lookback_hours=24, limit=10)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["lookback_hours"] == 24
+    assert payload["limit"] == 10
+    kinds = [event["kind"] for event in payload["recent_events"]]
+    assert "radar_scan" in kinds
+    assert "provider_fetch" in kinds
+    assert "data_quality" in kinds
+    assert "telegram_push" in kinds
+    assert "model_call" in kinds
+    assert payload["recent_events"][0]["kind"] == "radar_scan"
+    model_event = next(event for event in payload["recent_events"] if event["kind"] == "model_call")
+    assert model_event["metadata"]["error_type"] == "RateLimitError"
+    failure_keys = {
+        (item["kind"], item["key"]): item["count"]
+        for item in payload["failure_summary"]
+    }
+    assert failure_keys[("radar_scan", "failure")] == 1
+    assert failure_keys[("provider_fetch", "akshare/stock_board_concept_name_em/failure")] == 1
+    assert failure_keys[("data_quality", "akshare/stock_zh_a_spot_em/degraded")] == 1
+    assert failure_keys[("telegram_push", "telegram/failure")] == 1
+    assert failure_keys[("model_call", "review/fallback/RateLimitError")] == 1
+
+
+@pytest.mark.asyncio
 async def test_ops_overview_alerts_when_server_disk_space_is_low(
     monkeypatch: pytest.MonkeyPatch,
     session_factory: async_sessionmaker[AsyncSession],
@@ -301,6 +411,31 @@ async def _get_ops_overview(
             return await client.get(
                 "/ops/overview",
                 params={"lookback_hours": lookback_hours},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+
+async def _get_ops_history(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    lookback_hours: int,
+    limit: int,
+):
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.get(
+                "/ops/history",
+                params={"lookback_hours": lookback_hours, "limit": limit},
             )
     finally:
         app.dependency_overrides.clear()

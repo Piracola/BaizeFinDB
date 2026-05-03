@@ -133,6 +133,34 @@ def test_fetch_ops_overview_uses_lookback_query() -> None:
     assert payload["lookback_hours"] == 12
 
 
+def test_fetch_ops_history_uses_lookback_and_limit_query() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        return FakeResponse(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-04T09:30:00Z",
+                    "lookback_hours": 12,
+                    "limit": 5,
+                    "recent_events": [],
+                    "failure_summary": [],
+                },
+            ),
+        )
+
+    payload = client_api.fetch_ops_history(
+        "http://localhost:8000",
+        lookback_hours=12,
+        limit=5,
+        opener=opener,
+    )
+
+    assert calls["url"] == "http://localhost:8000/ops/history?lookback_hours=12&limit=5"
+    assert payload["limit"] == 5
+
+
 def test_fetch_tushare_status_uses_provider_status_endpoint() -> None:
     calls = {}
 
@@ -235,6 +263,36 @@ def test_format_ops_overview_outputs_runtime_summary() -> None:
     assert "Provider：异常=1 / 总数=6 / 最新=失败" in text
     assert "模型调用：异常=1 / 总数=2 / 最新=降级切换" in text
     assert "告警：Provider 拉取存在 1 条异常记录。" in text
+    assert "只读取已有运行记录" in text
+
+
+def test_format_ops_history_outputs_recent_events() -> None:
+    text = client_api.format_ops_history(
+        {
+            "generated_at": "2026-05-04T09:30:00Z",
+            "lookback_hours": 24,
+            "limit": 10,
+            "recent_events": [
+                {
+                    "id": 3,
+                    "kind": "model_call",
+                    "status": "fallback",
+                    "occurred_at": "2026-05-04T09:25:00Z",
+                    "title": "模型调用 review",
+                    "detail": "RateLimitError",
+                    "metadata": {"error_type": "RateLimitError"},
+                }
+            ],
+            "failure_summary": [
+                {"kind": "model_call", "key": "review/fallback/RateLimitError", "count": 1}
+            ],
+        },
+    )
+
+    assert "运维历史" in text
+    assert "统计窗口：最近 24 小时" in text
+    assert "异常汇总：模型 review/fallback/RateLimitError=1" in text
+    assert "- 模型 #3 降级切换 | 2026-05-04T09:25:00Z | RateLimitError" in text
     assert "只读取已有运行记录" in text
 
 

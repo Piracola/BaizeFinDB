@@ -39,6 +39,7 @@ const elements = {
   lastUpdated: document.querySelector("#last-updated"),
   readyStatus: document.querySelector("#ready-status"),
   opsOverview: document.querySelector("#ops-overview"),
+  opsHistory: document.querySelector("#ops-history"),
   tushareStatus: document.querySelector("#tushare-status"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
@@ -96,6 +97,7 @@ async function refreshAll() {
   if (isReady) {
     await Promise.all([
       loadOpsOverview(),
+      loadOpsHistory(),
       loadTushareStatus(),
       loadOverview(),
       loadSignals(),
@@ -123,6 +125,7 @@ async function loadReadyStatus() {
   } catch (error) {
     elements.readyStatus.innerHTML = emptyState(`无法连接 API：${formatError(error)}`);
     renderOpsUnavailable("无法连接 API。");
+    renderOpsHistoryUnavailable("无法连接 API。");
     return false;
   }
 }
@@ -133,6 +136,15 @@ async function loadOpsOverview() {
     renderOpsOverview(overview);
   } catch (error) {
     renderOpsUnavailable(`运行状态暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadOpsHistory() {
+  try {
+    const history = await fetchJson("/ops/history?lookback_hours=24&limit=8");
+    renderOpsHistory(history);
+  } catch (error) {
+    renderOpsHistoryUnavailable(`运维历史暂不可用：${formatError(error)}`);
   }
 }
 
@@ -232,6 +244,7 @@ async function loadPeriodicReport(period, options = {}) {
 
 function renderRadarUnavailable(reason) {
   renderOpsUnavailable("依赖服务恢复后再读取运行状态。");
+  renderOpsHistoryUnavailable("依赖服务恢复后再读取运维历史。");
   renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
@@ -450,7 +463,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -458,6 +471,14 @@ function executeCommand() {
   const commands = {
     ops: () => scrollToPanel("status-panel"),
     status: () => scrollToPanel("status-panel"),
+    history: () => {
+      scrollToPanel("status-panel");
+      loadOpsHistory();
+    },
+    opshistory: () => {
+      scrollToPanel("status-panel");
+      loadOpsHistory();
+    },
     tushare: () => {
       scrollToPanel("status-panel");
       loadTushareStatus();
@@ -489,7 +510,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -636,6 +657,44 @@ function renderOpsUnavailable(reason) {
   elements.opsOverview.innerHTML = emptyState(reason);
 }
 
+function renderOpsHistory(history) {
+  const events = Array.isArray(history?.recent_events) ? history.recent_events : [];
+  const summary = Array.isArray(history?.failure_summary) ? history.failure_summary : [];
+  const summaryText = summary.length
+    ? summary
+        .slice(0, 6)
+        .map((item) => `${opsKindLabel(item.kind)} ${item.key || "unknown"}=${item.count ?? 0}`)
+        .join(" / ")
+    : "暂无异常汇总";
+
+  const eventHtml = events.length
+    ? events
+        .map((event) => {
+          const detail = event.detail ? `<div class="muted">${escapeHtml(event.detail)}</div>` : "";
+          return `
+            <article class="detail-card">
+              <strong>${escapeHtml(opsKindLabel(event.kind))} #${escapeHtml(event.id)}</strong>
+              <div>${escapeHtml(label(event.status))} / ${escapeHtml(formatDate(event.occurred_at))}</div>
+              ${detail}
+            </article>
+          `;
+        })
+        .join("")
+    : emptyState("暂无运维历史事件。");
+
+  elements.opsHistory.innerHTML = `
+    <article class="detail-card">
+      <strong>异常汇总</strong>
+      <div class="muted">${escapeHtml(summaryText)}</div>
+    </article>
+    ${eventHtml}
+  `;
+}
+
+function renderOpsHistoryUnavailable(reason) {
+  elements.opsHistory.innerHTML = emptyState(reason);
+}
+
 function renderTushareStatus(status) {
   const tokenConfigured = Boolean(status?.token_configured);
   const fetchEnabled = Boolean(status?.fetch_enabled);
@@ -688,6 +747,17 @@ function opsCountCard(name, summary) {
     value: `异常 ${unhealthyCount}`,
     detail: `近 24h ${totalCount} 条 / 最新 ${label(summary?.latest_status)}`,
   };
+}
+
+function opsKindLabel(value) {
+  const labels = {
+    radar_scan: "雷达",
+    provider_fetch: "Provider",
+    data_quality: "数据质量",
+    telegram_push: "推送",
+    model_call: "模型",
+  };
+  return labels[value] || value || "-";
 }
 
 function renderPriorityCounts(counts) {

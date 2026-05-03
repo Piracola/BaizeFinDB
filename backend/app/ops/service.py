@@ -16,6 +16,9 @@ from app.db.radar_models import RadarScanBatch
 from app.ops.schemas import (
     OpsAlertRead,
     OpsCountSummary,
+    OpsFailureSummaryRead,
+    OpsHistoryEventRead,
+    OpsHistoryRead,
     OpsOverviewRead,
     OpsRadarSummary,
     OpsServerSummary,
@@ -99,6 +102,337 @@ async def get_ops_overview(
             server=server,
         ),
     )
+
+
+async def get_ops_history(
+    session: AsyncSession,
+    *,
+    lookback_hours: int = 24,
+    limit: int = 30,
+    now: datetime | None = None,
+) -> OpsHistoryRead:
+    generated_at = _as_utc(now or datetime.now(UTC))
+    since = generated_at - timedelta(hours=lookback_hours)
+    event_groups = await _history_event_groups(session, since=since, limit=limit)
+    events = sorted(
+        (event for group in event_groups for event in group),
+        key=lambda event: (_as_utc(event.occurred_at), event.kind, event.id),
+        reverse=True,
+    )[:limit]
+    failure_summary = sorted(
+        await _failure_summary(session, since=since),
+        key=lambda item: (-item.count, item.kind, item.key),
+    )
+
+    return OpsHistoryRead(
+        generated_at=generated_at,
+        lookback_hours=lookback_hours,
+        limit=limit,
+        recent_events=events,
+        failure_summary=failure_summary,
+    )
+
+
+async def _history_event_groups(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    limit: int,
+) -> list[list[OpsHistoryEventRead]]:
+    return [
+        await _radar_history_events(session, since=since, limit=limit),
+        await _provider_fetch_history_events(session, since=since, limit=limit),
+        await _data_quality_history_events(session, since=since, limit=limit),
+        await _telegram_push_history_events(session, since=since, limit=limit),
+        await _model_call_history_events(session, since=since, limit=limit),
+    ]
+
+
+async def _radar_history_events(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    limit: int,
+) -> list[OpsHistoryEventRead]:
+    rows = await session.scalars(
+        select(RadarScanBatch)
+        .where(RadarScanBatch.started_at >= since)
+        .order_by(desc(RadarScanBatch.started_at), desc(RadarScanBatch.id))
+        .limit(limit),
+    )
+    return [
+        OpsHistoryEventRead(
+            id=row.id,
+            kind="radar_scan",
+            status=str(row.status),
+            occurred_at=_row_datetime(row, "started_at") or since,
+            duration_seconds=_seconds_between(row.started_at, row.finished_at),
+            title=f"雷达扫描 #{row.id}",
+            detail=_short_text(row.error_message),
+            metadata={
+                "signal_count": _summary_value(row.summary, "signal_count"),
+                "source_snapshot_count": len(row.source_snapshot_ids or []),
+            },
+        )
+        for row in rows.all()
+    ]
+
+
+async def _provider_fetch_history_events(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    limit: int,
+) -> list[OpsHistoryEventRead]:
+    rows = await session.scalars(
+        select(ProviderFetchLog)
+        .where(
+            ProviderFetchLog.fetch_finished_at >= since,
+            ProviderFetchLog.status != "success",
+        )
+        .order_by(desc(ProviderFetchLog.fetch_finished_at), desc(ProviderFetchLog.id))
+        .limit(limit),
+    )
+    return [
+        OpsHistoryEventRead(
+            id=row.id,
+            kind="provider_fetch",
+            status=str(row.status),
+            occurred_at=_row_datetime(row, "fetch_finished_at") or since,
+            duration_seconds=_seconds_between(row.fetch_started_at, row.fetch_finished_at),
+            title=f"Provider {row.provider_name}/{row.endpoint}",
+            detail=_short_text(row.error_message),
+            metadata={
+                "provider_name": row.provider_name,
+                "endpoint": row.endpoint,
+                "row_count": row.row_count,
+                "freshness": row.freshness,
+                "confidence": row.confidence,
+            },
+        )
+        for row in rows.all()
+    ]
+
+
+async def _data_quality_history_events(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    limit: int,
+) -> list[OpsHistoryEventRead]:
+    rows = await session.scalars(
+        select(DataQualityCheck)
+        .where(
+            DataQualityCheck.created_at >= since,
+            DataQualityCheck.status != "ok",
+        )
+        .order_by(desc(DataQualityCheck.created_at), desc(DataQualityCheck.id))
+        .limit(limit),
+    )
+    return [
+        OpsHistoryEventRead(
+            id=row.id,
+            kind="data_quality",
+            status=str(row.status),
+            occurred_at=_row_datetime(row, "created_at") or since,
+            title=f"数据质量 {row.provider_name}/{row.endpoint}",
+            detail=_short_text(", ".join(row.missing_fields or [])),
+            metadata={
+                "provider_name": row.provider_name,
+                "endpoint": row.endpoint,
+                "check_name": row.check_name,
+                "confidence": row.confidence,
+            },
+        )
+        for row in rows.all()
+    ]
+
+
+async def _telegram_push_history_events(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    limit: int,
+) -> list[OpsHistoryEventRead]:
+    rows = await session.scalars(
+        select(PushLog)
+        .where(
+            PushLog.created_at >= since,
+            PushLog.status.notin_(("sent", "preview", "skipped")),
+        )
+        .order_by(desc(PushLog.created_at), desc(PushLog.id))
+        .limit(limit),
+    )
+    return [
+        OpsHistoryEventRead(
+            id=row.id,
+            kind="telegram_push",
+            status=str(row.status),
+            occurred_at=_row_datetime(row, "created_at") or since,
+            title=f"{row.channel} 推送 {row.source_kind} #{row.source_id}",
+            detail=_short_text(row.title),
+            metadata={
+                "channel": row.channel,
+                "source_kind": row.source_kind,
+                "source_id": row.source_id,
+                "included_signal_count": len(row.included_signal_ids or []),
+                "blocked_signal_count": len(row.blocked_signal_ids or []),
+            },
+        )
+        for row in rows.all()
+    ]
+
+
+async def _model_call_history_events(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    limit: int,
+) -> list[OpsHistoryEventRead]:
+    rows = await session.scalars(
+        select(ModelCallLog)
+        .where(
+            ModelCallLog.created_at >= since,
+            ModelCallLog.status != "success",
+        )
+        .order_by(desc(ModelCallLog.created_at), desc(ModelCallLog.id))
+        .limit(limit),
+    )
+    return [
+        OpsHistoryEventRead(
+            id=row.id,
+            kind="model_call",
+            status=str(row.status),
+            occurred_at=_row_datetime(row, "created_at") or since,
+            title=f"模型调用 {row.call_site}",
+            detail=_short_text(row.error_type or row.error_message),
+            metadata={
+                "call_site": row.call_site,
+                "primary_model": row.primary_model,
+                "fallback_model": row.fallback_model,
+                "error_type": row.error_type,
+            },
+        )
+        for row in rows.all()
+    ]
+
+
+async def _failure_summary(
+    session: AsyncSession,
+    *,
+    since: datetime,
+) -> list[OpsFailureSummaryRead]:
+    summary: list[OpsFailureSummaryRead] = []
+
+    radar_rows = await session.execute(
+        select(RadarScanBatch.status, func.count())
+        .where(
+            RadarScanBatch.started_at >= since,
+            RadarScanBatch.status == "failure",
+        )
+        .group_by(RadarScanBatch.status),
+    )
+    summary.extend(
+        OpsFailureSummaryRead(kind="radar_scan", key=str(status), count=int(count))
+        for status, count in radar_rows.all()
+    )
+
+    provider_rows = await session.execute(
+        select(
+            ProviderFetchLog.provider_name,
+            ProviderFetchLog.endpoint,
+            ProviderFetchLog.status,
+            func.count(),
+        )
+        .where(
+            ProviderFetchLog.fetch_finished_at >= since,
+            ProviderFetchLog.status != "success",
+        )
+        .group_by(
+            ProviderFetchLog.provider_name,
+            ProviderFetchLog.endpoint,
+            ProviderFetchLog.status,
+        ),
+    )
+    summary.extend(
+        OpsFailureSummaryRead(
+            kind="provider_fetch",
+            key=_join_key(provider_name, endpoint, status),
+            count=int(count),
+        )
+        for provider_name, endpoint, status, count in provider_rows.all()
+    )
+
+    quality_rows = await session.execute(
+        select(
+            DataQualityCheck.provider_name,
+            DataQualityCheck.endpoint,
+            DataQualityCheck.status,
+            func.count(),
+        )
+        .where(
+            DataQualityCheck.created_at >= since,
+            DataQualityCheck.status != "ok",
+        )
+        .group_by(
+            DataQualityCheck.provider_name,
+            DataQualityCheck.endpoint,
+            DataQualityCheck.status,
+        ),
+    )
+    summary.extend(
+        OpsFailureSummaryRead(
+            kind="data_quality",
+            key=_join_key(provider_name, endpoint, status),
+            count=int(count),
+        )
+        for provider_name, endpoint, status, count in quality_rows.all()
+    )
+
+    push_rows = await session.execute(
+        select(PushLog.channel, PushLog.status, func.count())
+        .where(
+            PushLog.created_at >= since,
+            PushLog.status.notin_(("sent", "preview", "skipped")),
+        )
+        .group_by(PushLog.channel, PushLog.status),
+    )
+    summary.extend(
+        OpsFailureSummaryRead(
+            kind="telegram_push",
+            key=_join_key(channel, status),
+            count=int(count),
+        )
+        for channel, status, count in push_rows.all()
+    )
+
+    model_rows = await session.execute(
+        select(
+            ModelCallLog.call_site,
+            ModelCallLog.status,
+            ModelCallLog.error_type,
+            func.count(),
+        )
+        .where(
+            ModelCallLog.created_at >= since,
+            ModelCallLog.status != "success",
+        )
+        .group_by(
+            ModelCallLog.call_site,
+            ModelCallLog.status,
+            ModelCallLog.error_type,
+        ),
+    )
+    summary.extend(
+        OpsFailureSummaryRead(
+            kind="model_call",
+            key=_join_key(call_site, status, error_type),
+            count=int(count),
+        )
+        for call_site, status, error_type, count in model_rows.all()
+    )
+
+    return summary
 
 
 def _server_summary(
@@ -323,6 +657,31 @@ def _percent(numerator: int, denominator: int) -> float | None:
         return None
 
     return round((numerator / denominator) * 100, 2)
+
+
+def _summary_value(summary: dict[str, object], key: str) -> object:
+    if not isinstance(summary, dict):
+        return None
+
+    return summary.get(key)
+
+
+def _short_text(value: object | None, *, max_length: int = 180) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) <= max_length:
+        return text
+
+    return f"{text[: max_length - 3]}..."
+
+
+def _join_key(*parts: object | None) -> str:
+    values = [str(part) for part in parts if part is not None and str(part).strip()]
+    return "/".join(values) if values else "unknown"
 
 
 def _seconds_between(start: datetime | None, end: datetime | None) -> float | None:

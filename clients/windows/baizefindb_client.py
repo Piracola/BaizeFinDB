@@ -85,6 +85,7 @@ class BaizeFinDBClientApp:
 
         self._add_button(button_frame, "检查状态", self.check_status)
         self._add_button(button_frame, "运行状态", self.view_ops_overview)
+        self._add_button(button_frame, "运维历史", self.view_ops_history)
         self._add_button(button_frame, "数据源状态", self.view_tushare_status)
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
         self._add_button(button_frame, "查看信号", self.view_signals)
@@ -137,6 +138,13 @@ class BaizeFinDBClientApp:
             return client_api.format_ops_overview(overview)
 
         self._run_worker("读取运行状态", worker)
+
+    def view_ops_history(self) -> None:
+        def worker() -> str:
+            history = client_api.fetch_ops_history(self._normalized_server_url(), limit=20)
+            return client_api.format_ops_history(history)
+
+        self._run_worker("读取运维历史", worker)
 
     def view_tushare_status(self) -> None:
         def worker() -> str:

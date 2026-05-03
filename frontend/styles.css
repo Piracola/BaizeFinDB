@@ -352,6 +352,7 @@ h3 {
 .signal-list,
 .evidence-list,
 .portfolio-list,
+.ops-history-list,
 .report-list {
   display: grid;
   gap: 10px;
