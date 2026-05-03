@@ -8,6 +8,7 @@
 
 - [开发文档导航](docs/README.md)
 - [本地开发 Runbook](docs/runbooks/local-dev.md)
+- [Linux 服务端部署骨架 Runbook](docs/runbooks/linux-server.md)
 - [当前 API 文档](docs/api/current-api.md)
 - [当前数据模型说明](docs/specs/current-data-model.md)
 - [M5 A 股 5 分钟资金主线雷达 MVP PRD](docs/prd/m5-next-step.md)
@@ -50,6 +51,7 @@
 - Alembic 迁移框架
 - Celery Worker / Beat 配置壳
 - Docker Compose 的 PostgreSQL / Redis 配置
+- Linux 服务端部署骨架：API Dockerfile、server compose overlay、systemd 示例和 nginx HTTPS 反代示例
 - pytest 冒烟测试
 
 ## 当前进度
@@ -92,6 +94,8 @@ uv run uvicorn app.main:app --reload
 如果 PostgreSQL / Redis 还没启动，`/health` 仍会正常，`/health/ready` 会显示依赖未就绪。
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
+
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web 和 Telegram webhook，不代表完整生产部署已经完成。
 
 ## Telegram Bot MVP
 

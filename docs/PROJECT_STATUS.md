@@ -10,6 +10,8 @@
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、雷达总览、信号折叠摘要和单条信号复盘；Telegram 仍只消费后端结果，不重新计算雷达等级。
 
+Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例。该状态只代表部署骨架完成，不代表完整生产部署完成。
+
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
 下一阶段开发基线已修正为 **A 股 5 分钟资金主线雷达 MVP**。Telegram、Web、报告、持仓自选、日报周报和评分都围绕雷达结果展开，不再按 Telegram / 报告 / Web 三选一推进。
@@ -29,6 +31,7 @@ Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康�
 
 - [开发文档导航](README.md)
 - [本地开发 Runbook](runbooks/local-dev.md)
+- [Linux 服务端部署骨架 Runbook](runbooks/linux-server.md)
 - [当前 API 文档](api/current-api.md)
 - [当前数据模型说明](specs/current-data-model.md)
 - [M5 A 股 5 分钟资金主线雷达 MVP PRD](prd/m5-next-step.md)
@@ -42,6 +45,7 @@ Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康�
 | M3 雷达核心 | 已完成早期闭环 | 基于已入库快照生成雷达候选信号，写入扫描批次、信号和证据，并提供最新总览视图；普通扫描异常会落 `failure` 状态。 |
 | M4 审查层 | 已完成 | 轻量规则审查可对单个雷达信号给出 `approved`、`blocked`、`needs_human_review`，并记录审查历史；Provider 数据质量、证据冲突、重复触发、来源过期和分享安全门已进入审查判断。 |
 | M5 A 股 5 分钟资金主线雷达 MVP | 进行中 | 已有静态 Web 和 Telegram Bot MVP 消费后端雷达结果；后续继续补 5 分钟调度、持仓自选、折叠推送、quick/standard 报告、日报周报和基础评分。 |
+| Linux 服务端部署骨架 | 已完成 | 已有 API Dockerfile、`docker-compose.server.yml`、`infra/linux/` runbook、systemd 示例和 nginx HTTPS 反代示例；尚不是完整生产部署。 |
 
 ## 当前可用 API
 

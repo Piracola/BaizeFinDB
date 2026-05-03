@@ -1,0 +1,16 @@
+[Unit]
+Description=BaizeFinDB Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/baizefindb
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.server.yml down
+RemainAfterExit=yes
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
