@@ -10,6 +10,8 @@
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、最近扫描状态、雷达总览、生命周期分布、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级或评分。
 
+M5 验收测试已覆盖 P0/P1/P2 规则、生命周期、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、Web 核心页面顺序和公开分享脱敏。
+
 Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 服务器 API，查看健康状态、雷达总览、生命周期分布、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 1d/3d/5d/10d v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板；它仍只消费后端结果，不重新计算雷达等级或评分，也不是完整安装包。
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性。该状态只代表部署骨架完成，不代表完整生产部署完成。

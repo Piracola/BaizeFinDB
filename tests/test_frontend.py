@@ -20,6 +20,13 @@ def test_frontend_index_returns_static_page() -> None:
     assert "daily / score" in response.text
     assert "lifecycle-counts" in response.text
     assert "stock-backtrace-evidences" in response.text
+    panel_order = [
+        response.text.index('id="overview-panel"'),
+        response.text.index('id="detail-panel"'),
+        response.text.index('id="portfolio-panel"'),
+        response.text.index('id="reports-panel"'),
+    ]
+    assert panel_order == sorted(panel_order)
 
 
 def test_frontend_assets_are_served() -> None:
