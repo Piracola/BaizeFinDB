@@ -144,6 +144,54 @@ async def test_report_api_returns_404_for_missing_signal(client: AsyncClient) ->
     assert response.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_periodic_report_summarizes_signals_and_user_reports(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory, priority="P0")
+    await client.post(
+        "/reports/from-signal",
+        params={"user_key": "telegram-1001"},
+        json={"signal_id": signal_id, "report_type": "standard"},
+    )
+
+    response = await client.get(
+        "/reports/periodic",
+        params={"user_key": "telegram-1001", "period": "daily"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["report_type"] == "daily"
+    assert payload["user_key"] == "telegram-1001"
+    assert payload["signal_count"] == 1
+    assert payload["report_count"] == 1
+    assert payload["push_count"] == 0
+    assert payload["priority_counts"]["P0"] == 1
+    assert payload["top_subjects"][0]["signal_id"] == signal_id
+    assert "日报汇总" in payload["summary"]
+    assert "BaizeFinDB 日报" in payload["body_markdown"]
+    assert "internal raw excerpt" not in payload["body_markdown"]
+    for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
+        assert forbidden not in payload["body_markdown"]
+
+
+@pytest.mark.asyncio
+async def test_weekly_periodic_report_handles_empty_window(client: AsyncClient) -> None:
+    response = await client.get(
+        "/reports/periodic",
+        params={"user_key": "telegram-1001", "period": "weekly"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["report_type"] == "weekly"
+    assert payload["signal_count"] == 0
+    assert payload["priority_counts"] == {"P0": 0, "P1": 0, "P2": 0}
+    assert "暂无雷达信号" in payload["body_markdown"]
+
+
 async def _seed_signal(
     session_factory: async_sessionmaker[AsyncSession],
     *,

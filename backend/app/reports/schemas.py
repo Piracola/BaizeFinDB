@@ -15,6 +15,11 @@ class CreatableReportType(StrEnum):
     STANDARD = "standard"
 
 
+class PeriodicReportType(StrEnum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
 class ReportStatus(StrEnum):
     GENERATED = "generated"
     NEEDS_HUMAN_REVIEW = "needs_human_review"
@@ -49,3 +54,27 @@ class ReportRead(BaseModel):
     details: dict[str, object]
     created_at: datetime
     updated_at: datetime
+
+
+class PeriodicReportSubjectRead(BaseModel):
+    signal_id: int
+    subject_name: str
+    priority: str
+    lifecycle_stage: str
+    review_status: str
+
+
+class PeriodicReportRead(BaseModel):
+    user_key: str
+    report_type: PeriodicReportType
+    period_start: datetime
+    period_end: datetime
+    signal_count: int
+    report_count: int
+    push_count: int
+    priority_counts: dict[str, int]
+    review_counts: dict[str, int]
+    lifecycle_counts: dict[str, int]
+    top_subjects: list[PeriodicReportSubjectRead]
+    summary: str
+    body_markdown: str

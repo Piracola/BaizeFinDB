@@ -162,6 +162,13 @@ Invoke-RestMethod http://127.0.0.1:8000/reports
 
 当前只支持 quick / standard 模板报告；deep report 后续只能手动触发并二次确认。
 
+生成日报/周报汇总：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?period=daily"
+Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?period=weekly&user_key=telegram-1001"
+```
+
 ## 5. Telegram Bot MVP 本地调试
 
 `.env` 支持这些 Telegram 可选配置：

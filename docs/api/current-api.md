@@ -22,6 +22,7 @@ GET  /portfolio/watchlist
 POST /portfolio/watchlist
 POST /reports/from-signal
 GET  /reports
+GET  /reports/periodic
 POST /radar/signals/{signal_id}/review
 GET  /radar/signals/{signal_id}/share-preview
 GET  /radar/signals/{signal_id}/share-payload
@@ -408,6 +409,31 @@ Invoke-RestMethod http://127.0.0.1:8000/reports/1
 ```
 
 报告正文使用 `body_markdown` 返回。当前模板不会输出原始证据摘录、交易指令或保证收益语言。
+
+### `GET /reports/periodic`
+
+用途：按日或周生成当前 `user_key` 的雷达汇总报告。该接口实时读取周期内的雷达信号、当前用户报告和 Telegram 推送日志，不创建新的 `reports` 表记录。
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?user_key=telegram-1001&period=daily"
+Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?user_key=telegram-1001&period=weekly"
+```
+
+可选参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `user_key` | 单用户 MVP 隔离键，默认 `default` |
+| `period` | `daily` 或 `weekly`，默认 `daily` |
+
+响应重点：
+
+- `priority_counts`：周期内雷达信号的 P0/P1/P2 计数。
+- `review_counts`：周期内审查状态计数。
+- `lifecycle_counts`：周期内生命周期分布。
+- `report_count`：当前 `user_key` 在周期内生成的报告数量。
+- `push_count`：当前 `user_key` 在周期内记录的 Telegram 推送数量。
+- `body_markdown`：日报/周报正文摘要，不包含原始证据摘录、URL、域名、持仓成本或交易指令。
 
 ## 7. Governance / 分享安全 API
 

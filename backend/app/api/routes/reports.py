@@ -6,10 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.portfolio.schemas import DEFAULT_USER_KEY
-from app.reports.schemas import CreatableReportType, ReportRead, SignalReportCreate
+from app.reports.schemas import (
+    CreatableReportType,
+    PeriodicReportRead,
+    PeriodicReportType,
+    ReportRead,
+    SignalReportCreate,
+)
 from app.reports.service import (
     ReportBlockedError,
     create_signal_report,
+    generate_periodic_report,
     get_report,
     list_reports,
 )
@@ -76,6 +83,22 @@ async def reports(
         )
     except SQLAlchemyError as exc:
         raise _database_unavailable("reading reports", exc) from exc
+
+
+@router.get("/periodic", response_model=PeriodicReportRead)
+async def periodic_report(
+    session: SessionDep,
+    user_key: UserKeyQuery = DEFAULT_USER_KEY,
+    period: PeriodicReportType = PeriodicReportType.DAILY,
+) -> PeriodicReportRead:
+    try:
+        return await generate_periodic_report(
+            session,
+            report_type=period,
+            user_key=user_key,
+        )
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("generating periodic report", exc) from exc
 
 
 @router.get("/{report_id}", response_model=ReportRead)
