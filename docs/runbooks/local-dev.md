@@ -185,6 +185,7 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_IDS=
 TELEGRAM_WEBHOOK_SECRET=
 TELEGRAM_PUSH_ENABLED=false
+MODEL_AUDIT_STORE_RAW_PROMPT=false
 ```
 
 本地开发时可以先不填 `TELEGRAM_BOT_TOKEN`。此时 webhook 不会调用 Telegram Bot API，而是返回 `preview`，方便直接看 Bot 会发送的中文内容。

@@ -16,6 +16,7 @@ def test_settings_defaults() -> None:
     assert not settings.telegram_bot_token_configured
     assert not settings.telegram_webhook_secret_enabled
     assert settings.telegram_push_enabled is False
+    assert settings.model_audit_store_raw_prompt is False
 
 
 def test_settings_reads_environment(monkeypatch) -> None:
@@ -44,4 +45,12 @@ def test_settings_reads_telegram_environment(monkeypatch) -> None:
     assert settings.telegram_allowed_chat_id_set == {"1001", "1002"}
     assert settings.telegram_webhook_secret_enabled
     assert settings.telegram_push_enabled is True
+
+
+def test_settings_reads_model_audit_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_AUDIT_STORE_RAW_PROMPT", "true")
+
+    settings = Settings()
+
+    assert settings.model_audit_store_raw_prompt is True
 

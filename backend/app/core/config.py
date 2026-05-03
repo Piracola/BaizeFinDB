@@ -48,6 +48,10 @@ class Settings(BaseSettings):
         alias="TELEGRAM_WEBHOOK_SECRET",
     )
     telegram_push_enabled: bool = Field(default=False, alias="TELEGRAM_PUSH_ENABLED")
+    model_audit_store_raw_prompt: bool = Field(
+        default=False,
+        alias="MODEL_AUDIT_STORE_RAW_PROMPT",
+    )
 
     @property
     def effective_celery_broker_url(self) -> str:

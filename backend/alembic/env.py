@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
+from app.db.audit_models import ModelCallLog  # noqa: F401
 from app.db.base import Base
 from app.db.health_models import SchemaHealthCheck  # noqa: F401
 from app.db.portfolio_models import PortfolioHolding, UserProfile, WatchlistItem  # noqa: F401

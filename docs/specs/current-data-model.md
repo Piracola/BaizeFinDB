@@ -4,7 +4,7 @@
 
 ## 1. 当前真实数据表
 
-当前 Alembic head：`202605030009`。
+当前 Alembic head：`202605030010`。
 
 | 表 | 阶段 | 作用 |
 | --- | --- | --- |
@@ -19,6 +19,7 @@
 | `push_logs` | M5 | Telegram 折叠推送记录，按用户和渠道隔离 |
 | `score_records` | M5 | 1d/3d/5d/10d 综合评分记录 |
 | `telegram_bindings` | M5 | Telegram chat 与 `user_key` 的绑定、白名单和禁用状态 |
+| `model_call_logs` | M5 | 模型失败、降级和 fallback 审计，默认不保存完整 raw prompt |
 | `radar_scan_batches` | M3 | 记录每次雷达扫描批次、状态、摘要、失败原因 |
 | `radar_signals` | M3 | 保存候选信号、优先级、生命周期、审查状态 |
 | `signal_evidences` | M3 | 保存信号证据链、置信度、新鲜度和分享策略 |
@@ -49,6 +50,9 @@ radar_signals
   <- radar_signal_reviews.signal_id
   <- reports.signal_id
   <- score_records.signal_id
+
+model_call_logs
+  (standalone audit table)
 ```
 
 ## 3. 当前核心枚举
@@ -119,6 +123,21 @@ Radar 表不负责：
 - 发送消息。
 - 生成公开页面。
 - 保存完整 LLM prompt。
+
+### Model audit 模型审计表
+
+Model audit 表只回答：
+
+- 哪个调用点发生了模型失败、显式降级或 fallback。
+- 主模型、fallback 模型、状态、错误类型和错误摘要是什么。
+- prompt 的 hash、长度和审计版本是什么。
+- 是否在 debug 配置下保存了完整 `raw_prompt`。
+
+Model audit 表不负责：
+
+- 保存用户完整上下文，除非显式开启 debug。
+- 代替报告、推送或审查结果。
+- 伪造 AI 结论；模型失败只能记录为 `degraded` 或 `fallback`。
 
 ### Portfolio 个人数据表
 
@@ -217,7 +236,6 @@ M5 的数据模型基线已经修正为 A 股 5 分钟资金主线雷达 MVP：
 | `focus_items` | M5 | 临时关注、备注和 free-chat 低风险数据修改 |
 | `report_exports` | M5+ | HTML/PDF/Markdown 导出记录，M5 可先只保留 Markdown/HTML |
 | `report_reviews` | M5 | 所有报告发布前审查 |
-| `model_call_logs` | M5+ | 模型调用日志；默认不保存完整 raw prompt，debug 模式才保存完整上下文 |
 | `agent_task_logs` | M5+ | Agent 任务日志、显式降级和 fallback 记录 |
 | `tool_call_logs` | M5+ | Telegram/Web/Agent 工具调用日志 |
 | `audit_events` | M5 | 用户操作、二次确认和系统审计 |
