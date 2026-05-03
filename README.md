@@ -45,9 +45,9 @@
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
-- Telegram Bot MVP Webhook 模块：只消费健康检查和雷达后端结果，不重新计算 P0/P1/P2
+- Telegram Bot MVP Webhook 模块：只消费健康检查、雷达、报告和评分后端结果，不重新计算 P0/P1/P2 或评分
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
-- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/score` 展示后端 v2 评分档位和组件明细
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
@@ -76,7 +76,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示和 Telegram 绑定管理）、Telegram Bot MVP、Windows 客户端 MVP（含报告、日报/周报、评分展示和 Telegram 绑定管理）、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补生产化部署。 |
+| M5 | 进行中 | 已有静态 Web 终端工作台（含报告、日报/周报、评分展示和 Telegram 绑定管理）、Telegram Bot MVP（含评分明细展示）、Windows 客户端 MVP（含报告、日报/周报、评分展示和 Telegram 绑定管理）、5 分钟采集后扫描调度入口、持仓/自选最小 API 与 Web 维护视图、quick/standard 报告 MVP、日报/周报汇总 API、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送日志和 P0 推送后 standard report 自动生成；后续继续补生产化部署。 |
 
 ## 本地启动
 
@@ -148,6 +148,7 @@ TELEGRAM_PUSH_ENABLED=false
 - `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤。
 - `/holding` 和 `/watchlist` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的个人持仓/自选，只用于个人提醒和复盘上下文。
 - `/reports` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的报告列表。
+- `/score <id>` 触发后端评分并展示 1d/3d/5d/10d 综合评分、评分档位和组件明细；Telegram 不做本地评分。
 
 本地折叠推送 preview 示例：
 

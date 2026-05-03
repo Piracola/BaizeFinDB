@@ -408,6 +408,10 @@ async def test_telegram_periodic_and_score_commands(
     assert f"信号 #{signal_id} 综合评分" in score_preview
     assert "1d" in score_preview
     assert "10d" in score_preview
+    assert "窗口未结束 / 观察" in score_preview
+    assert "组件：优先级=68.00" in score_preview
+    assert "数据质量=50.00" in score_preview
+    assert "时效性=90.00" in score_preview
     assert "不是价格回测或交易建议" in score_preview
 
     assert invalid_score_response.status_code == 200

@@ -279,7 +279,7 @@ Telegram 个人数据命令：
 - `/watchlist` 读取 `user_key=telegram-<chat_id>` 的自选关注。
 - `/reports` 读取 `user_key=telegram-<chat_id>` 的报告列表。
 - `/daily` 和 `/weekly` 读取 `user_key=telegram-<chat_id>` 的周期汇总。
-- `/score <id>` 触发后端评分记录生成；评分不改变雷达等级，不构成交易建议。
+- `/score <id>` 触发后端评分记录生成，并展示评分档位和组件明细；评分不改变雷达等级，不构成交易建议，Telegram 不做本地评分。
 
 本地 preview 示例：
 

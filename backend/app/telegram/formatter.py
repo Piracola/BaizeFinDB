@@ -53,6 +53,33 @@ FRESHNESS_LABELS = {
     "unknown": "未知",
 }
 
+SCORE_BAND_LABELS = {
+    "strong_attention": "强关注",
+    "watch": "观察",
+    "weak_watch": "弱观察",
+    "low_signal_quality": "低质量",
+}
+
+SCORE_COMPONENT_LABELS = {
+    "priority": "优先级",
+    "lifecycle": "生命周期",
+    "review": "审查",
+    "evidence": "证据",
+    "continuity": "连续性",
+    "data_quality": "数据质量",
+    "timeliness": "时效性",
+}
+
+SCORE_COMPONENT_ORDER = (
+    "priority",
+    "lifecycle",
+    "review",
+    "evidence",
+    "continuity",
+    "data_quality",
+    "timeliness",
+)
+
 
 def format_help() -> str:
     return _trim_message(
@@ -349,12 +376,18 @@ def format_scores(score_run: ScoreRunRead) -> str:
     lines = [f"信号 #{score_run.signal_id} 综合评分"]
     for record in score_run.records:
         status_label = "已完成" if record.score_status.value == "generated" else "窗口未结束"
+        score_band = str(record.details.get("score_band", "")).strip()
+        band_label = SCORE_BAND_LABELS.get(score_band, score_band)
+        band_suffix = f" / {band_label}" if band_label else ""
         lines.append(
             (
                 f"- {record.window_days}d：{record.composite_score:.2f} "
-                f"({status_label})"
+                f"({status_label}{band_suffix})"
             ),
         )
+        component_text = _score_components_text(record.components)
+        if component_text:
+            lines.append(f"  组件：{component_text}")
 
     lines.extend(
         [
@@ -364,6 +397,15 @@ def format_scores(score_run: ScoreRunRead) -> str:
         ],
     )
     return _trim_message("\n".join(lines))
+
+
+def _score_components_text(components: dict[str, object]) -> str:
+    parts = [
+        f"{SCORE_COMPONENT_LABELS.get(name, name)}={_score_value(components[name])}"
+        for name in SCORE_COMPONENT_ORDER
+        if name in components
+    ]
+    return " / ".join(parts)
 
 
 def format_radar_push(
@@ -488,6 +530,13 @@ def _ratio_label(value: float | None) -> str:
         return "未填"
 
     return f"{value:.0%}"
+
+
+def _score_value(value: object) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return _value(value)
 
 
 def _value(value: object) -> str:

@@ -604,7 +604,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/reports` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的报告列表 |
 | `/daily` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的日报汇总 |
 | `/weekly` | 查看当前聊天对应 `user_key=telegram-<chat_id>` 的周报汇总 |
-| `/score <id>` | 生成并查看单个信号的 1d/3d/5d/10d 综合评分 |
+| `/score <id>` | 生成并查看单个信号的 1d/3d/5d/10d 综合评分、评分档位和组件明细 |
 
 本地不配置 `TELEGRAM_BOT_TOKEN` 时，接口返回 `preview`，不会调用 Telegram Bot API：
 
@@ -636,7 +636,7 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
-`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令。
+`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
 
 ### `GET /telegram/bindings`
 
@@ -737,7 +737,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
 - 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；用 `GET /reports/periodic` 展示日报/周报。
-- 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回结果。
+- 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回的评分档位和组件明细。
 - 内部调试：用 `share-preview`。
 - 公开展示：只能用 `share-payload`。
 - 触发扫描：先保证 Provider 有最新快照，再调用 `POST /radar/scans/run`。
