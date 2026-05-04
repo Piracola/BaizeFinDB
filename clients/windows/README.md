@@ -159,11 +159,12 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
   `run-client.ps1 -SmokeCheck`，不复制 smoke check 或 GUI 逻辑，默认
   `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`。
   只有显式加 `-StartDockerBackend` 时，才会先通过 Docker compose server overlay
-  启动本地后端、执行迁移、等待 `/health`，然后进入同一套 smoke/GUI 委托。
+  重建当前源码的 `api` 镜像，再启动本地后端、执行迁移、等待 `/health`，
+  然后进入同一套 smoke/GUI 委托。
 - `--ops-readiness-lookback-hours <n>` 会调整 smoke check 中 `/ops/readiness` 和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
 - `--compact-json-output <path>` 是首次试运行推荐 evidence：只写总体状态、服务端 URL 元数据、脱敏 `user_key`、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要；不写 endpoint payload、原始后端响应、环境变量、token、secret、API key、authorization、原始 provider URL、个人持仓、二进制或构建输出。
 - `--json-output <path>` 仍可写出有界脱敏详细 JSON，用于深度排障；它会隐藏 `user_key`、token、secret 和 credential-like 字段。
-- `run-client.ps1 -SmokeOnly` 会隐式执行同一套 smoke check 并在结束后退出，不打开 GUI；`first-trial.ps1 -SmokeOnly` 会透传该模式，和 `-StartDockerBackend` 同用时仍先启动 Docker 后端并等待 `/health`。
+- `run-client.ps1 -SmokeOnly` 会隐式执行同一套 smoke check 并在结束后退出，不打开 GUI；`first-trial.ps1 -SmokeOnly` 会透传该模式，和 `-StartDockerBackend` 同用时仍先重建 `api` 镜像、启动 Docker 后端并等待 `/health`。
 - `run-client.ps1 -SmokeCompactJsonOutput <path>` 和 `first-trial.ps1 -SmokeCompactJsonOutput <path>` 会把 compact evidence 路径传给 smoke check；`-SmokeJsonOutput <path>` 继续转发详细 JSON 路径；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
 - 当 `/ops/readiness` 返回 warning 或 blocked 时，console summary 会列出非 OK 检查项名称和有界脱敏说明，例如 `provider_fetch`、`data_quality`，便于首用时区分历史数据源/数据质量 warning 和真正 blocker。
 - GUI 的 `OPS Lookback (hours)` 会传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`，默认 24，范围 1 到 168；非法输入会在发起 API 请求前弹出校验错误。
