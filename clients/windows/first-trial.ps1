@@ -78,6 +78,7 @@ function Wait-BackendHealth {
 
 if ($StartDockerBackend) {
     Set-Location $RepoRoot
+    Invoke-BackendCompose -ComposeArgs @("build", "api")
     Invoke-BackendCompose -ComposeArgs @("up", "-d", "postgres", "redis")
     Invoke-BackendCompose -ComposeArgs @("run", "--rm", "api", "alembic", "upgrade", "head")
     Invoke-BackendCompose -ComposeArgs @("up", "-d", "api", "worker", "beat")

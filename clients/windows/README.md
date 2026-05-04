@@ -27,10 +27,11 @@ powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
 powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend
 ```
 
-该模式使用仓库已有 `docker-compose.yml` 和 `docker-compose.server.yml`，顺序启动
-`postgres` / `redis`，通过 `api` 容器执行 `alembic upgrade head`，再启动
-`api` / `worker` / `beat`，并等待 `<ServerUrl>/health` 后才委托
-`run-client.ps1 -SmokeCheck`。Docker 启动不会对远端 URL 隐式发生；需要调整等待时可传
+该模式使用仓库已有 `docker-compose.yml` 和 `docker-compose.server.yml`，先重建当前源码的
+`api` 镜像，确保 `/ops/trends` 等新端点存在，再顺序启动 `postgres` / `redis`，通过
+`api` 容器执行 `alembic upgrade head`，启动 `api` / `worker` / `beat`，并等待
+`<ServerUrl>/health` 后才委托 `run-client.ps1 -SmokeCheck`。Docker build / 启动 / 迁移失败
+都会在 smoke 或 GUI 前退出；Docker 启动不会对远端 URL 隐式发生；需要调整等待时可传
 `-BackendHealthTimeoutSeconds <n>` 和 `-BackendHealthPollIntervalSeconds <n>`。
 
 也可以单独运行同一套 smoke check：

@@ -67,10 +67,11 @@ powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartD
 ```
 
 这个 opt-in 路径会使用 `docker-compose.yml` 和 `docker-compose.server.yml`，顺序执行：
-`docker compose ... up -d postgres redis`、`docker compose ... run --rm api alembic upgrade head`、
-`docker compose ... up -d api worker beat`，然后等待
-`http://127.0.0.1:8000/health` 成功响应，再委托 `run-client.ps1 -SmokeCheck`。Docker
-启动和迁移失败、或 health 等待超时，都会在打开 GUI 前失败退出。等待参数有上界，可按本机性能调整：
+`docker compose ... build api`、`docker compose ... up -d postgres redis`、
+`docker compose ... run --rm api alembic upgrade head`、`docker compose ... up -d api worker beat`，
+然后等待 `http://127.0.0.1:8000/health` 成功响应，再委托 `run-client.ps1 -SmokeCheck`。
+默认重建当前源码的 `api` 镜像，避免复用缺少 `/ops/trends` 等新端点的旧 `baizefindb-api:latest`。
+Docker build、启动和迁移失败，或 health 等待超时，都会在打开 GUI 前失败退出。等待参数有上界，可按本机性能调整：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend -BackendHealthTimeoutSeconds 180 -BackendHealthPollIntervalSeconds 3

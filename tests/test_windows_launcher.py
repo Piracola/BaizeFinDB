@@ -113,6 +113,7 @@ def test_first_trial_launcher_start_docker_backend_runs_compose_before_delegatio
 
     assert result.returncode == 0, result.stderr
     assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
         "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
         (
             "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
@@ -147,6 +148,7 @@ def test_first_trial_launcher_start_docker_backend_smoke_only_runs_compose_befor
 
     assert result.returncode == 0, result.stderr
     assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
         "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
         (
             "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
@@ -178,6 +180,7 @@ def test_first_trial_launcher_start_docker_backend_blocks_gui_on_docker_failure(
 
     assert result.returncode == 23
     assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
         "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
         (
             "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
@@ -203,12 +206,34 @@ def test_first_trial_launcher_start_docker_backend_blocks_gui_on_health_timeout(
 
     assert result.returncode == 1
     assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
         "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
         (
             "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
             "api alembic upgrade head"
         ),
         "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == []
+
+
+def test_first_trial_launcher_start_docker_backend_blocks_before_migration_on_build_failure(
+    tmp_path: Path,
+) -> None:
+    result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+        tmp_path,
+        "-StartDockerBackend",
+        "-BackendHealthTimeoutSeconds",
+        "1",
+        "-BackendHealthPollIntervalSeconds",
+        "1",
+        docker_fail_match="build api",
+        docker_exit=19,
+    )
+
+    assert result.returncode == 19
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
     ]
     assert python_calls == []
 
