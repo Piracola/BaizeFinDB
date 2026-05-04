@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -18,6 +19,17 @@ def write_fake_python(fake_bin: Path) -> Path:
                 "@echo off",
                 'if "%EXPECT_PREFLIGHT%"=="1" if not exist "%PYTHON_PREFLIGHT_MARKER%" (',
                 '  echo preflight>> "%PYTHON_CALL_LOG%"',
+                '  if not "%BAIZE_PACKAGE_PREFLIGHT_REPORT%"=="" (',
+                (
+                    '    > "%BAIZE_PACKAGE_PREFLIGHT_REPORT%" echo '
+                    '{^"python^":{^"status^":^"pass^",'
+                    '^"required_version^":^"3.12^",^"version^":^"3.12.0^"},'
+                    '^"tkinter^":{^"status^":^"pass^",^"available^":true},'
+                    '^"gui_module^":{^"status^":^"pass^",'
+                    '^"module^":^"clients.windows.baizefindb_client^",'
+                    '^"available^":true}}'
+                ),
+                "  )",
                 '  echo done> "%PYTHON_PREFLIGHT_MARKER%"',
                 "  exit /b 0",
                 ")",
@@ -49,7 +61,9 @@ def test_packaging_script_has_lightweight_python_preflight() -> None:
 
     assert "[switch]$SkipPreflight" in script
     assert "[switch]$CheckOnly" in script
+    assert "[string]$CheckJsonOutput" in script
     assert "$CheckOnly -and $SkipPreflight" in script
+    assert "-CheckJsonOutput can only be used with -CheckOnly" in script
     assert "sys.version_info[:2] != (3, 12)" in script
     assert 'importlib.import_module("tkinter")' in script
     assert 'find_spec("clients.windows.baizefindb_client")' in script
@@ -74,6 +88,7 @@ def test_packaging_outputs_are_gitignored() -> None:
 
     assert "clients/windows/build/" in gitignore
     assert "clients/windows/dist/" in gitignore
+    assert "clients/windows/package-check-evidence*.json" in gitignore
     assert "*.spec" in gitignore
 
 
@@ -333,6 +348,193 @@ def test_packaging_check_only_rejects_skip_preflight_without_artifacts(
 
     assert result.returncode != 0
     assert "-CheckOnly cannot be used with -SkipPreflight" in result.stderr
+    assert not call_log.exists()
+    assert not dist_path.exists()
+    assert not work_path.exists()
+
+
+def test_packaging_check_only_writes_success_evidence_without_artifacts(
+    tmp_path: Path,
+) -> None:
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    call_log = tmp_path / "python-calls.log"
+    write_fake_python(fake_bin)
+
+    dist_path = tmp_path / "dist"
+    work_path = tmp_path / "build"
+    evidence_path = tmp_path / "package-check-evidence.json"
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin)
+    env["PYTHON_CALL_LOG"] = str(call_log)
+    env["EXPECT_PREFLIGHT"] = "1"
+    env["PYTHON_PREFLIGHT_MARKER"] = str(tmp_path / "preflight.marker")
+    env["PYINSTALLER_EXIT_CODE"] = "0"
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PACKAGE_SCRIPT),
+            "-CheckOnly",
+            "-CheckJsonOutput",
+            str(evidence_path),
+            "-DistPath",
+            str(dist_path),
+            "-WorkPath",
+            str(work_path),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert evidence["status"] == "ok"
+    assert evidence["checks"]["python"] == {
+        "status": "pass",
+        "required_version": "3.12",
+        "version": "3.12.0",
+    }
+    assert evidence["checks"]["tkinter"] == {"status": "pass", "available": True}
+    assert evidence["checks"]["gui_module"] == {
+        "status": "pass",
+        "module": "clients.windows.baizefindb_client",
+        "available": True,
+    }
+    assert evidence["checks"]["pyinstaller"] == {"status": "pass", "available": True}
+    assert evidence["command"]["mode"] == "check-only"
+    assert evidence["command"]["target_module"] == "clients.windows.baizefindb_client"
+    assert evidence["output_paths"]["dist_path"] == str(dist_path)
+    assert evidence["output_paths"]["work_path"] == str(work_path)
+    assert evidence["output_paths"]["spec_path"] == str(work_path / "spec")
+    assert evidence["output_paths"]["check_json_output"] == str(evidence_path)
+    assert "environment" not in evidence
+    assert "smoke" not in evidence
+    assert "backend" not in evidence
+    assert not dist_path.exists()
+    assert not work_path.exists()
+
+
+def test_packaging_check_only_writes_failure_evidence_without_artifacts(
+    tmp_path: Path,
+) -> None:
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    call_log = tmp_path / "python-calls.log"
+    write_fake_python(fake_bin)
+
+    dist_path = tmp_path / "dist"
+    work_path = tmp_path / "build"
+    evidence_path = tmp_path / "package-check-evidence.json"
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin)
+    env["PYTHON_CALL_LOG"] = str(call_log)
+    env["EXPECT_PREFLIGHT"] = "1"
+    env["PYTHON_PREFLIGHT_MARKER"] = str(tmp_path / "preflight.marker")
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PACKAGE_SCRIPT),
+            "-CheckOnly",
+            "-CheckJsonOutput",
+            str(evidence_path),
+            "-DistPath",
+            str(dist_path),
+            "-WorkPath",
+            str(work_path),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "PyInstaller is not installed" in result.stderr
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert evidence["status"] == "fail"
+    assert evidence["checks"]["python"]["status"] == "pass"
+    assert evidence["checks"]["tkinter"]["status"] == "pass"
+    assert evidence["checks"]["gui_module"]["status"] == "pass"
+    assert evidence["checks"]["pyinstaller"] == {"status": "fail", "available": False}
+    assert not dist_path.exists()
+    assert not work_path.exists()
+
+
+def test_packaging_rejects_check_json_output_without_check_only_without_artifacts(
+    tmp_path: Path,
+) -> None:
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    call_log = tmp_path / "python-calls.log"
+    write_fake_python(fake_bin)
+
+    dist_path = tmp_path / "dist"
+    work_path = tmp_path / "build"
+    evidence_path = tmp_path / "package-check-evidence.json"
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin)
+    env["PYTHON_CALL_LOG"] = str(call_log)
+    env["EXPECT_PREFLIGHT"] = "1"
+    env["PYTHON_PREFLIGHT_MARKER"] = str(tmp_path / "preflight.marker")
+    env["PYINSTALLER_EXIT_CODE"] = "0"
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PACKAGE_SCRIPT),
+            "-CheckJsonOutput",
+            str(evidence_path),
+            "-DistPath",
+            str(dist_path),
+            "-WorkPath",
+            str(work_path),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "-CheckJsonOutput can only be used with -CheckOnly" in result.stderr
+    assert not evidence_path.exists()
     assert not call_log.exists()
     assert not dist_path.exists()
     assert not work_path.exists()

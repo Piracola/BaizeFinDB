@@ -90,7 +90,10 @@ powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -Dry
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly -CheckJsonOutput clients/windows/package-check-evidence.local.json
 ```
+
+`-CheckJsonOutput` 只能和 `-CheckOnly` 同用；它写出的 JSON 只包含打包前置条件状态、Python 版本、`tkinter`/GUI 模块/PyInstaller 可用性、命令元数据和输出路径元数据，不包含环境变量、密钥、smoke 报告、后端响应、构建输出或二进制。`clients/windows/package-check-evidence*.json` 已加入 `.gitignore`，本地证据文件不要提交。
 
 非 dry-run 打包会先运行轻量 Python preflight：确认当前 Python 是 3.12、`tkinter` 可导入、并且能从仓库路径解析 `clients.windows.baizefindb_client`。该 preflight 不会创建 `tk.Tk()`、打开 GUI、调用后端 API、运行 smoke check 或生成构建产物；只有本地排查特殊问题时才加 `-SkipPreflight` 明确跳过：
 

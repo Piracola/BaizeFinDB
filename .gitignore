@@ -9,6 +9,7 @@ __pycache__/
 
 clients/windows/build/
 clients/windows/dist/
+clients/windows/package-check-evidence*.json
 *.spec
 
 .pytest_cache/
