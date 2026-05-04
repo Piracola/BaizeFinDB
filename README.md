@@ -124,7 +124,7 @@ uv run uvicorn app.main:app --reload
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
-Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、`/ops/readiness` 就绪自检契约、Tushare 状态契约和 `pg_dump` 可用性，`infra/scripts/server_runtime_check.py` 可对运行中的 API 连续采样健康、OPS 和就绪状态并生成 JSON 报告，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、`/ops/readiness` 就绪自检契约、Tushare 状态契约、可选 Tushare `anns_d` Beat enablement 离线/no-token checklist 和 `pg_dump` 可用性，`infra/scripts/server_runtime_check.py` 可对运行中的 API 连续采样健康、OPS 和就绪状态并生成 JSON 报告，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
 
 ## Windows 客户端 MVP
 
@@ -233,6 +233,14 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 ```
 
 `check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，默认离线/no-token，不访问 Tushare、不写数据库、不触发抓取、扫描或推送。它会汇总本地 sample gate、`TUSHARE_TOKEN`、`TUSHARE_ANNS_D_BEAT_ENABLED`、`TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS`、仍需 live verify、readiness/live data 默认未检查等状态；只有显式加 `--check-readiness` 时才会做只读 readiness HTTP GET。
+
+部署预检需要一起检查该 checklist 时使用：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement
+```
+
+该集成仍是离线/no-token 模式，输出精简摘要；`warn` 不阻断部署预检，只有 checklist `fail` 会返回失败退出码。
 
 `verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。它是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
 

@@ -181,3 +181,103 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
     ops_readiness_call = calls[4]
     assert "status" in ops_readiness_call[2]
     assert "checks" in ops_readiness_call[2]
+
+
+def test_tushare_anns_d_beat_enablement_flag_defaults_off() -> None:
+    args = server_deploy_check.build_parser().parse_args([])
+
+    assert args.check_tushare_anns_d_beat_enablement is False
+
+
+def test_tushare_anns_d_beat_enablement_flag_can_be_enabled() -> None:
+    args = server_deploy_check.build_parser().parse_args(
+        ["--check-tushare-anns-d-beat-enablement"]
+    )
+
+    assert args.check_tushare_anns_d_beat_enablement is True
+
+
+def test_tushare_anns_d_beat_enablement_pass_maps_to_ok(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_tushare_anns_d_beat_enablement_report",
+        lambda: {
+            "status": "pass",
+            "mode": "offline_no_token",
+            "summary": {"pass": 6, "warn": 0, "fail": 0},
+            "checklist": [],
+        },
+    )
+
+    result = server_deploy_check.check_tushare_anns_d_beat_enablement()
+
+    assert result.status == "ok"
+    assert result.ok
+    assert "summary pass=6 warn=0 fail=0" in result.detail
+
+
+def test_tushare_anns_d_beat_enablement_warn_is_non_fatal(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_tushare_anns_d_beat_enablement_report",
+        lambda: {
+            "status": "warn",
+            "mode": "offline_no_token",
+            "summary": {"pass": 3, "warn": 3, "fail": 0},
+            "checklist": [
+                {"id": "tushare_token", "status": "warn", "details": {"value": None}},
+                {"id": "readiness_live_data", "status": "warn"},
+            ],
+        },
+    )
+
+    result = server_deploy_check.check_tushare_anns_d_beat_enablement()
+
+    assert result.status == "warn"
+    assert result.ok
+    assert "tushare_token:warn" in result.detail
+    assert "readiness_live_data:warn" in result.detail
+
+
+def test_tushare_anns_d_beat_enablement_fail_is_fatal(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_tushare_anns_d_beat_enablement_report",
+        lambda: {
+            "status": "fail",
+            "mode": "offline_no_token",
+            "summary": {"pass": 2, "warn": 1, "fail": 1},
+            "checklist": [{"id": "beat_interval", "status": "fail"}],
+        },
+    )
+
+    result = server_deploy_check.check_tushare_anns_d_beat_enablement()
+
+    assert result.status == "fail"
+    assert not result.ok
+    assert "beat_interval:fail" in result.detail
+
+
+def test_tushare_anns_d_beat_enablement_summary_does_not_leak_token(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_tushare_anns_d_beat_enablement_report",
+        lambda: {
+            "status": "warn",
+            "mode": "offline_no_token",
+            "summary": {"pass": 5, "warn": 1, "fail": 0},
+            "checklist": [
+                {
+                    "id": "tushare_token",
+                    "status": "warn",
+                    "message": "token value should not be copied",
+                    "details": {"value": "super-secret-token"},
+                }
+            ],
+        },
+    )
+
+    result = server_deploy_check.check_tushare_anns_d_beat_enablement()
+
+    assert "super-secret-token" not in result.detail
+    assert "token value should not be copied" not in result.detail

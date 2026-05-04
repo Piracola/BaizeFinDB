@@ -60,7 +60,13 @@ docker build -t baizefindb-api:dev .
 uv run python infra/scripts/server_deploy_check.py
 ```
 
-预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。
+预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement
+```
+
+该可选检查复用 `check_tushare_anns_d_beat_enablement.py`，不访问 Tushare、不写数据库、不触发抓取、扫描、推送或模型调用；checklist `warn` 只作为预警输出，只有 `fail` 会让部署预检失败。
 
 服务已经启动后，可以追加容器和 API 检查：
 

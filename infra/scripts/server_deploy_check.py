@@ -217,6 +217,37 @@ def check_m5_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
     ]
 
 
+def check_tushare_anns_d_beat_enablement() -> CheckResult:
+    try:
+        report = _build_tushare_anns_d_beat_enablement_report()
+    except Exception as exc:
+        return CheckResult(
+            "Tushare anns_d Beat enablement checklist",
+            "fail",
+            f"checklist could not run: {exc.__class__.__name__}: {_truncate(str(exc), limit=250)}",
+        )
+
+    status = str(report.get("status", "fail"))
+    if status == "fail":
+        result_status = "fail"
+    elif status == "warn":
+        result_status = "warn"
+    elif status in {"ok", "pass"}:
+        result_status = "ok"
+    else:
+        return CheckResult(
+            "Tushare anns_d Beat enablement checklist",
+            "fail",
+            f"unexpected checklist status: {_truncate(status, limit=120)}",
+        )
+
+    return CheckResult(
+        "Tushare anns_d Beat enablement checklist",
+        result_status,
+        _format_tushare_anns_d_beat_enablement_summary(report),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check BaizeFinDB Linux server deployment prerequisites.",
@@ -235,6 +266,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--check-m5-smoke",
         action="store_true",
         help="Check read-only M5 API JSON contracts on the target API.",
+    )
+    parser.add_argument(
+        "--check-tushare-anns-d-beat-enablement",
+        action="store_true",
+        help=(
+            "Run the offline/no-token Tushare anns_d Beat enablement checklist. "
+            "Warnings are non-fatal; only checklist fail status fails this preflight."
+        ),
     )
     parser.add_argument(
         "--check-containers",
@@ -325,6 +364,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_m5_smoke:
         checks.extend(check_m5_smoke(args.base_url, timeout=args.timeout))
 
+    if args.check_tushare_anns_d_beat_enablement:
+        checks.append(check_tushare_anns_d_beat_enablement())
+
     for check in checks:
         label = check.status.upper()
         print(f"[{label}] {check.name}")
@@ -338,6 +380,58 @@ def _truncate(text: str, *, limit: int = 700) -> str:
     if len(text) <= limit:
         return text
     return f"{text[: limit - 15]}\n... truncated"
+
+
+def _build_tushare_anns_d_beat_enablement_report() -> dict[str, object]:
+    try:
+        from infra.scripts.check_tushare_anns_d_beat_enablement import build_report
+    except ModuleNotFoundError:
+        from check_tushare_anns_d_beat_enablement import build_report
+
+    return build_report(check_readiness=False)
+
+
+def _format_tushare_anns_d_beat_enablement_summary(report: dict[str, object]) -> str:
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+
+    parts = [
+        f"status={report.get('status', 'unknown')}",
+        f"mode={report.get('mode', 'unknown')}",
+        (
+            "summary "
+            f"pass={summary.get('pass', 0)} "
+            f"warn={summary.get('warn', 0)} "
+            f"fail={summary.get('fail', 0)}"
+        ),
+    ]
+
+    gate_parts = _format_tushare_anns_d_beat_enablement_gates(report)
+    if gate_parts:
+        parts.append(gate_parts)
+
+    return "; ".join(parts)
+
+
+def _format_tushare_anns_d_beat_enablement_gates(report: dict[str, object]) -> str:
+    checklist = report.get("checklist")
+    if not isinstance(checklist, list):
+        return ""
+
+    attention_gates = []
+    for item in checklist:
+        if not isinstance(item, dict):
+            continue
+        gate_status = item.get("status")
+        if gate_status not in {"warn", "fail"}:
+            continue
+        gate_id = str(item.get("id", "unknown"))
+        attention_gates.append(f"{gate_id}:{gate_status}")
+
+    if not attention_gates:
+        return ""
+    return f"attention gates={', '.join(attention_gates[:6])}"
 
 
 if __name__ == "__main__":
