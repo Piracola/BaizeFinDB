@@ -672,6 +672,105 @@ def format_ops_readiness(payload: Mapping[str, Any]) -> str:
     return _trim_text("\n".join(lines))
 
 
+def format_ops_warning_drilldown(
+    readiness: Mapping[str, Any],
+    overview: Mapping[str, Any],
+    history: Mapping[str, Any],
+) -> str:
+    checks = _sequence(readiness.get("checks"))
+    non_ok_checks = [
+        _mapping(check)
+        for check in checks
+        if _text(_mapping(check).get("status"), "").lower() != "ok"
+    ]
+    alerts = _sequence(overview.get("alerts"))
+    failure_summary = _sequence(history.get("failure_summary"))
+    recent_events = _sequence(history.get("recent_events"))
+
+    lines = [
+        "OPS 告警钻取",
+        f"就绪状态：{_readiness_status_label(readiness.get('status'))}",
+        (
+            "统计窗口："
+            f"readiness={_int_text(readiness.get('lookback_hours'))}h / "
+            f"overview={_int_text(overview.get('lookback_hours'))}h / "
+            f"history={_int_text(history.get('lookback_hours'))}h"
+        ),
+        "",
+        "非 OK 就绪检查：",
+    ]
+
+    if non_ok_checks:
+        for check in non_ok_checks:
+            lines.append(
+                (
+                    f"- {_ops_check_label(check.get('name'))} "
+                    f"({_text(check.get('name'), '-')}): "
+                    f"{_readiness_check_label(check.get('status'))}，"
+                    f"{_text(check.get('message'), '未返回检查说明')}"
+                ),
+            )
+    else:
+        lines.append("- 暂无")
+
+    lines.extend(["", "Overview 告警："])
+    if alerts:
+        for alert in alerts[:OPS_HISTORY_PREVIEW_LIMIT]:
+            alert_map = _mapping(alert)
+            lines.append(
+                (
+                    f"- {_text(alert_map.get('severity'), '-')} / "
+                    f"{_text(alert_map.get('code'), '-')}："
+                    f"{_text(alert_map.get('message'), '未返回告警说明')}"
+                ),
+            )
+    else:
+        lines.append("- 暂无")
+
+    lines.extend(["", "异常汇总："])
+    if failure_summary:
+        for item in _prioritized_ops_failure_summary(failure_summary):
+            item_map = _mapping(item)
+            lines.append(
+                (
+                    f"- {_ops_kind_label(item_map.get('kind'))} "
+                    f"{_text(item_map.get('key'), 'unknown')}="
+                    f"{_int_text(item_map.get('count'))}"
+                ),
+            )
+    else:
+        lines.append("- 暂无")
+
+    lines.extend(["", "最近事件："])
+    if recent_events:
+        for event in recent_events[:OPS_HISTORY_PREVIEW_LIMIT]:
+            event_map = _mapping(event)
+            title = _text(event_map.get("title"), "")
+            title_suffix = f" | {title}" if title else ""
+            detail = _text(event_map.get("detail"), "")
+            detail_suffix = f" | {detail}" if detail else ""
+            lines.append(
+                (
+                    f"- {_ops_kind_label(event_map.get('kind'))} "
+                    f"#{_text(event_map.get('id'), '-')} "
+                    f"{_ops_status_label(event_map.get('status'))} | "
+                    f"{_text(event_map.get('occurred_at'), '未返回')}"
+                    f"{title_suffix}{detail_suffix}"
+                ),
+            )
+    else:
+        lines.append("- 暂无")
+
+    lines.extend(
+        [
+            "该视图只读取已有运行记录，不触发采集、扫描、推送、模型调用或证据写入。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
 def format_tushare_status(payload: Mapping[str, Any]) -> str:
     lines = [
         "Tushare 状态",
@@ -1194,6 +1293,15 @@ def _ops_failure_summary_text(items: Sequence[Any]) -> str:
             ),
         )
     return " / ".join(parts)
+
+
+def _prioritized_ops_failure_summary(items: Sequence[Any]) -> list[Any]:
+    priority = {"provider_fetch": 0, "data_quality": 1}
+    bounded = list(items[:OPS_HISTORY_PREVIEW_LIMIT])
+    return sorted(
+        bounded,
+        key=lambda item: priority.get(_text(_mapping(item).get("kind"), ""), 2),
+    )
 
 
 def _ops_kind_label(value: Any) -> str:

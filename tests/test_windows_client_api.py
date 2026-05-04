@@ -386,6 +386,78 @@ def test_format_ops_readiness_outputs_checks() -> None:
     assert "只读取已有运行记录" in text
 
 
+def test_format_ops_warning_drilldown_prioritizes_backend_warning_fields() -> None:
+    text = client_api.format_ops_warning_drilldown(
+        {
+            "lookback_hours": 6,
+            "status": "warning",
+            "checks": [
+                {"name": "radar_freshness", "status": "ok", "message": "fresh"},
+                {
+                    "name": "provider_fetch",
+                    "status": "warning",
+                    "message": "Provider 拉取存在异常。",
+                },
+                {
+                    "name": "data_quality",
+                    "status": "fail",
+                    "message": "数据质量检查失败。",
+                },
+            ],
+        },
+        {
+            "lookback_hours": 6,
+            "alerts": [
+                {
+                    "severity": "warning",
+                    "code": "provider_fetch_unhealthy",
+                    "message": "Provider 拉取存在 2 条异常记录。",
+                }
+            ],
+        },
+        {
+            "lookback_hours": 6,
+            "failure_summary": [
+                {"kind": "model_call", "key": "review/fallback", "count": 3},
+                {"kind": "data_quality", "key": "akshare/degraded", "count": 1},
+                {"kind": "provider_fetch", "key": "akshare/failure", "count": 2},
+            ],
+            "recent_events": [
+                {
+                    "id": 9,
+                    "kind": "provider_fetch",
+                    "status": "failure",
+                    "occurred_at": "2026-05-04T09:25:00Z",
+                    "title": "AKShare minimal fetch",
+                    "detail": "timeout",
+                }
+            ],
+        },
+    )
+
+    provider_check_pos = text.index("Provider (provider_fetch): 警告")
+    data_quality_check_pos = text.index("数据质量 (data_quality): 失败")
+    alert_pos = text.index("provider_fetch_unhealthy")
+    provider_summary_pos = text.index("Provider akshare/failure=2")
+    data_quality_summary_pos = text.index("数据质量 akshare/degraded=1")
+    model_summary_pos = text.index("模型 review/fallback=3")
+    event_pos = text.index("AKShare minimal fetch")
+
+    assert "就绪状态：有警告" in text
+    assert "radar_freshness" not in text
+    assert (
+        provider_check_pos
+        < data_quality_check_pos
+        < alert_pos
+        < provider_summary_pos
+        < data_quality_summary_pos
+        < model_summary_pos
+        < event_pos
+    )
+    assert "timeout" in text
+    assert "不触发采集、扫描、推送、模型调用或证据写入" in text
+
+
 def test_format_tushare_status_outputs_read_only_provider_state() -> None:
     text = client_api.format_tushare_status(
         {

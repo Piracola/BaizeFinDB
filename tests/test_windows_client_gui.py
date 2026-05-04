@@ -86,6 +86,31 @@ def test_first_use_smoke_check_blocks_invalid_lookback_before_worker(
     ]
 
 
+def test_ops_warning_drilldown_blocks_invalid_lookback_before_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("abc")
+    errors: list[tuple[str, str]] = []
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start for invalid lookback")
+
+    def fake_showerror(title: str, message: str) -> None:
+        errors.append((title, message))
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "showerror", fake_showerror)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.view_ops_warning_drilldown()
+
+    assert errors == [
+        (
+            baizefindb_client.WINDOW_TITLE,
+            "OPS Lookback 必须是 1 到 168 之间的整数小时。",
+        ),
+    ]
+
+
 def test_first_use_smoke_check_passes_current_gui_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -118,6 +143,74 @@ def test_first_use_smoke_check_passes_current_gui_values(
     }
     assert calls["summary_report"] == {"status": "ok"}
     assert calls["result"] == "formatted smoke summary"
+
+
+def test_ops_warning_drilldown_reads_three_ops_endpoints_with_selected_lookback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("6")
+    calls: dict[str, Any] = {"fetches": []}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_fetch_readiness(base_url: str, **kwargs: object) -> dict[str, object]:
+        calls["fetches"].append(("readiness", base_url, kwargs))
+        return {"status": "warning"}
+
+    def fake_fetch_overview(base_url: str, **kwargs: object) -> dict[str, object]:
+        calls["fetches"].append(("overview", base_url, kwargs))
+        return {"alerts": []}
+
+    def fake_fetch_history(base_url: str, **kwargs: object) -> dict[str, object]:
+        calls["fetches"].append(("history", base_url, kwargs))
+        return {"recent_events": []}
+
+    def fake_format(
+        readiness: object,
+        overview: object,
+        history: object,
+    ) -> str:
+        calls["format_payloads"] = (readiness, overview, history)
+        return "formatted drilldown"
+
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "fetch_ops_readiness",
+        fake_fetch_readiness,
+    )
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "fetch_ops_overview",
+        fake_fetch_overview,
+    )
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "fetch_ops_history",
+        fake_fetch_history,
+    )
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "format_ops_warning_drilldown",
+        fake_format,
+    )
+
+    app.view_ops_warning_drilldown()
+
+    assert calls["action"] == "读取 OPS 告警钻取"
+    assert calls["fetches"] == [
+        ("readiness", "http://localhost:8000", {"lookback_hours": 6}),
+        ("overview", "http://localhost:8000", {"lookback_hours": 6}),
+        ("history", "http://localhost:8000", {"lookback_hours": 6, "limit": 20}),
+    ]
+    assert calls["format_payloads"] == (
+        {"status": "warning"},
+        {"alerts": []},
+        {"recent_events": []},
+    )
+    assert calls["result"] == "formatted drilldown"
 
 
 @pytest.mark.parametrize(

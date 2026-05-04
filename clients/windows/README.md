@@ -1,6 +1,6 @@
 # BaizeFinDB Windows Client MVP
 
-这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、首用诊断、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史、就绪自检和首用诊断共用。
+这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史、就绪自检、告警钻取和首用诊断共用。
 
 默认仍是源码运行版，不是安装包。当前目录提供可选 PyInstaller onedir 打包脚手架，方便后续在 Windows 目标机上验证 exe 形态；它不是签名安装器，也不包含自动更新或生产分发承诺。
 
@@ -139,6 +139,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - `run-client.ps1 -SmokeCompactJsonOutput <path>` 和 `first-trial.ps1 -SmokeCompactJsonOutput <path>` 会把 compact evidence 路径传给 smoke check；`-SmokeJsonOutput <path>` 继续转发详细 JSON 路径；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
 - 当 `/ops/readiness` 返回 warning 或 blocked 时，console summary 会列出非 OK 检查项名称和有界脱敏说明，例如 `provider_fetch`、`data_quality`，便于首用时区分历史数据源/数据质量 warning 和真正 blocker。
 - GUI 的 `OPS Lookback (hours)` 会传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`，默认 24，范围 1 到 168；非法输入会在发起 API 请求前弹出校验错误。
+- GUI 的 `告警钻取` 按钮复用这三个只读 OPS API，并把同一个 `OPS Lookback (hours)` 传给每次调用；输出优先展示后端 readiness 状态和非 OK 检查、overview alerts、history failure_summary（Provider / 数据质量优先）和有界最近事件，不本地重算状态，不写 evidence。
 - GUI 的 `首用诊断` 按钮复用同一个 `clients.windows.smoke_check.run_smoke_check` 和 `format_summary`，传入当前 Server URL、User Key 和 `OPS Lookback (hours)`，只在窗口内显示摘要；默认不写 evidence 文件，也不会打开第二个 GUI 窗口。
 - smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
