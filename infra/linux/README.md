@@ -165,6 +165,15 @@ Sample the running API for a short validation window. Endpoint failures or
 python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
 ```
 
+When warning or blocked readiness needs shareable sanitized evidence, opt in to
+writing OPS evidence during the same read-only runtime check. The evidence path
+uses the `export_ops_evidence.py` report logic and only reads health/OPS
+endpoints:
+
+```bash
+python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --ops-evidence-output evidence/ops-evidence.json
+```
+
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:
 

@@ -20,6 +20,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import export_ops_evidence  # noqa: E402
+
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_LOOKBACK_HOURS = 24
 RUNTIME_ENDPOINTS = (
@@ -49,6 +55,10 @@ class EndpointRead:
 class RuntimeSample:
     collected_at: str
     endpoints: dict[str, EndpointRead]
+
+
+class OpsEvidenceExportError(RuntimeError):
+    """Raised when optional OPS evidence export could not complete successfully."""
 
 
 def build_endpoint_path(
@@ -288,6 +298,38 @@ def run_runtime_check(
     )
 
 
+def write_ops_evidence_report(
+    output_path: Path,
+    *,
+    base_url: str,
+    lookback_hours: int,
+    history_limit: int,
+    timeout: int,
+) -> dict[str, Any]:
+    reads = export_ops_evidence.collect_ops_evidence(
+        base_url,
+        lookback_hours=lookback_hours,
+        history_limit=history_limit,
+        timeout=timeout,
+    )
+    report = export_ops_evidence.build_evidence_report(
+        reads,
+        base_url=base_url,
+        lookback_hours=lookback_hours,
+        history_limit=history_limit,
+    )
+    encoded = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(encoded, encoding="utf-8")
+    if report.get("status") == "error":
+        failures = report.get("failures")
+        raise OpsEvidenceExportError(
+            "OPS evidence export failed while reading allowed health/OPS endpoints: "
+            f"{failures}",
+        )
+    return report
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sample a running BaizeFinDB API and validate runtime health.",
@@ -337,6 +379,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional path to write the full JSON report.",
     )
+    parser.add_argument(
+        "--ops-evidence-output",
+        type=Path,
+        help=(
+            "Optional path to write sanitized read-only OPS evidence using the same "
+            "health/OPS endpoints as export_ops_evidence.py."
+        ),
+    )
     return parser
 
 
@@ -364,6 +414,27 @@ def main(argv: list[str] | None = None) -> int:
         timeout=args.timeout,
         fail_on_warning=args.fail_on_warning,
     )
+    evidence_error = ""
+    if args.ops_evidence_output:
+        try:
+            evidence_report = write_ops_evidence_report(
+                args.ops_evidence_output,
+                base_url=args.base_url,
+                lookback_hours=args.lookback_hours,
+                history_limit=args.history_limit,
+                timeout=args.timeout,
+            )
+        except OpsEvidenceExportError as exc:
+            evidence_error = str(exc)
+            report["ops_evidence_output"] = str(args.ops_evidence_output)
+            report["ops_evidence_error"] = evidence_error
+        except OSError as exc:
+            evidence_error = f"OPS evidence export failed while writing output: {exc}"
+            report["ops_evidence_output"] = str(args.ops_evidence_output)
+            report["ops_evidence_error"] = evidence_error
+        else:
+            report["ops_evidence_output"] = str(args.ops_evidence_output)
+            report["ops_evidence_status"] = evidence_report.get("status")
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
         args.json_output.write_text(
@@ -372,6 +443,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     print(_format_report(report))
+    if evidence_error:
+        print(f"[FAIL] {evidence_error}", file=sys.stderr)
+        return 1
     return 0 if report["status"] == "ok" else 1
 
 
@@ -386,6 +460,12 @@ def _format_report(report: dict[str, Any]) -> str:
     latest_server = report.get("latest_server")
     if latest_server:
         lines.append(f"server={latest_server}")
+    if report.get("ops_evidence_output"):
+        lines.append(f"ops_evidence_output={report['ops_evidence_output']}")
+    if report.get("ops_evidence_status"):
+        lines.append(f"ops_evidence_status={report['ops_evidence_status']}")
+    if report.get("ops_evidence_error"):
+        lines.append(f"ops_evidence_error={report['ops_evidence_error']}")
     for failure in report["failures"]:
         lines.append(
             "[FAIL] "

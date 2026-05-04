@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -268,6 +269,120 @@ def test_run_runtime_check_collects_requested_sample_count(monkeypatch) -> None:
     assert report["readiness_status_counts"] == {"ready": 3}
 
 
+def test_main_writes_ops_evidence_for_ready_runtime(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(status="ok"),
+    )
+    monkeypatch.setattr(
+        server_runtime_check.export_ops_evidence,
+        "collect_ops_evidence",
+        lambda *args, **kwargs: _evidence_reads(readiness_status="ready"),
+    )
+    output_path = tmp_path / "ops-evidence.json"
+
+    exit_code = server_runtime_check.main(["--ops-evidence-output", str(output_path)])
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["report_type"] == "ops_evidence"
+    assert payload["summary"]["readiness_status"] == "ready"
+    assert "ops_evidence_status=ok" in captured.out
+
+
+def test_main_writes_ops_evidence_for_warning_runtime(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(
+            status="ok",
+            warnings=[{"sample": 1, "kind": "readiness_warning", "status": "warning"}],
+        ),
+    )
+    monkeypatch.setattr(
+        server_runtime_check.export_ops_evidence,
+        "collect_ops_evidence",
+        lambda *args, **kwargs: _evidence_reads(readiness_status="warning"),
+    )
+    output_path = tmp_path / "ops-evidence.json"
+
+    exit_code = server_runtime_check.main(["--ops-evidence-output", str(output_path)])
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert payload["status"] == "ok"
+    assert payload["summary"]["warning_non_fatal"] is True
+
+
+def test_main_writes_ops_evidence_for_blocked_runtime(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(
+            status="fail",
+            failures=[
+                {
+                    "sample": 1,
+                    "endpoint": "ops_readiness",
+                    "path": "/ops/readiness?lookback_hours=24",
+                    "http_status": 200,
+                    "error": "ops readiness status is blocked",
+                },
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        server_runtime_check.export_ops_evidence,
+        "collect_ops_evidence",
+        lambda *args, **kwargs: _evidence_reads(readiness_status="blocked"),
+    )
+    output_path = tmp_path / "ops-evidence.json"
+
+    exit_code = server_runtime_check.main(["--ops-evidence-output", str(output_path)])
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert payload["status"] == "blocked"
+    assert payload["summary"]["blocked"] is True
+    assert "ops_evidence_status=blocked" in captured.out
+
+
+def test_main_fails_when_ops_evidence_export_fails(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(status="ok"),
+    )
+    reads = _evidence_reads(readiness_status="ready")
+    reads[0] = server_runtime_check.export_ops_evidence.EndpointRead(
+        name="health",
+        path="/health",
+        status="fail",
+        http_status=503,
+        error="health unavailable",
+    )
+    monkeypatch.setattr(
+        server_runtime_check.export_ops_evidence,
+        "collect_ops_evidence",
+        lambda *args, **kwargs: reads,
+    )
+    output_path = tmp_path / "ops-evidence.json"
+
+    exit_code = server_runtime_check.main(["--ops-evidence-output", str(output_path)])
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 1
+    assert payload["status"] == "error"
+    assert "OPS evidence export failed" in captured.err
+    assert "ops_evidence_error=" in captured.out
+
+
 def _sample(
     *,
     readiness_status: str,
@@ -321,3 +436,59 @@ def _sample(
         collected_at="2026-05-04T00:00:00+00:00",
         endpoints=endpoints,
     )
+
+
+def _runtime_report(
+    *,
+    status: str,
+    failures: list[dict[str, object]] | None = None,
+    warnings: list[dict[str, object]] | None = None,
+):
+    return {
+        "base_url": "http://api.test",
+        "sample_count": 1,
+        "started_at": "2026-05-04T00:00:00+00:00",
+        "finished_at": "2026-05-04T00:00:00+00:00",
+        "status": status,
+        "fail_on_warning": False,
+        "readiness_status_counts": {"ready": 1},
+        "alert_counts": {},
+        "latest_server": None,
+        "failures": failures or [],
+        "warnings": warnings or [],
+    }
+
+
+def _evidence_reads(*, readiness_status: str):
+    return [
+        server_runtime_check.export_ops_evidence.EndpointRead(
+            name="health",
+            path="/health",
+            status="ok",
+            payload={"status": "ok"},
+        ),
+        server_runtime_check.export_ops_evidence.EndpointRead(
+            name="health_ready",
+            path="/health/ready",
+            status="ok",
+            payload={"status": "ready"},
+        ),
+        server_runtime_check.export_ops_evidence.EndpointRead(
+            name="ops_overview",
+            path="/ops/overview?lookback_hours=24",
+            status="ok",
+            payload={"alerts": []},
+        ),
+        server_runtime_check.export_ops_evidence.EndpointRead(
+            name="ops_history",
+            path="/ops/history?lookback_hours=24&limit=20",
+            status="ok",
+            payload={"failure_summary": [], "recent_events": []},
+        ),
+        server_runtime_check.export_ops_evidence.EndpointRead(
+            name="ops_readiness",
+            path="/ops/readiness?lookback_hours=24",
+            status="ok",
+            payload={"status": readiness_status, "checks": []},
+        ),
+    ]

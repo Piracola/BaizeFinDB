@@ -542,6 +542,12 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 如果 readiness 是 `warning`，并且需要判断它是历史 Provider / 数据质量问题还是部署阻塞，可导出只读脱敏 evidence：
 
 ```powershell
+uv run python infra/scripts/server_runtime_check.py --samples 1 --interval-seconds 0 --ops-evidence-output evidence/ops-evidence.json
+```
+
+这条命令会在 runtime check 原有只读采样之外，复用 `export_ops_evidence.py` 的脱敏报告逻辑写入 evidence；ready、warning、blocked 都会写入，warning/blocked 排障时优先用这种单命令流程。也可以单独运行 exporter：
+
+```powershell
 uv run python infra/scripts/export_ops_evidence.py --json-output evidence/ops-evidence.json
 ```
 
