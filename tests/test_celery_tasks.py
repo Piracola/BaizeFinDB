@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.core.config import Settings
 from app.tasks import celery_app as celery_module
 
 
@@ -14,6 +15,63 @@ def test_celery_beat_schedules_collect_then_scan_task() -> None:
             "schedule": 300.0,
         },
     }
+
+
+def test_tushare_announcements_beat_schedule_is_default_off() -> None:
+    schedule = celery_module.build_beat_schedule(Settings())
+
+    assert schedule == {
+        "collect-and-run-radar-every-5-minutes": {
+            "task": "baizefindb.radar.collect_and_scan",
+            "schedule": 300.0,
+        },
+    }
+
+
+def test_tushare_announcements_beat_schedule_can_be_enabled() -> None:
+    settings = Settings(
+        TUSHARE_ANNS_D_BEAT_ENABLED=True,
+        TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=1800,
+    )
+
+    schedule = celery_module.build_beat_schedule(settings)
+
+    assert schedule["collect-and-run-radar-every-5-minutes"] == {
+        "task": "baizefindb.radar.collect_and_scan",
+        "schedule": 300.0,
+    }
+    assert schedule["collect-tushare-announcements"] == {
+        "task": "baizefindb.providers.collect_tushare_announcements",
+        "schedule": 1800.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_collect_tushare_announcements_task_wrapper(monkeypatch) -> None:
+    calls = []
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> str:
+            return "session"
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    async def fake_collect_tushare_announcements(session: str) -> SimpleNamespace:
+        calls.append(session)
+        return SimpleNamespace(model_dump=lambda mode: {"status": "success", "mode": mode})
+
+    monkeypatch.setattr(celery_module, "AsyncSessionLocal", FakeSessionContext)
+    monkeypatch.setattr(
+        celery_module,
+        "collect_tushare_announcements",
+        fake_collect_tushare_announcements,
+    )
+
+    result = await celery_module._collect_tushare_announcements()
+
+    assert calls == ["session"]
+    assert result == {"status": "success", "mode": "json"}
 
 
 @pytest.mark.asyncio

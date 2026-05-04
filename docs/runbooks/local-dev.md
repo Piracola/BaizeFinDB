@@ -110,7 +110,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/min
 
 ### 4.3 查看和手动验证 Tushare
 
-Tushare 当前用于补充证券主数据、公告数据和公司主体资料。`stock_basic`、`anns_d` 与 `stock_company` 已支持手动抓取并写入 Provider 快照。Tushare 不在当前 Celery 5 分钟调度里，避免权限、积分或字段变化影响主雷达闭环；`anns_d` 中明显重大风险公告会在后续手动运行雷达扫描时映射为 risk P0，普通公告不会生成信号。
+Tushare 当前用于补充证券主数据、公告数据和公司主体资料。`stock_basic`、`anns_d` 与 `stock_company` 已支持手动抓取并写入 Provider 快照。Tushare 不在当前 AKShare+雷达 5 分钟调度里，避免权限、积分或字段变化影响主雷达闭环；`anns_d` 中明显重大风险公告会在后续手动运行雷达扫描时映射为 risk P0，普通公告不会生成信号。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
@@ -122,9 +122,11 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
 
 ```dotenv
 TUSHARE_TOKEN=
+TUSHARE_ANNS_D_BEAT_ENABLED=false
+TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=3600
 ```
 
-配置真实 token 后，`/providers/tushare/status` 只会返回 `token_configured=true`，不会返回 token 原文；`/providers/tushare/readiness` 只读取配置、最近抓取日志和数据质量记录，不触发真实抓取或调度。
+配置真实 token 后，`/providers/tushare/status` 只会返回 `token_configured=true`，不会返回 token 原文；`/providers/tushare/readiness` 只读取配置、最近抓取日志、数据质量记录和显式调度开关，不触发真实抓取或调度。`TUSHARE_ANNS_D_BEAT_ENABLED` 默认必须保持 `false`；只有在确认 token 权限、积分消耗、字段稳定性和误报样例后，才把它改成 `true`。
 
 手动抓取股票基础信息：
 
@@ -390,8 +392,12 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 RADAR_SCAN_INTERVAL_SECONDS=300
 RADAR_CONTINUOUS_P1_TRIGGER_COUNT=3
 RADAR_CONTINUITY_WINDOW_MINUTES=30
+TUSHARE_ANNS_D_BEAT_ENABLED=false
+TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=3600
 TELEGRAM_PUSH_ENABLED=false
 ```
+
+`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。
 
 需要调试后台任务时，先启动 worker：
 

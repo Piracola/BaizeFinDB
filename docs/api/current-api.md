@@ -252,7 +252,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
 
 ### `GET /providers/tushare/readiness`
 
-用途：查看 Tushare 端点是否具备手动抓取和后续调度准入条件。该接口只读取配置、最近抓取日志和数据质量记录，不返回 token 原文，不触发真实抓取，也不会启用 Celery 调度。
+用途：查看 Tushare 端点是否具备手动抓取和后续调度准入条件。该接口只读取配置、最近抓取日志、数据质量记录和显式调度开关，不返回 token 原文，不触发真实抓取，也不会自行启用 Celery 调度。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
@@ -261,9 +261,9 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
 响应重点：
 
 - `status`：整体结果，`ready` 表示端点已有成功抓取和 `ok` 质量样例，`warning` 表示仍缺样例或存在降级，`blocked` 表示 token 缺失或最近失败。
-- `scheduler_enabled`：当前固定为 `false`；这个接口只做准入自检，不代表调度已启用。
+- `scheduler_enabled`：反映 `.env` 中 `TUSHARE_ANNS_D_BEAT_ENABLED` 是否显式启用；默认 `false`。
 - `scheduler_ready_endpoint_count`：具备成功抓取、非空行数和 `ok` 质量记录的已实现端点数量。
-- `scheduler_policy`：当前调度策略说明，默认保持手动模式，直到 token、字段漂移和误报样例验证通过。
+- `scheduler_policy`：当前调度策略说明；默认 `anns_d` Celery Beat 关闭，只有设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会加入 Beat。
 - `endpoints[].checks`：逐端点检查 token、实现状态、必需字段、默认查询、最近抓取、数据质量；`anns_d` 还标记重大风险公告映射已接入。
 
 ### `POST /providers/tushare/fetch/stock-basic`
@@ -291,7 +291,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/sto
 
 ### `POST /providers/tushare/fetch/announcements`
 
-用途：手动触发 Tushare `anns_d` 公告抓取，写入 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`。该接口不进入 Celery 5 分钟调度，也不会在抓取阶段直接生成风险 P0；后续运行雷达扫描时，明显重大风险公告标题会按 risk P0 候选映射，普通公告不会生成信号。
+用途：手动触发 Tushare `anns_d` 公告抓取，写入 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`。该接口不进入 AKShare+雷达 5 分钟调度，也不会在抓取阶段直接生成风险 P0；后续运行雷达扫描时，明显重大风险公告标题会按 risk P0 候选映射，普通公告不会生成信号。可选的 `anns_d` Celery Beat 调度默认关闭，需显式配置环境变量后才会启用。
 
 ```powershell
 Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/announcements?ann_date=20260503"

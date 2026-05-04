@@ -38,6 +38,15 @@ class Settings(BaseSettings):
         alias="RADAR_CONTINUITY_WINDOW_MINUTES",
     )
     tushare_token: str | None = Field(default=None, alias="TUSHARE_TOKEN")
+    tushare_anns_d_beat_enabled: bool = Field(
+        default=False,
+        alias="TUSHARE_ANNS_D_BEAT_ENABLED",
+    )
+    tushare_anns_d_beat_interval_seconds: int = Field(
+        default=3600,
+        gt=0,
+        alias="TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS",
+    )
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_allowed_chat_ids: str | None = Field(
         default=None,

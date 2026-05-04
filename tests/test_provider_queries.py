@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
@@ -232,6 +232,11 @@ async def test_tushare_readiness_blocks_without_token(
 
     assert readiness.status == "blocked"
     assert readiness.token_configured is False
+    assert readiness.scheduler_enabled is False
+    assert (
+        readiness.scheduler_policy
+        == "anns_d_celery_beat_disabled_by_default_enable_with_tushare_anns_d_beat_enabled"
+    )
     assert readiness.scheduler_ready_endpoint_count == 0
     assert readiness.endpoints[0].manual_fetch_eligible is False
     token_check = next(check for check in readiness.endpoints[0].checks if check.name == "token")
@@ -275,6 +280,10 @@ async def test_tushare_readiness_api_returns_database_state(
     assert payload["status"] == "warning"
     assert payload["token_configured"] is True
     assert payload["scheduler_enabled"] is False
+    assert (
+        payload["scheduler_policy"]
+        == "anns_d_celery_beat_disabled_by_default_enable_with_tushare_anns_d_beat_enabled"
+    )
     assert payload["scheduler_ready_endpoint_count"] == 1
     assert "secret-tushare-token" not in response.text
 
@@ -283,3 +292,24 @@ async def test_tushare_readiness_api_returns_database_state(
     assert by_endpoint["stock_basic"]["latest_status"] == "success"
     assert by_endpoint["stock_basic"]["latest_quality_status"] == "ok"
     assert by_endpoint["anns_d"]["status"] == "warning"
+
+
+@pytest.mark.asyncio
+async def test_tushare_readiness_reflects_explicit_scheduler_enablement(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        readiness = await get_tushare_readiness(
+            session,
+            settings=Settings(
+                TUSHARE_TOKEN="secret-tushare-token",
+                TUSHARE_ANNS_D_BEAT_ENABLED=True,
+                TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=1800,
+            ),
+        )
+
+    assert readiness.scheduler_enabled is True
+    assert readiness.scheduler_policy == (
+        "anns_d_celery_beat_enabled_explicitly;interval_seconds=1800"
+    )
+    assert "secret-tushare-token" not in readiness.model_dump_json()

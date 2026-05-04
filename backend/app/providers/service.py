@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.db.provider_models import DataQualityCheck, MarketSnapshot, ProviderFetchLog
 from app.providers.akshare import AKSHARE_ENDPOINTS, NORMALIZATION_VERSION, AkshareProvider
 from app.providers.schemas import (
@@ -302,7 +302,8 @@ async def get_tushare_readiness(
     session: AsyncSession,
     settings: Settings | None = None,
 ) -> TushareReadinessResponse:
-    provider_status = get_tushare_provider_status(settings)
+    active_settings = settings or get_settings()
+    provider_status = get_tushare_provider_status(active_settings)
     endpoint_readiness: list[TushareEndpointReadiness] = []
 
     for spec in TUSHARE_ENDPOINTS.values():
@@ -378,12 +379,14 @@ async def get_tushare_readiness(
         fetch_enabled=provider_status.fetch_enabled,
         endpoint_count=provider_status.endpoint_count,
         implemented_endpoint_count=provider_status.implemented_endpoint_count,
+        scheduler_enabled=active_settings.tushare_anns_d_beat_enabled,
         scheduler_ready_endpoint_count=scheduler_ready_count,
-        scheduler_policy="manual_only_until_token_field_drift_and_false_positive_checks_pass",
+        scheduler_policy=_tushare_scheduler_policy(active_settings),
         message=_tushare_readiness_message(
             provider_status.token_configured,
             provider_status.implemented_endpoint_count,
             scheduler_ready_count,
+            active_settings.tushare_anns_d_beat_enabled,
         ),
         endpoints=endpoint_readiness,
     )
@@ -577,9 +580,13 @@ def _tushare_readiness_message(
     token_configured: bool,
     implemented_endpoint_count: int,
     scheduler_ready_count: int,
+    scheduler_enabled: bool,
 ) -> str:
     if not token_configured:
         return "TUSHARE_TOKEN 未配置；Tushare 只能展示端点规划，不能进入抓取或调度准入。"
+
+    if scheduler_enabled:
+        return "Tushare anns_d Celery Beat 调度已显式启用；请持续关注接口权限、积分消耗和数据质量。"
 
     if scheduler_ready_count >= implemented_endpoint_count:
         return (
@@ -588,6 +595,16 @@ def _tushare_readiness_message(
         )
 
     return "Tushare 已可手动验证；进入调度前还需要补齐每个端点的成功抓取、字段完整性和误报样例。"
+
+
+def _tushare_scheduler_policy(settings: Settings) -> str:
+    if settings.tushare_anns_d_beat_enabled:
+        return (
+            "anns_d_celery_beat_enabled_explicitly;"
+            f"interval_seconds={settings.tushare_anns_d_beat_interval_seconds}"
+        )
+
+    return "anns_d_celery_beat_disabled_by_default_enable_with_tushare_anns_d_beat_enabled"
 
 
 async def _record_failure(

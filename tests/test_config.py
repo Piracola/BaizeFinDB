@@ -12,6 +12,8 @@ def test_settings_defaults() -> None:
     assert settings.radar_continuous_p1_trigger_count == 3
     assert settings.radar_continuity_window_minutes == 30
     assert not settings.tushare_token_configured
+    assert settings.tushare_anns_d_beat_enabled is False
+    assert settings.tushare_anns_d_beat_interval_seconds == 3600
     assert settings.telegram_bot_token is None
     assert settings.telegram_allowed_chat_id_set == set()
     assert not settings.telegram_bot_token_configured
@@ -28,6 +30,8 @@ def test_settings_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("RADAR_SCAN_INTERVAL_SECONDS", "120")
     monkeypatch.setenv("RADAR_CONTINUOUS_P1_TRIGGER_COUNT", "2")
     monkeypatch.setenv("RADAR_CONTINUITY_WINDOW_MINUTES", "15")
+    monkeypatch.setenv("TUSHARE_ANNS_D_BEAT_ENABLED", "true")
+    monkeypatch.setenv("TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS", "1800")
     monkeypatch.setenv("OPS_CPU_USAGE_PERCENT_ALERT_THRESHOLD", "85")
     monkeypatch.setenv("OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD", "88")
 
@@ -37,6 +41,8 @@ def test_settings_reads_environment(monkeypatch) -> None:
     assert settings.radar_scan_interval_seconds == 120
     assert settings.radar_continuous_p1_trigger_count == 2
     assert settings.radar_continuity_window_minutes == 15
+    assert settings.tushare_anns_d_beat_enabled is True
+    assert settings.tushare_anns_d_beat_interval_seconds == 1800
     assert settings.ops_cpu_usage_percent_alert_threshold == 85.0
     assert settings.ops_memory_used_percent_alert_threshold == 88.0
 
