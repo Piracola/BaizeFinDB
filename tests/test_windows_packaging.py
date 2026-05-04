@@ -22,7 +22,10 @@ def write_fake_python(fake_bin: Path) -> Path:
                 "  exit /b 0",
                 ")",
                 'echo pyinstaller>> "%PYTHON_CALL_LOG%"',
-                "exit /b 23",
+                'if "%PYINSTALLER_EXIT_CODE%"=="" (',
+                "  exit /b 23",
+                ")",
+                "exit /b %PYINSTALLER_EXIT_CODE%",
             ]
         ),
         encoding="utf-8",
@@ -45,6 +48,8 @@ def test_packaging_script_has_lightweight_python_preflight() -> None:
     script = PACKAGE_SCRIPT.read_text(encoding="utf-8")
 
     assert "[switch]$SkipPreflight" in script
+    assert "[switch]$CheckOnly" in script
+    assert "$CheckOnly -and $SkipPreflight" in script
     assert "sys.version_info[:2] != (3, 12)" in script
     assert 'importlib.import_module("tkinter")' in script
     assert 'find_spec("clients.windows.baizefindb_client")' in script
@@ -222,5 +227,112 @@ def test_packaging_skip_preflight_goes_directly_to_pyinstaller_check(
     calls = call_log.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 1
     assert calls[0] == "pyinstaller"
+    assert not dist_path.exists()
+    assert not work_path.exists()
+
+
+def test_packaging_check_only_runs_preflight_and_pyinstaller_check_without_artifacts(
+    tmp_path: Path,
+) -> None:
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    call_log = tmp_path / "python-calls.log"
+    write_fake_python(fake_bin)
+
+    dist_path = tmp_path / "dist"
+    work_path = tmp_path / "build"
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin)
+    env["PYTHON_CALL_LOG"] = str(call_log)
+    env["EXPECT_PREFLIGHT"] = "1"
+    env["PYTHON_PREFLIGHT_MARKER"] = str(tmp_path / "preflight.marker")
+    env["PYINSTALLER_EXIT_CODE"] = "0"
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PACKAGE_SCRIPT),
+            "-CheckOnly",
+            "-DistPath",
+            str(dist_path),
+            "-WorkPath",
+            str(work_path),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Packaging prerequisites are available." in result.stdout
+    calls = call_log.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2
+    assert calls[0] == "preflight"
+    assert calls[1] == "pyinstaller"
+    assert not dist_path.exists()
+    assert not work_path.exists()
+    assert not (work_path / "spec").exists()
+    assert not (work_path / "baizefindb_client_launcher.py").exists()
+
+
+def test_packaging_check_only_rejects_skip_preflight_without_artifacts(
+    tmp_path: Path,
+) -> None:
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is not available")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    call_log = tmp_path / "python-calls.log"
+    write_fake_python(fake_bin)
+
+    dist_path = tmp_path / "dist"
+    work_path = tmp_path / "build"
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin)
+    env["PYTHON_CALL_LOG"] = str(call_log)
+    env["EXPECT_PREFLIGHT"] = "1"
+    env["PYTHON_PREFLIGHT_MARKER"] = str(tmp_path / "preflight.marker")
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(PACKAGE_SCRIPT),
+            "-CheckOnly",
+            "-SkipPreflight",
+            "-DistPath",
+            str(dist_path),
+            "-WorkPath",
+            str(work_path),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "-CheckOnly cannot be used with -SkipPreflight" in result.stderr
+    assert not call_log.exists()
     assert not dist_path.exists()
     assert not work_path.exists()

@@ -123,6 +123,12 @@ powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -Dry
 powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun -Name CustomClient -DistPath C:\tmp\baize-dist -WorkPath C:\tmp\baize-build -Clean
 ```
 
+也可以用 check-only 验证真实打包前置条件。该模式会运行同一套 Python 3.12、`tkinter` import、入口模块解析 preflight，并检查 PyInstaller 是否已安装；检查通过后在创建 `build/`、`dist/`、`spec/`、临时 launcher 或调用 PyInstaller 构建前退出。`-CheckOnly` 必须运行 preflight，因此不能和 `-SkipPreflight` 同用：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly
+```
+
 非 dry-run 打包会在调用 PyInstaller 前先运行轻量 Python preflight，确认 Python 3.12、`tkinter` 可导入、并且能从仓库路径解析 `clients.windows.baizefindb_client`。这个检查不会创建 `tk.Tk()`、打开 GUI、访问后端 API、运行 smoke check 或生成构建产物。只有本地排查特殊问题时才显式跳过：
 
 ```powershell

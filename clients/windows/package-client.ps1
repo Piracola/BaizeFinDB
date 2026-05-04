@@ -4,10 +4,16 @@ param(
     [string]$WorkPath,
     [switch]$Clean,
     [switch]$DryRun,
+    [switch]$CheckOnly,
     [switch]$SkipPreflight
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($CheckOnly -and $SkipPreflight) {
+    Write-Error "-CheckOnly cannot be used with -SkipPreflight because check-only mode must run the packaging preflight."
+    exit 2
+}
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
@@ -94,6 +100,11 @@ $PyInstallerCheck = @(
 if ($LASTEXITCODE -ne 0) {
     Write-Error "PyInstaller is not installed. Install it only for packaging, for example: uv pip install pyinstaller"
     exit $LASTEXITCODE
+}
+
+if ($CheckOnly) {
+    Write-Output "Packaging prerequisites are available."
+    exit 0
 }
 
 New-Item -ItemType Directory -Force -Path $WorkPath, $DistPath, $SpecPath | Out-Null
