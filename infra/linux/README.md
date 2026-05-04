@@ -201,6 +201,7 @@ Verify the backup toolchain without exporting data:
 
 ```bash
 python infra/scripts/server_deploy_check.py --check-backup
+python infra/scripts/postgres_backup.py --check-only --check-json-output evidence/postgres-backup-check.json
 ```
 
 Verify Tushare `stock_basic` without writing to the database:
@@ -301,6 +302,12 @@ The helper runs:
 docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T postgres \
   pg_dump -U baizefindb -d baizefindb
 ```
+
+For a no-data preflight, use `--check-only --check-json-output <path>`. That mode
+only runs `pg_dump --version` through the server compose overlay and writes bounded
+metadata about the repo root, output path, command shape, service, database user,
+database name, and version-check result. It does not create a `.sql` file or stream
+database contents.
 
 `backups/` is ignored by git. Also back up `.env` through a secure server-side
 secret process, not through git.

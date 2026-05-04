@@ -148,6 +148,13 @@ uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 uv run python infra/scripts/server_deploy_check.py --check-backup
 ```
 
+通过备份脚本验证 repo root、输出路径元数据、compose 命令形态和
+`pg_dump --version`，并保存不含数据库内容的有界证据：
+
+```powershell
+uv run python infra/scripts/postgres_backup.py --check-only --check-json-output evidence/postgres-backup-check.json
+```
+
 生成 PostgreSQL 备份：
 
 ```powershell
