@@ -17,6 +17,7 @@ class FakeVar:
 def _app_with_lookback(value: str) -> baizefindb_client.BaizeFinDBClientApp:
     app = object.__new__(baizefindb_client.BaizeFinDBClientApp)
     app.server_url = FakeVar("http://localhost:8000")
+    app.user_key = FakeVar("analyst")
     app.ops_lookback_hours = FakeVar(value)
     return app
 
@@ -58,6 +59,65 @@ def test_view_ops_overview_blocks_invalid_lookback_before_worker(
             "OPS Lookback 必须是 1 到 168 之间的整数小时。",
         ),
     ]
+
+
+def test_first_use_smoke_check_blocks_invalid_lookback_before_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("169")
+    errors: list[tuple[str, str]] = []
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start for invalid lookback")
+
+    def fake_showerror(title: str, message: str) -> None:
+        errors.append((title, message))
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "showerror", fake_showerror)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.run_first_use_smoke_check()
+
+    assert errors == [
+        (
+            baizefindb_client.WINDOW_TITLE,
+            "OPS Lookback 必须是 1 到 168 之间的整数小时。",
+        ),
+    ]
+
+
+def test_first_use_smoke_check_passes_current_gui_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("6")
+    calls: dict[str, Any] = {}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_run_smoke_check(**kwargs: object) -> object:
+        calls["smoke_kwargs"] = kwargs
+        return {"status": "ok"}
+
+    def fake_format_summary(report: object) -> str:
+        calls["summary_report"] = report
+        return "formatted smoke summary"
+
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(baizefindb_client.smoke_check, "run_smoke_check", fake_run_smoke_check)
+    monkeypatch.setattr(baizefindb_client.smoke_check, "format_summary", fake_format_summary)
+
+    app.run_first_use_smoke_check()
+
+    assert calls["action"] == "运行首用诊断"
+    assert calls["smoke_kwargs"] == {
+        "server_url": "http://localhost:8000",
+        "user_key": "analyst",
+        "ops_readiness_lookback_hours": 6,
+    }
+    assert calls["summary_report"] == {"status": "ok"}
+    assert calls["result"] == "formatted smoke summary"
 
 
 @pytest.mark.parametrize(

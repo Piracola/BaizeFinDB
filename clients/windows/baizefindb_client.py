@@ -12,10 +12,10 @@ from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
 
 try:
-    from . import client_api
+    from . import client_api, smoke_check
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from clients.windows import client_api
+    from clients.windows import client_api, smoke_check
 
 WINDOW_TITLE = "BaizeFinDB Windows Client"
 DEFAULT_OPS_LOOKBACK_HOURS = 24
@@ -115,6 +115,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "运行状态", self.view_ops_overview)
         self._add_button(button_frame, "运维历史", self.view_ops_history)
         self._add_button(button_frame, "就绪自检", self.view_ops_readiness)
+        self._add_button(button_frame, "首用诊断", self.run_first_use_smoke_check)
         self._add_button(button_frame, "数据源状态", self.view_tushare_status)
         self._add_button(button_frame, "数据源自检", self.view_tushare_readiness)
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
@@ -210,6 +211,23 @@ class BaizeFinDBClientApp:
             return client_api.format_ops_readiness(readiness)
 
         self._run_worker("读取运行就绪自检", worker)
+
+    def run_first_use_smoke_check(self) -> None:
+        try:
+            lookback_hours = self._normalized_ops_lookback_hours()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        def worker() -> str:
+            report = smoke_check.run_smoke_check(
+                server_url=self._normalized_server_url(),
+                user_key=self._normalized_user_key(),
+                ops_readiness_lookback_hours=lookback_hours,
+            )
+            return smoke_check.format_summary(report)
+
+        self._run_worker("运行首用诊断", worker)
 
     def view_tushare_status(self) -> None:
         def worker() -> str:
