@@ -1,0 +1,238 @@
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+MODULE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "infra"
+    / "scripts"
+    / "server_delivery_acceptance.py"
+)
+SPEC = importlib.util.spec_from_file_location("server_delivery_acceptance", MODULE_PATH)
+assert SPEC is not None
+assert SPEC.loader is not None
+server_delivery_acceptance = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = server_delivery_acceptance
+SPEC.loader.exec_module(server_delivery_acceptance)
+
+
+def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None:
+    args = _args(tmp_path)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "runtime_check",
+    ]
+    assert stages[0].command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert stages[1].command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--check-backup",
+        "--backup-check-json-output",
+        str(tmp_path / "postgres-backup-check.json"),
+        "--json-output",
+        str(tmp_path / "server-backup-preflight.json"),
+    ]
+    assert stages[2].command == [
+        "python",
+        "infra/scripts/server_runtime_check.py",
+        "--samples",
+        "3",
+        "--interval-seconds",
+        "30",
+        "--include-ops-trends",
+        "--json-output",
+        str(tmp_path / "server-runtime-check.json"),
+    ]
+
+
+def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
+    args = _args(tmp_path, runtime_samples=5, runtime_interval_seconds=7)
+
+    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[2]
+
+    assert "--samples" in runtime_stage.command
+    assert "5" in runtime_stage.command
+    assert "--interval-seconds" in runtime_stage.command
+    assert "7" in runtime_stage.command
+
+
+def test_build_stage_specs_marks_skipped_stages(tmp_path: Path) -> None:
+    args = _args(tmp_path, skip_backup_check=True, skip_runtime_check=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert stages[1].name == "backup_check"
+    assert stages[1].command == []
+    assert stages[2].name == "runtime_check"
+    assert stages[2].command == []
+
+
+def test_run_acceptance_runs_all_stages_by_default(monkeypatch, tmp_path: Path) -> None:
+    args = _args(tmp_path)
+    calls = []
+
+    def fake_run_stage(stage, *, repo_root: Path):
+        calls.append(stage.name)
+        status = "fail" if stage.name == "deploy_preflight" else "ok"
+        return server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status=status,
+            command=stage.command,
+            exit_code=1 if status == "fail" else 0,
+            evidence_files=stage.evidence_files,
+        )
+
+    monkeypatch.setattr(server_delivery_acceptance, "run_stage", fake_run_stage)
+
+    results = server_delivery_acceptance.run_acceptance(args, repo_root=tmp_path)
+
+    assert calls == ["deploy_preflight", "backup_check", "runtime_check"]
+    assert [result.status for result in results] == ["fail", "ok", "ok"]
+
+
+def test_run_acceptance_fail_fast_stops_after_failure(monkeypatch, tmp_path: Path) -> None:
+    args = _args(tmp_path, fail_fast=True)
+    calls = []
+
+    def fake_run_stage(stage, *, repo_root: Path):
+        calls.append(stage.name)
+        return server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status="fail",
+            command=stage.command,
+            exit_code=9,
+            evidence_files=stage.evidence_files,
+        )
+
+    monkeypatch.setattr(server_delivery_acceptance, "run_stage", fake_run_stage)
+
+    results = server_delivery_acceptance.run_acceptance(args, repo_root=tmp_path)
+
+    assert calls == ["deploy_preflight"]
+    assert len(results) == 1
+
+
+def test_build_report_summarizes_stage_results(tmp_path: Path) -> None:
+    report = server_delivery_acceptance.build_report(
+        [
+            _result("deploy_preflight", "ok", 0),
+            _result("backup_check", "skipped", None),
+            _result("runtime_check", "fail", 2),
+        ],
+        evidence_dir=tmp_path,
+    )
+
+    assert report["status"] == "fail"
+    assert report["evidence_dir"] == str(tmp_path)
+    assert report["summary"] == {"total": 3, "ok": 1, "fail": 1, "skipped": 1}
+    assert report["stages"][0]["name"] == "deploy_preflight"
+    assert report["stages"][0]["command"] == ["python", "helper.py"]
+
+
+def test_write_report_creates_parent_directory(tmp_path: Path) -> None:
+    output = tmp_path / "nested" / "acceptance.json"
+
+    server_delivery_acceptance.write_report(output, {"status": "ok"})
+
+    assert json.loads(output.read_text(encoding="utf-8")) == {"status": "ok"}
+
+
+def test_main_writes_report_and_returns_nonzero_on_failure(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    output = tmp_path / "acceptance.json"
+
+    monkeypatch.setattr(server_delivery_acceptance, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_delivery_acceptance,
+        "run_stage",
+        lambda stage, *, repo_root: server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status="fail" if stage.name == "runtime_check" else "ok",
+            command=stage.command,
+            exit_code=4 if stage.name == "runtime_check" else 0,
+            evidence_files=stage.evidence_files,
+            stderr="blocked",
+        ),
+    )
+
+    exit_code = server_delivery_acceptance.main(
+        [
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--json-output",
+            str(output),
+            "--python-executable",
+            "python",
+            "--runtime-samples",
+            "1",
+            "--runtime-interval-seconds",
+            "1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 1
+    assert report["status"] == "fail"
+    assert report["summary"]["fail"] == 1
+    assert "[FAIL] runtime_check exit=4" in captured.out
+
+
+def test_main_rejects_invalid_runtime_samples() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        server_delivery_acceptance.main(["--runtime-samples", "0"])
+
+    assert exc_info.value.code == 2
+
+
+def test_main_rejects_invalid_runtime_interval() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        server_delivery_acceptance.main(["--runtime-interval-seconds", "0"])
+
+    assert exc_info.value.code == 2
+
+
+def _args(tmp_path: Path, **overrides):
+    parser = server_delivery_acceptance.build_parser()
+    args = parser.parse_args(
+        [
+            "--evidence-dir",
+            str(tmp_path),
+            "--python-executable",
+            "python",
+        ]
+    )
+    args.json_output = overrides.pop("json_output", None)
+    for key, value in overrides.items():
+        setattr(args, key, value)
+    return args
+
+
+def _result(name: str, status: str, exit_code: int | None):
+    return server_delivery_acceptance.StageResult(
+        name=name,
+        status=status,
+        command=["python", "helper.py"],
+        exit_code=exit_code,
+        evidence_files=[Path("evidence.json")],
+        stdout="ok",
+        stderr="",
+    )

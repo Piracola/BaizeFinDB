@@ -208,6 +208,18 @@ python infra/scripts/server_deploy_check.py --check-backup --backup-check-json-o
 python infra/scripts/postgres_backup.py --check-only --check-json-output evidence/postgres-backup-check.json
 ```
 
+For one delivery acceptance run after the API is up, use the orchestrator. It
+delegates to the existing deploy preflight, backup check-only evidence, and
+runtime sampler, then writes a bounded summary under
+`evidence/server-delivery-acceptance/`:
+
+```bash
+python infra/scripts/server_delivery_acceptance.py
+```
+
+Use `--evidence-dir`, `--runtime-samples`, `--runtime-interval-seconds`, and
+`--fail-fast` to adjust the evidence bundle or stop on the first failing stage.
+
 Verify Tushare `stock_basic` without writing to the database:
 
 ```bash
