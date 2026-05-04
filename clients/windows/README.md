@@ -71,6 +71,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 - `--ops-readiness-lookback-hours <n>` 只调整 `/ops/readiness` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
 - `--json-output <path>` 可写出有界脱敏 JSON 报告；报告会隐藏 `user_key`、token、secret 和 credential-like 字段。
 - `run-client.ps1 -SmokeJsonOutput <path>` 会把该路径传给 smoke check；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
+- 当 `/ops/readiness` 返回 warning 或 blocked 时，console summary 会列出非 OK 检查项名称和有界脱敏说明，例如 `provider_fetch`、`data_quality`，便于首用时区分历史数据源/数据质量 warning 和真正 blocker。
 - smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
 - Telegram 绑定管理调用 `/telegram/bindings`；服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。

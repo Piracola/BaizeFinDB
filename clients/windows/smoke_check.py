@@ -19,6 +19,7 @@ MAX_TEXT_LENGTH = 500
 MAX_LIST_ITEMS = 10
 MAX_DICT_ITEMS = 30
 MAX_DEPTH = 4
+MAX_READINESS_DIAGNOSTICS = 5
 DEFAULT_OPS_READINESS_LOOKBACK_HOURS = 24
 MIN_OPS_READINESS_LOOKBACK_HOURS = 1
 MAX_OPS_READINESS_LOOKBACK_HOURS = 168
@@ -26,6 +27,8 @@ REDACTED = "<redacted>"
 SENSITIVE_TEXT_PATTERNS = (
     re.compile(r"(?i)(bearer\s+)[^\s,;]+"),
     re.compile(r"(?i)\b(token|secret|password|authorization|credential|api[_-]?key|user[_-]?key)=([^&\s,;]+)"),
+    re.compile(r"(?i)\b(source[_-]?url|url|domain|host|webhook)=([^&\s,;]+)"),
+    re.compile(r"https?://[^\s,;]+"),
 )
 SKIPPED_USER_SCOPED_ENDPOINTS = (
     "/portfolio/holdings",
@@ -277,9 +280,23 @@ def _check_core_endpoints(
     if isinstance(ops_readiness, Mapping):
         status = str(ops_readiness.get("status", ""))
         if status == "blocked":
-            report.add_blocker("ops_readiness", "/ops/readiness is blocked", ops_readiness)
+            report.add_blocker(
+                "ops_readiness",
+                _ops_readiness_status_message(
+                    "/ops/readiness is blocked",
+                    ops_readiness,
+                ),
+                ops_readiness,
+            )
         elif status == "warning":
-            report.add_warning("ops_readiness", "/ops/readiness returned warning", ops_readiness)
+            report.add_warning(
+                "ops_readiness",
+                _ops_readiness_status_message(
+                    "/ops/readiness returned warning",
+                    ops_readiness,
+                ),
+                ops_readiness,
+            )
         elif status != "ready":
             report.add_blocker(
                 "ops_readiness",
@@ -412,6 +429,39 @@ def _positive_number(value: Any) -> bool:
         return False
 
 
+def _ops_readiness_status_message(prefix: str, payload: Mapping[str, Any]) -> str:
+    diagnostics = _ops_readiness_diagnostics(payload)
+    if not diagnostics:
+        return prefix
+    return f"{prefix}: {'; '.join(diagnostics)}"
+
+
+def _ops_readiness_diagnostics(payload: Mapping[str, Any]) -> list[str]:
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        return []
+
+    diagnostics: list[str] = []
+    non_ok_checks = []
+    for check in checks:
+        if not isinstance(check, Mapping):
+            continue
+        status = str(check.get("status", "")).lower()
+        if status in {"", "ok", "ready"}:
+            continue
+        non_ok_checks.append(check)
+
+    for check in non_ok_checks[:MAX_READINESS_DIAGNOSTICS]:
+        name = _sanitize_message(_bounded_text(str(check.get("name") or "unnamed_check")))
+        message = _sanitize_message(
+            _bounded_text(str(check.get("message") or "No message returned.")),
+        )
+        diagnostics.append(f"{name}: {message}")
+    if len(non_ok_checks) > MAX_READINESS_DIAGNOSTICS:
+        diagnostics.append(f"+{len(non_ok_checks) - MAX_READINESS_DIAGNOSTICS} more")
+    return diagnostics
+
+
 def _sanitize(value: Any, *, depth: int = 0) -> Any:
     if depth > MAX_DEPTH:
         return "<truncated>"
@@ -477,8 +527,10 @@ def _sanitize_message(value: str) -> str:
     for pattern in SENSITIVE_TEXT_PATTERNS:
         if pattern.pattern.startswith("(?i)(bearer"):
             sanitized = pattern.sub(r"\1" + REDACTED, sanitized)
-        else:
+        elif pattern.pattern.startswith("(?i)\\b"):
             sanitized = pattern.sub(lambda match: f"{match.group(1)}={REDACTED}", sanitized)
+        else:
+            sanitized = pattern.sub(REDACTED, sanitized)
     return _bounded_text(sanitized)
 
 

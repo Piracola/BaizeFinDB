@@ -125,6 +125,80 @@ def test_smoke_check_warning_only_empty_first_use_data_exits_zero() -> None:
     assert any("user_scoped_reads" in warning for warning in report.warnings)
 
 
+def test_smoke_check_summary_lists_non_ok_ops_readiness_checks() -> None:
+    payloads = _ready_payloads()
+    payloads["/ops/readiness"] = {
+        "status": "warning",
+        "lookback_hours": 24,
+        "checks": [
+            {"name": "server_disk", "status": "ok", "message": "ok"},
+            {
+                "name": "provider_fetch",
+                "status": "warning",
+                "message": "Recent provider fetch failures in lookback window.",
+            },
+            {
+                "name": "data_quality",
+                "status": "warning",
+                "message": "Data quality checks include degraded snapshots.",
+            },
+        ],
+    }
+
+    report = smoke_check.run_smoke_check(
+        server_url="http://localhost:8000",
+        user_key="default",
+        importer=lambda name: object(),
+        opener=_opener(payloads),
+    )
+    summary = smoke_check.format_summary(report)
+
+    assert report.exit_code() == 0
+    assert "ops_readiness: /ops/readiness returned warning" in summary
+    assert "provider_fetch: Recent provider fetch failures" in summary
+    assert "data_quality: Data quality checks include degraded snapshots." in summary
+    assert "server_disk: ok" not in summary
+
+
+def test_smoke_check_summary_sanitizes_ops_readiness_diagnostics() -> None:
+    payloads = _ready_payloads()
+    payloads["/ops/readiness"] = {
+        "status": "blocked",
+        "lookback_hours": 24,
+        "checks": [
+            {
+                "name": "provider_fetch",
+                "status": "blocked",
+                "message": (
+                    "Provider failed with token=secret-value, Bearer raw-token, "
+                    "source_url=https://provider.example.test/raw"
+                ),
+                "metadata": {
+                    "token": "metadata-secret",
+                    "source_url": "https://metadata.example.test/raw",
+                },
+            },
+        ],
+    }
+
+    report = smoke_check.run_smoke_check(
+        server_url="http://localhost:8000",
+        user_key="default",
+        importer=lambda name: object(),
+        opener=_opener(payloads),
+    )
+    summary = smoke_check.format_summary(report)
+
+    assert report.exit_code() == 1
+    assert "provider_fetch" in summary
+    assert "secret-value" not in summary
+    assert "raw-token" not in summary
+    assert "provider.example.test" not in summary
+    assert "metadata-secret" not in summary
+    assert "metadata.example.test" not in summary
+    assert "<redacted>" in summary
+
+
 def test_smoke_check_strict_warning_exit_code_is_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
     report = smoke_check.run_smoke_check(
         server_url="http://localhost:8000",
