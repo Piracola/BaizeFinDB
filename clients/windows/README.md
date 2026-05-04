@@ -12,7 +12,16 @@
 
 ## 本地连接
 
-在仓库根目录执行：
+推荐首次试运行直接在仓库根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
+```
+
+该命令默认连接 `http://127.0.0.1:8000`、使用 `user_key=default`，先复用
+`run-client.ps1 -SmokeCheck` 执行只读 smoke check，通过后才打开 Tkinter GUI。
+
+也可以单独运行同一套 smoke check：
 
 ```powershell
 python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
@@ -30,13 +39,25 @@ python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000
 ```
 
-也可以让 launcher 先执行同一套 smoke check，再在通过后打开 GUI：
+`first-trial.ps1` 支持覆盖连接地址、用户隔离键和 OPS readiness 窗口：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeLookbackHours 6
+```
+
+底层 `run-client.ps1` 也可以先执行同一套 smoke check，再在通过后打开 GUI：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck
 ```
 
-需要留下脱敏 JSON evidence，或要求 warning 也阻断启动：
+需要留下脱敏 JSON evidence，或要求 warning 也阻断启动，优先使用：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+```
+
+等价的底层 launcher 参数是：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
@@ -108,6 +129,9 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 ## 功能边界
 
 - 首次使用前可运行 `python -m clients.windows.smoke_check --server-url <api-url> --user-key <key>`，也可用 `run-client.ps1 -SmokeCheck` 在启动 GUI 前自动执行。该命令只做 Tkinter import 检查和 API GET 自检，不打开 GUI，不调用采集、扫描、评分生成、报告生成、Telegram 修改或任何交易相关动作。
+- 推荐首次 Windows 试运行使用 `clients/windows/first-trial.ps1`。它只委托
+  `run-client.ps1 -SmokeCheck`，不复制 smoke check 或 GUI 逻辑，默认
+  `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`。
 - `--ops-readiness-lookback-hours <n>` 只调整 `/ops/readiness` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
 - `--json-output <path>` 可写出有界脱敏 JSON 报告；报告会隐藏 `user_key`、token、secret 和 credential-like 字段。
 - `run-client.ps1 -SmokeJsonOutput <path>` 会把该路径传给 smoke check；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。

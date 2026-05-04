@@ -48,7 +48,15 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-先运行首次使用 smoke check。该命令只检查 Tkinter import 和只读 API GET，不打开 GUI，不触发采集、扫描、评分生成、报告生成或 Telegram 修改：
+推荐先运行首次试用 launcher。它默认连接 `http://127.0.0.1:8000`，使用
+`user_key=default` 和最近 24 小时 OPS readiness 窗口，内部只委托
+`run-client.ps1 -SmokeCheck`，不会复制 smoke check 或 GUI 逻辑：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
+```
+
+也可以单独运行首次使用 smoke check。该命令只检查 Tkinter import 和只读 API GET，不打开 GUI，不触发采集、扫描、评分生成、报告生成或 Telegram 修改：
 
 ```powershell
 python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
@@ -72,13 +80,25 @@ python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default
 ```
 
-也可以用 launcher 在打开 GUI 前自动执行同一套 smoke check：
+如果需要覆盖首次试用参数：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeLookbackHours 6
+```
+
+底层 `run-client.ps1` 仍可在打开 GUI 前自动执行同一套 smoke check：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck
 ```
 
-需要同时保存脱敏 JSON evidence，或让 warning 也阻断 GUI 启动：
+需要同时保存脱敏 JSON evidence，或让 warning 也阻断 GUI 启动，推荐：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+```
+
+等价的底层 launcher 参数是：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
@@ -92,6 +112,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 python -m clients.windows.smoke_check --server-url https://<your-domain> --user-key default
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain> -UserKey default
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain> -UserKey default -SmokeCheck
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -ServerUrl https://<your-domain> -UserKey default
 ```
 
 如果暂时使用环境变量：
@@ -172,7 +193,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 
 如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。
 
-首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeJsonOutput <path>` 会写出同一份脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。
+首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；它不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeJsonOutput <path>` 会写出同一份脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。
 
 ## 7. 常见问题
 

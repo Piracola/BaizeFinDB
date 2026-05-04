@@ -7,6 +7,70 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = REPO_ROOT / "clients" / "windows" / "run-client.ps1"
+FIRST_TRIAL_LAUNCHER = REPO_ROOT / "clients" / "windows" / "first-trial.ps1"
+
+
+def test_first_trial_launcher_delegates_default_smoke_check_args(tmp_path: Path) -> None:
+    result, calls = _run_first_trial_launcher(tmp_path)
+
+    assert result.returncode == 0
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_delegates_overrides_json_and_strict(tmp_path: Path) -> None:
+    json_output = tmp_path / "first-trial-smoke.json"
+
+    result, calls = _run_first_trial_launcher(
+        tmp_path,
+        "-ServerUrl",
+        "https://api.example.test",
+        "-UserKey",
+        "analyst",
+        "-SmokeLookbackHours",
+        "6",
+        "-SmokeJsonOutput",
+        str(json_output),
+        "-SmokeStrict",
+    )
+
+    assert result.returncode == 0
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url https://api.example.test "
+            "--user-key analyst --ops-readiness-lookback-hours 6 --json-output "
+            f"{json_output} --fail-on-warning"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_blocks_gui_when_delegated_smoke_check_fails(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(tmp_path, smoke_exit=7)
+
+    assert result.returncode == 7
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+    ]
+
+
+def test_first_trial_launcher_is_thin_run_client_delegator() -> None:
+    content = FIRST_TRIAL_LAUNCHER.read_text(encoding="utf-8")
+
+    assert "run-client.ps1" in content
+    assert "SmokeCheck" in content
+    assert "clients.windows.smoke_check" not in content
+    assert "clients.windows.baizefindb_client" not in content
 
 
 def test_launcher_default_runs_gui_without_smoke_check(tmp_path: Path) -> None:
@@ -75,6 +139,33 @@ def _run_launcher(
     *args: str,
     smoke_exit: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    return _run_powershell_launcher(
+        LAUNCHER,
+        tmp_path,
+        *args,
+        smoke_exit=smoke_exit,
+    )
+
+
+def _run_first_trial_launcher(
+    tmp_path: Path,
+    *args: str,
+    smoke_exit: int = 0,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    return _run_powershell_launcher(
+        FIRST_TRIAL_LAUNCHER,
+        tmp_path,
+        *args,
+        smoke_exit=smoke_exit,
+    )
+
+
+def _run_powershell_launcher(
+    launcher: Path,
+    tmp_path: Path,
+    *args: str,
+    smoke_exit: int = 0,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if powershell is None:
         pytest.skip("PowerShell is required for launcher script checks.")
@@ -97,7 +188,7 @@ def _run_launcher(
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(LAUNCHER),
+            str(launcher),
             *args,
         ],
         cwd=REPO_ROOT,
