@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from clients.windows import client_api
 
@@ -124,6 +125,20 @@ def write_json_report(report: SmokeReport, output_path: str | Path) -> None:
     )
 
 
+def write_compact_json_report(report: SmokeReport, output_path: str | Path) -> None:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            report_to_compact_json(report),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+
 def report_to_json(report: SmokeReport) -> JsonObject:
     return {
         "status": report.status,
@@ -140,6 +155,26 @@ def report_to_json(report: SmokeReport) -> JsonObject:
             }
             for check in report.checks
         ],
+    }
+
+
+def report_to_compact_json(report: SmokeReport) -> JsonObject:
+    return {
+        "status": report.status,
+        "server": _server_url_metadata(report.server_url),
+        "user_key": REDACTED,
+        "check_count": len(report.checks),
+        "checks": [
+            {
+                "name": check.name,
+                "status": check.status,
+                "message": _sanitize_message(check.message),
+            }
+            for check in report.checks
+        ],
+        "warnings": [_sanitize_message(item) for item in report.warnings],
+        "blockers": [_sanitize_message(item) for item in report.blockers],
+        "ops_readiness_non_ok_checks": _compact_ops_readiness_non_ok_checks(report),
     }
 
 
@@ -190,6 +225,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional path for a bounded sanitized JSON report.",
     )
     parser.add_argument(
+        "--compact-json-output",
+        help=(
+            "Optional path for compact evidence with status, check summaries, "
+            "warnings, blockers, and redacted metadata only."
+        ),
+    )
+    parser.add_argument(
         "--ops-readiness-lookback-hours",
         type=int,
         default=DEFAULT_OPS_READINESS_LOOKBACK_HOURS,
@@ -214,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.json_output:
         write_json_report(report, args.json_output)
+    if args.compact_json_output:
+        write_compact_json_report(report, args.compact_json_output)
 
     print(format_summary(report))
     return report.exit_code(fail_on_warning=args.fail_on_warning)
@@ -460,6 +504,61 @@ def _ops_readiness_diagnostics(payload: Mapping[str, Any]) -> list[str]:
     if len(non_ok_checks) > MAX_READINESS_DIAGNOSTICS:
         diagnostics.append(f"+{len(non_ok_checks) - MAX_READINESS_DIAGNOSTICS} more")
     return diagnostics
+
+
+def _compact_ops_readiness_non_ok_checks(report: SmokeReport) -> list[JsonObject]:
+    for check in report.checks:
+        if check.name != "ops_readiness" or not isinstance(check.payload, Mapping):
+            continue
+        checks = check.payload.get("checks")
+        if not isinstance(checks, list):
+            return []
+
+        summaries: list[JsonObject] = []
+        for readiness_check in checks:
+            if not isinstance(readiness_check, Mapping):
+                continue
+            status = str(readiness_check.get("status", "")).lower()
+            if status in {"", "ok", "ready"}:
+                continue
+            summaries.append(
+                {
+                    "name": _sanitize_message(
+                        _bounded_text(str(readiness_check.get("name") or "unnamed_check")),
+                    ),
+                    "status": _sanitize_message(_bounded_text(status)),
+                    "message": _sanitize_message(
+                        _bounded_text(
+                            str(readiness_check.get("message") or "No message returned."),
+                        ),
+                    ),
+                },
+            )
+            if len(summaries) >= MAX_READINESS_DIAGNOSTICS:
+                break
+        return summaries
+    return []
+
+
+def _server_url_metadata(server_url: str) -> JsonObject:
+    if not server_url:
+        return {
+            "scheme": "",
+            "host": "",
+            "port": None,
+            "path": "",
+            "has_path": False,
+        }
+
+    parts = urlsplit(server_url)
+    path = parts.path.rstrip("/")
+    return {
+        "scheme": parts.scheme.lower(),
+        "host": _sanitize_message(parts.hostname or ""),
+        "port": parts.port,
+        "path": _sanitize_message(path),
+        "has_path": bool(path),
+    }
 
 
 def _sanitize(value: Any, *, depth: int = 0) -> Any:

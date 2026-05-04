@@ -3,6 +3,7 @@ param(
     [string]$UserKey = $env:BAIZEFINDB_USER_KEY,
     [switch]$SmokeCheck,
     [string]$SmokeJsonOutput,
+    [string]$SmokeCompactJsonOutput,
     [ValidateRange(1, 168)]
     [int]$SmokeLookbackHours = 24,
     [switch]$SmokeStrict
@@ -39,6 +40,10 @@ if ($SmokeCheck) {
 
     if (-not [string]::IsNullOrWhiteSpace($SmokeJsonOutput)) {
         $SmokeArgs += @("--json-output", $SmokeJsonOutput)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($SmokeCompactJsonOutput)) {
+        $SmokeArgs += @("--compact-json-output", $SmokeCompactJsonOutput)
     }
 
     if ($SmokeStrict) {

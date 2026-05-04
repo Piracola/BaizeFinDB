@@ -51,16 +51,17 @@ powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -Server
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck
 ```
 
-需要留下脱敏 JSON evidence，或要求 warning 也阻断启动，优先使用：
+需要留下首次试运行证据时，优先使用 compact JSON；它只保存总体状态、服务端地址元数据、脱敏 user key、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要，不包含端点 payload 或原始后端响应。详细 JSON 仍保留给深度排障：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -SmokeLookbackHours 6 -SmokeCompactJsonOutput evidence/windows-client-smoke-compact.json -SmokeStrict
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default --json-output evidence/windows-client-smoke.json
 ```
 
 等价的底层 launcher 参数是：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeLookbackHours 6 -SmokeCompactJsonOutput evidence/windows-client-smoke-compact.json -SmokeStrict
 ```
 
 ## 连接服务器
@@ -133,8 +134,9 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
   `run-client.ps1 -SmokeCheck`，不复制 smoke check 或 GUI 逻辑，默认
   `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`。
 - `--ops-readiness-lookback-hours <n>` 只调整 `/ops/readiness` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
-- `--json-output <path>` 可写出有界脱敏 JSON 报告；报告会隐藏 `user_key`、token、secret 和 credential-like 字段。
-- `run-client.ps1 -SmokeJsonOutput <path>` 会把该路径传给 smoke check；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
+- `--compact-json-output <path>` 是首次试运行推荐 evidence：只写总体状态、服务端 URL 元数据、脱敏 `user_key`、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要；不写 endpoint payload、原始后端响应、环境变量、token、secret、API key、authorization、原始 provider URL、个人持仓、二进制或构建输出。
+- `--json-output <path>` 仍可写出有界脱敏详细 JSON，用于深度排障；它会隐藏 `user_key`、token、secret 和 credential-like 字段。
+- `run-client.ps1 -SmokeCompactJsonOutput <path>` 和 `first-trial.ps1 -SmokeCompactJsonOutput <path>` 会把 compact evidence 路径传给 smoke check；`-SmokeJsonOutput <path>` 继续转发详细 JSON 路径；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
 - 当 `/ops/readiness` 返回 warning 或 blocked 时，console summary 会列出非 OK 检查项名称和有界脱敏说明，例如 `provider_fetch`、`data_quality`，便于首用时区分历史数据源/数据质量 warning 和真正 blocker。
 - GUI 的 `OPS Lookback (hours)` 会传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`，默认 24，范围 1 到 168；非法输入会在发起 API 请求前弹出校验错误。
 - smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。

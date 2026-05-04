@@ -23,8 +23,11 @@ def test_first_trial_launcher_delegates_default_smoke_check_args(tmp_path: Path)
     ]
 
 
-def test_first_trial_launcher_delegates_overrides_json_and_strict(tmp_path: Path) -> None:
+def test_first_trial_launcher_delegates_overrides_json_compact_and_strict(
+    tmp_path: Path,
+) -> None:
     json_output = tmp_path / "first-trial-smoke.json"
+    compact_output = tmp_path / "first-trial-smoke-compact.json"
 
     result, calls = _run_first_trial_launcher(
         tmp_path,
@@ -36,6 +39,8 @@ def test_first_trial_launcher_delegates_overrides_json_and_strict(tmp_path: Path
         "6",
         "-SmokeJsonOutput",
         str(json_output),
+        "-SmokeCompactJsonOutput",
+        str(compact_output),
         "-SmokeStrict",
     )
 
@@ -44,7 +49,7 @@ def test_first_trial_launcher_delegates_overrides_json_and_strict(tmp_path: Path
         (
             "-m clients.windows.smoke_check --server-url https://api.example.test "
             "--user-key analyst --ops-readiness-lookback-hours 6 --json-output "
-            f"{json_output} --fail-on-warning"
+            f"{json_output} --compact-json-output {compact_output} --fail-on-warning"
         ),
         "-m clients.windows.baizefindb_client",
     ]
@@ -86,8 +91,11 @@ def test_launcher_default_runs_gui_without_smoke_check(tmp_path: Path) -> None:
     assert calls == ["-m clients.windows.baizefindb_client"]
 
 
-def test_launcher_smoke_check_passes_server_user_json_and_strict_args(tmp_path: Path) -> None:
+def test_launcher_smoke_check_passes_server_user_json_compact_and_strict_args(
+    tmp_path: Path,
+) -> None:
     json_output = tmp_path / "windows-smoke.json"
+    compact_output = tmp_path / "windows-smoke-compact.json"
 
     result, calls = _run_launcher(
         tmp_path,
@@ -100,6 +108,8 @@ def test_launcher_smoke_check_passes_server_user_json_and_strict_args(tmp_path: 
         "6",
         "-SmokeJsonOutput",
         str(json_output),
+        "-SmokeCompactJsonOutput",
+        str(compact_output),
         "-SmokeStrict",
     )
 
@@ -108,7 +118,7 @@ def test_launcher_smoke_check_passes_server_user_json_and_strict_args(tmp_path: 
         (
             "-m clients.windows.smoke_check --server-url https://api.example.test "
             "--user-key tester --ops-readiness-lookback-hours 6 --json-output "
-            f"{json_output} --fail-on-warning"
+            f"{json_output} --compact-json-output {compact_output} --fail-on-warning"
         ),
         "-m clients.windows.baizefindb_client",
     ]

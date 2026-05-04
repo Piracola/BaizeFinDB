@@ -317,6 +317,100 @@ def test_smoke_check_writes_bounded_sanitized_json(tmp_path: Path) -> None:
     assert "<truncated>" in output.read_text(encoding="utf-8")
 
 
+def test_smoke_check_writes_compact_json_without_payloads_or_raw_responses(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "compact-smoke.json"
+    payloads = _ready_payloads()
+    payloads["/ops/readiness"] = {
+        "status": "warning",
+        "lookback_hours": 24,
+        "checks": [
+            {"name": "server_disk", "status": "ok", "message": "ok"},
+            {
+                "name": "provider_fetch",
+                "status": "warning",
+                "message": (
+                    "Provider failed with token=secret-value and "
+                    "source_url=https://provider.example.test/raw"
+                ),
+                "metadata": {
+                    "token": "metadata-secret",
+                    "source_url": "https://metadata.example.test/raw",
+                },
+            },
+        ],
+    }
+    payloads["/providers/tushare/status"] = {
+        "provider": "tushare",
+        "token_configured": True,
+        "raw_token": "token=secret-value",
+        "endpoint_payload": {"source_url": "https://provider.example.test/raw"},
+    }
+
+    report = smoke_check.run_smoke_check(
+        server_url="https://user:password@api.example.test:8443?token=secret",
+        user_key="personal-key",
+        importer=lambda name: object(),
+        opener=_opener(payloads),
+    )
+    smoke_check.write_compact_json_report(report, output)
+
+    data = json.loads(output.read_text(encoding="utf-8"))
+    encoded = output.read_text(encoding="utf-8")
+
+    assert data["status"] == "warning"
+    assert data["user_key"] == "<redacted>"
+    assert data["check_count"] == len(report.checks)
+    assert data["server"] == {
+        "scheme": "https",
+        "host": "api.example.test",
+        "port": 8443,
+        "path": "",
+        "has_path": False,
+    }
+    assert all(set(check) == {"name", "status", "message"} for check in data["checks"])
+    assert data["ops_readiness_non_ok_checks"] == [
+        {
+            "name": "provider_fetch",
+            "status": "warning",
+            "message": "Provider failed with token=<redacted> and source_url=<redacted>",
+        },
+    ]
+    assert '"payload"' not in encoded
+    assert "endpoint_payload" not in encoded
+    assert "raw_token" not in encoded
+    assert "metadata-secret" not in encoded
+    assert "secret-value" not in encoded
+    assert "personal-key" not in encoded
+    assert "user:password" not in encoded
+    assert "provider.example.test" not in encoded
+
+
+def test_smoke_check_main_can_write_detailed_and_compact_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detailed_output = tmp_path / "smoke.json"
+    compact_output = tmp_path / "compact-smoke.json"
+    report = smoke_check.SmokeReport(server_url="http://localhost:8000")
+    report.add_ok("tkinter", "Tkinter imports without opening a GUI window.", {"raw": "payload"})
+
+    monkeypatch.setattr(smoke_check, "run_smoke_check", lambda **kwargs: report)
+
+    assert smoke_check.main(
+        [
+            "--json-output",
+            str(detailed_output),
+            "--compact-json-output",
+            str(compact_output),
+        ],
+    ) == 0
+
+    assert "payload" in detailed_output.read_text(encoding="utf-8")
+    assert "payload" not in compact_output.read_text(encoding="utf-8")
+
+
 def test_smoke_check_sanitizes_warning_and_blocker_text() -> None:
     report = smoke_check.SmokeReport(server_url="http://localhost:8000")
     report.add_warning(

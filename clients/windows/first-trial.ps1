@@ -4,6 +4,7 @@ param(
     [ValidateRange(1, 168)]
     [int]$SmokeLookbackHours = 24,
     [string]$SmokeJsonOutput,
+    [string]$SmokeCompactJsonOutput,
     [switch]$SmokeStrict
 )
 
@@ -21,6 +22,10 @@ $RunParams = @{
 
 if (-not [string]::IsNullOrWhiteSpace($SmokeJsonOutput)) {
     $RunParams.SmokeJsonOutput = $SmokeJsonOutput
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SmokeCompactJsonOutput)) {
+    $RunParams.SmokeCompactJsonOutput = $SmokeCompactJsonOutput
 }
 
 if ($SmokeStrict) {
