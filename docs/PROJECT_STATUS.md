@@ -18,7 +18,7 @@ Web 雷达终端工作台、Windows 客户端和 Telegram `/tushare` 已展示 T
 
 Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose overlay、部署预检脚本、运行采样脚本、PostgreSQL 备份/恢复脚本、Ubuntu runbook、systemd 示例和 nginx HTTPS 反代示例；部署预检可选验证 `pg_dump` 可用性、可选执行 Tushare `anns_d` Beat enablement 离线/no-token checklist，并可执行只读 M5 smoke check 验证健康、Ops、Ops history、Ops readiness、AKShare Provider、Tushare Provider、Radar 和 Telegram 状态接口 JSON 契约；运行采样脚本可连续读取健康、Ops、运维历史和就绪状态，生成 JSON 验收记录并在接口失败或 readiness `blocked` 时返回失败退出码。2026-05-04 已在本机 Docker Desktop 用 server overlay 完成一次 API/worker/beat 启动、容器迁移、M5 smoke check、runtime check 和手动扫描后 readiness `ready` 验证；同日重建最新 API 镜像后再次验证 Tushare `anns_d` Beat 默认关闭、显式 env 覆盖启用时只额外加入 `collect-tushare-announcements`，部署预检和 runtime ready 均通过；预检脚本已改为 quiet compose config，避免输出展开后的 `.env`。Ops 已能生成扫描停滞、失败率、服务端磁盘/CPU/内存资源压力和 unhealthy 计数告警摘要，Ops history 已能只读列出最近扫描和运行异常历史，Ops readiness 已能给出运行就绪自检结果。该状态只代表本机部署演练和部署骨架完成，不代表公网 HTTPS、域名、备份策略和生产安全加固完成。
 
-5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。Tushare `anns_d` 公告 Beat 调度已具备独立开关，但默认关闭，只有显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会额外加入调度；启用前应先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，再运行 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，用本地样例验证字段漂移和风险 P0/普通公告映射边界，然后用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存真实 token 下的脱敏 live evidence。默认 checklist 和离线门禁不替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 readiness 验证。
+5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。Tushare `anns_d` 公告 Beat 调度已具备独立开关，但默认关闭，只有显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会额外加入调度；启用前应先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，再运行 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，用本地样例验证字段漂移和风险 P0/普通公告映射边界，然后用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存真实 token 下的脱敏 live evidence。`stock_basic`、`anns_d` 和 `stock_company` 三条 live verify 脚本均可输出同类脱敏 evidence；默认 checklist 和离线门禁不替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 readiness 验证。
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能查看运行状态、维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
 
@@ -157,7 +157,7 @@ Windows 客户端：
 - `infra/scripts/check_tushare_anns_d_beat_enablement.py`：Tushare `anns_d` Beat 启用前 JSON checklist，默认离线/no-token，汇总 sample gate、token、Beat 启停、interval、live verify 和 readiness/live data 检查状态。
 - `infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement`：可选部署预检集成项，复用上述 checklist；`warn` 只告警不阻断，只有 checklist `fail` 会让部署预检失败。
 - `infra/scripts/verify_tushare_anns_d_preflight.py`：离线/no-token `anns_d` 预调度校验，读取本地 golden case，验证必需字段、重大风险 P0 样例和普通公告无风险信号样例。
-- `infra/scripts/verify_tushare_announcements.py --json-output <path>`：真实 token live verify 脱敏 evidence 输出；不写数据库，成功和失败都会保存状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和去 URL/source 字段的少量归一化样例或错误摘要。
+- `infra/scripts/verify_tushare_stock_basic.py --json-output <path>`、`infra/scripts/verify_tushare_announcements.py --json-output <path>`、`infra/scripts/verify_tushare_stock_company.py --json-output <path>`：真实 token live verify 脱敏 evidence 输出；不写数据库，成功和失败都会保存状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去 URL/source/token/secret-like 字段的少量归一化样例或错误摘要。
 
 ## 当前数据表
 
@@ -214,13 +214,13 @@ Docker / PostgreSQL 可用后：
 docker compose up -d postgres redis
 uv run alembic upgrade head
 uv run python infra/scripts/collect_akshare_minimal.py
-uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
-uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 uv run python infra/scripts/run_radar_scan.py
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
@@ -239,7 +239,7 @@ uv run uvicorn app.main:app --reload
 
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移、只读 M5 smoke check 和短窗口 runtime check。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
-- Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0；`anns_d` Beat 调度默认关闭，后续在 checklist、`verify_tushare_anns_d_preflight.py` 离线预调度校验、真实 token live evidence、字段和误报样例稳定后再显式启用。
+- Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；三条 live verify 脚本均支持脱敏 JSON evidence 输出；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0；`anns_d` Beat 调度默认关闭，后续在 checklist、`verify_tushare_anns_d_preflight.py` 离线预调度校验、真实 token live evidence、字段和误报样例稳定后再显式启用。
 - 增加运行可观测性：`/ops/overview` 已汇总服务端进程运行时长、磁盘/CPU/内存资源、扫描耗时、失败率、推送结果、模型降级、数据质量状态和只读告警摘要，`/ops/history` 已返回最近扫描、Provider 异常、数据质量异常、推送异常和模型降级/失败历史，`/ops/readiness` 已基于这些信息输出运行就绪自检；Web 状态面板、Windows 客户端和 Telegram `/ops`、`/ops_history`、`/ops_ready` 已展示这些摘要；后续再接趋势图和真实监控告警。
 - 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

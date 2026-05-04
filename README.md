@@ -225,11 +225,11 @@ uv run python infra/scripts/verify_akshare_minimal.py
 验证 Tushare `stock_basic`，不写数据库：
 
 ```powershell
-uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
-uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 ```
 
 `check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，默认离线/no-token，不访问 Tushare、不写数据库、不触发抓取、扫描或推送。它会汇总本地 sample gate、`TUSHARE_TOKEN`、`TUSHARE_ANNS_D_BEAT_ENABLED`、`TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS`、仍需 live verify、readiness/live data 默认未检查等状态；只有显式加 `--check-readiness` 时才会做只读 readiness HTTP GET。
@@ -244,7 +244,7 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 
 `verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。它是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
 
-`verify_tushare_announcements.py --json-output <path>` 会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和少量去 URL/source 字段的归一化样例，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存这份 live evidence。
+`verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存 announcements live evidence；`stock_basic` 和 `stock_company` evidence 用于同步留存 token 权限、积分和字段稳定性。
 
 PostgreSQL 迁移完成后，手动采集并写入数据库：
 

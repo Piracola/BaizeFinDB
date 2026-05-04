@@ -102,14 +102,14 @@ uv run python infra/scripts/server_runtime_check.py --samples 5 --interval-secon
 验证 Tushare `stock_basic` token 和字段稳定性，不写数据库。`anns_d` Beat 启用前先跑离线/no-token 预调度校验；它只读取本地 golden case，检查归一化必需字段、重大风险公告应映射 risk P0、普通公告不应生成风险信号。该离线门禁不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证：
 
 ```powershell
-uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
-uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 ```
 
-`verify_tushare_announcements.py --json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和少量去 URL/source 字段的归一化样例；失败时也会写入脱敏 failure report。该步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
+三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 的 `--json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例；失败时也会写入脱敏 failure report。announcements evidence 步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
 
 手动写入 Tushare 股票基础信息或公告快照：
 

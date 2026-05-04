@@ -138,11 +138,11 @@ uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 手动抓取股票基础信息：
 
 ```powershell
-uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
-uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/stock-basic
 Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/announcements?ann_date=20260503"
@@ -153,7 +153,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=s
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
-`verify_tushare_announcements.py --json-output <path>` 不写数据库，只把 live verify 的脱敏 JSON 证据保存到本地；报告包含状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和去掉 URL/source 字段的少量归一化样例。失败时也会写入脱敏 failure report，便于留存权限、积分或字段漂移问题，但不保存 token、原始 URL/域名或付费原始数据。
+三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，不写数据库，只把 live verify 的脱敏 JSON 证据保存到本地；报告包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去掉 URL/source/token/secret-like 字段的少量归一化样例。失败时也会写入脱敏 failure report，便于留存权限、积分或字段漂移问题，但不保存 token、原始 URL/域名或付费原始数据。
 
 如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，至少要先通过 `check_tushare_anns_d_beat_enablement.py` 的 checklist 和 `verify_tushare_anns_d_preflight.py` 的本地字段漂移、风险映射样例校验，再保存真实 token live evidence，补充积分消耗评估、实时接口字段校验和端到端误报样例。
 
@@ -552,11 +552,11 @@ uv run python infra/scripts/verify_akshare_minimal.py
 先确认 `.env` 已配置 `TUSHARE_TOKEN`，再看抓取日志：
 
 ```powershell
-uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
-uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
+uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic&limit=5"

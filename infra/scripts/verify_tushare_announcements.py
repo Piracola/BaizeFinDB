@@ -1,36 +1,31 @@
 import argparse
 import asyncio
 import json
-import os
-import re
 from pathlib import Path
 from typing import Any
 
-from app.providers.schemas import DataQualityStatus, ProviderDataset
-from app.providers.tushare import TUSHARE_ENDPOINTS, TushareProvider
+from app.providers.schemas import ProviderDataset
+from app.providers.tushare import TushareProvider
+from app.providers.tushare_verify_evidence import (
+    DEFAULT_MAX_SAMPLE_ROWS,
+    sanitize_error,
+    sanitize_normalized_row,
+    write_json_report,
+)
+from app.providers.tushare_verify_evidence import (
+    build_failure_report as build_evidence_failure_report,
+)
+from app.providers.tushare_verify_evidence import (
+    build_legacy_failure_result as build_evidence_legacy_failure_result,
+)
+from app.providers.tushare_verify_evidence import (
+    build_legacy_success_result as build_evidence_legacy_success_result,
+)
+from app.providers.tushare_verify_evidence import (
+    build_success_report as build_evidence_success_report,
+)
 
 ENDPOINT = "anns_d"
-DEFAULT_MAX_SAMPLE_ROWS = 2
-SENSITIVE_FIELD_MARKERS = (
-    "url",
-    "source",
-    "domain",
-    "website",
-    "link",
-    "token",
-    "secret",
-)
-URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
-DOMAIN_PATTERN = re.compile(
-    r"\b(?:[a-z0-9-]+\.)+(?:com|cn|net|org|io|test|edu|gov|info|biz)\b",
-    re.IGNORECASE,
-)
-TUSHARE_TOKEN_PATTERN = re.compile(
-    r"(?i)\b(TUSHARE_TOKEN\s*(?:=|:)?\s*)([^\s,;]+)"
-)
-SECRET_ASSIGNMENT_PATTERN = re.compile(
-    r"(?i)\b((?:api[_-]?key|token|secret)\s*[:=]\s*)([^\s,;&]+)"
-)
 
 
 async def main() -> None:
@@ -83,119 +78,34 @@ def build_success_report(
     ann_date: str | None,
     max_sample_rows: int = DEFAULT_MAX_SAMPLE_ROWS,
 ) -> dict[str, Any]:
-    spec = TUSHARE_ENDPOINTS[ENDPOINT]
-    quality = dataset.quality.model_dump(mode="json")
-    sample_limit = max(max_sample_rows, 0)
-
-    return {
-        "endpoint": ENDPOINT,
-        "status": "success",
-        "ann_date": ann_date or _infer_ann_date(dataset.normalized_rows),
-        "row_count": dataset.row_count,
-        "quality_status": dataset.quality.status.value,
-        "quality": quality,
-        "required_fields": list(spec.required_fields),
-        "missing_fields": list(dataset.quality.missing_fields),
-        "field_presence": _field_presence(dataset.normalized_rows, spec.required_fields),
-        "sample": [
-            _sanitize_normalized_row(row)
-            for row in dataset.normalized_rows[:sample_limit]
-        ],
-    }
+    return build_evidence_success_report(
+        endpoint=ENDPOINT,
+        dataset=dataset,
+        query_params={"ann_date": ann_date} if ann_date else {},
+        max_sample_rows=max_sample_rows,
+        extra_fields={
+            "ann_date": ann_date or _infer_ann_date(dataset.normalized_rows),
+        },
+    )
 
 
 def build_failure_report(exc: Exception, ann_date: str | None) -> dict[str, Any]:
-    spec = TUSHARE_ENDPOINTS[ENDPOINT]
-
-    return {
-        "endpoint": ENDPOINT,
-        "status": "failure",
-        "ann_date": ann_date,
-        "row_count": 0,
-        "quality_status": DataQualityStatus.FAILED.value,
-        "quality": {
-            "status": DataQualityStatus.FAILED.value,
-            "confidence": 0,
-            "freshness": spec.freshness,
-            "missing_fields": list(spec.required_fields),
+    return build_evidence_failure_report(
+        endpoint=ENDPOINT,
+        exc=exc,
+        query_params={"ann_date": ann_date} if ann_date else {},
+        extra_fields={
+            "ann_date": ann_date,
         },
-        "required_fields": list(spec.required_fields),
-        "missing_fields": list(spec.required_fields),
-        "sample": [],
-        "error": _sanitize_error(exc),
-    }
+    )
 
 
 def build_legacy_success_result(dataset: ProviderDataset) -> dict[str, Any]:
-    return {
-        "endpoint": ENDPOINT,
-        "status": "success",
-        "row_count": dataset.row_count,
-        "quality": dataset.quality.model_dump(mode="json"),
-        "sample": [
-            _sanitize_normalized_row(row)
-            for row in dataset.normalized_rows[:DEFAULT_MAX_SAMPLE_ROWS]
-        ],
-    }
+    return build_evidence_legacy_success_result(endpoint=ENDPOINT, dataset=dataset)
 
 
 def build_legacy_failure_result(exc: Exception) -> dict[str, Any]:
-    return {
-        "endpoint": ENDPOINT,
-        "status": "failure",
-        "error": _sanitize_error(exc),
-    }
-
-
-def write_json_report(path: Path, report: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _sanitize_normalized_row(row: dict[str, object]) -> dict[str, object]:
-    sanitized: dict[str, object] = {}
-
-    for key, value in row.items():
-        if _is_sensitive_field(key):
-            continue
-        sanitized[key] = _sanitize_value(value)
-
-    return sanitized
-
-
-def _sanitize_value(value: object) -> object:
-    if isinstance(value, str):
-        return _redact_text(value)
-    if isinstance(value, int | float | bool) or value is None:
-        return value
-    return _redact_text(str(value))
-
-
-def _sanitize_error(exc: Exception) -> str:
-    return _redact_text(f"{exc.__class__.__name__}: {exc}")[:800]
-
-
-def _redact_text(text: str) -> str:
-    redacted = text
-    token = os.environ.get("TUSHARE_TOKEN")
-
-    if token:
-        redacted = redacted.replace(token, "<redacted>")
-
-    redacted = TUSHARE_TOKEN_PATTERN.sub(r"\1<redacted>", redacted)
-    redacted = SECRET_ASSIGNMENT_PATTERN.sub(r"\1<redacted>", redacted)
-    redacted = URL_PATTERN.sub("<redacted-url>", redacted)
-    return DOMAIN_PATTERN.sub("<redacted-domain>", redacted)
-
-
-def _field_presence(
-    rows: list[dict[str, object]],
-    required_fields: tuple[str, ...],
-) -> dict[str, bool]:
-    return {
-        field: any(row.get(field) not in (None, "") for row in rows)
-        for field in required_fields
-    }
+    return build_evidence_legacy_failure_result(endpoint=ENDPOINT, exc=exc)
 
 
 def _infer_ann_date(rows: list[dict[str, object]]) -> str | None:
@@ -206,9 +116,8 @@ def _infer_ann_date(rows: list[dict[str, object]]) -> str | None:
     return None
 
 
-def _is_sensitive_field(field: str) -> bool:
-    normalized = field.lower()
-    return any(marker in normalized for marker in SENSITIVE_FIELD_MARKERS)
+_sanitize_normalized_row = sanitize_normalized_row
+_sanitize_error = sanitize_error
 
 
 if __name__ == "__main__":
