@@ -1,0 +1,26 @@
+[
+  {
+    "case_id": "major-risk-investigation-p0",
+    "expected_risk_priority": "P0",
+    "row": {
+      "ann_date": "20260503",
+      "ts_code": "000001.SZ",
+      "name": "风险样例",
+      "title": "关于收到中国证监会立案调查通知书的公告",
+      "url": "https://example.invalid/internal-only",
+      "rec_time": "2026-05-03 20:00:00"
+    }
+  },
+  {
+    "case_id": "ordinary-board-resolution-no-risk",
+    "expected_risk_priority": "none",
+    "row": {
+      "ann_date": "20260503",
+      "ts_code": "000002.SZ",
+      "name": "普通样例",
+      "title": "董事会决议公告",
+      "url": "https://example.invalid/internal-only-ordinary",
+      "rec_time": "2026-05-03 20:10:00"
+    }
+  }
+]

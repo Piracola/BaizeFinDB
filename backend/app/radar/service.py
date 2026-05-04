@@ -793,6 +793,13 @@ def _announcement_risk_row_metrics(row: dict[str, object]) -> dict[str, object]:
     }
 
 
+def classify_tushare_announcement_risk(
+    row: dict[str, object],
+) -> tuple[dict[str, object], RadarRuleResult | None]:
+    metrics = _announcement_risk_row_metrics(row)
+    return metrics, classify_risk_event(metrics)
+
+
 def _classify_snapshot_row(
     snapshot: MarketSnapshot,
     row: dict[str, object],
@@ -804,8 +811,7 @@ def _classify_snapshot_row(
         return metrics, classify_risk_event(metrics)
 
     if _is_tushare_announcement_snapshot(snapshot):
-        metrics = _announcement_risk_row_metrics(row)
-        return metrics, classify_risk_event(metrics)
+        return classify_tushare_announcement_risk(row)
 
     if _is_market_mainline_snapshot(snapshot):
         metrics = _row_metrics(row)
