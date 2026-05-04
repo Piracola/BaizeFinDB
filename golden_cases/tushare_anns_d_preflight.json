@@ -4,7 +4,7 @@
     "expected_risk_priority": "P0",
     "row": {
       "ann_date": "20260503",
-      "ts_code": "000001.SZ",
+      "ts_code": "SAMPLE-P0.SZ",
       "name": "风险样例",
       "title": "关于收到中国证监会立案调查通知书的公告",
       "url": "https://example.invalid/internal-only",
@@ -16,7 +16,7 @@
     "expected_risk_priority": "none",
     "row": {
       "ann_date": "20260503",
-      "ts_code": "000002.SZ",
+      "ts_code": "SAMPLE-NONE.SZ",
       "name": "普通样例",
       "title": "董事会决议公告",
       "url": "https://example.invalid/internal-only-ordinary",

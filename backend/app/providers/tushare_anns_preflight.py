@@ -75,10 +75,24 @@ def validate_anns_d_preflight_cases(cases: list[dict[str, object]]) -> Preflight
     for index, case in enumerate(cases, start=1):
         case_id = _text(case.get("case_id"), f"case-{index}")
         expected = _expected_priority(case)
-        if expected == EXPECTED_RISK_P0:
+        unsupported_expected = _unsupported_expected_priority(expected)
+        normalized_expected = _normalized_expected_priority(expected)
+        if unsupported_expected is None and normalized_expected == EXPECTED_RISK_P0:
             saw_expected_p0 = True
-        if expected == EXPECTED_NO_RISK_SIGNAL:
+        if unsupported_expected is None and normalized_expected == EXPECTED_NO_RISK_SIGNAL:
             saw_expected_no_signal = True
+
+        if unsupported_expected is not None:
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="unsupported_expected_risk_priority",
+                    message=(
+                        "expected_risk_priority must be either P0 or none: "
+                        f"{unsupported_expected}"
+                    ),
+                )
+            )
 
         row = case.get("row")
         if not isinstance(row, dict):
@@ -106,14 +120,17 @@ def validate_anns_d_preflight_cases(cases: list[dict[str, object]]) -> Preflight
         results.append(
             PreflightCaseResult(
                 case_id=case_id,
-                expected_risk_priority=expected,
+                expected_risk_priority=normalized_expected,
                 actual_risk_priority=actual_priority,
                 matched_keywords=_string_list(metrics.get("announcement_keywords")),
                 missing_required_fields=missing_fields,
             )
         )
 
-        if expected == EXPECTED_RISK_P0 and actual_priority != RadarPriority.P0.value:
+        if unsupported_expected is not None:
+            continue
+
+        if normalized_expected == EXPECTED_RISK_P0 and actual_priority != RadarPriority.P0.value:
             issues.append(
                 PreflightIssue(
                     case_id=case_id,
@@ -121,7 +138,7 @@ def validate_anns_d_preflight_cases(cases: list[dict[str, object]]) -> Preflight
                     message="major-risk announcement did not map to risk P0",
                 )
             )
-        elif expected == EXPECTED_NO_RISK_SIGNAL and actual_priority is not None:
+        elif normalized_expected == EXPECTED_NO_RISK_SIGNAL and actual_priority is not None:
             issues.append(
                 PreflightIssue(
                     case_id=case_id,
@@ -158,9 +175,20 @@ def validate_anns_d_preflight_cases(cases: list[dict[str, object]]) -> Preflight
 
 
 def _expected_priority(case: dict[str, object]) -> str:
-    value = _text(case.get("expected_risk_priority"), EXPECTED_NO_RISK_SIGNAL)
-    if value == RadarPriority.P0.value:
+    return _text(case.get("expected_risk_priority"), EXPECTED_NO_RISK_SIGNAL)
+
+
+def _unsupported_expected_priority(expected: str) -> str | None:
+    if expected not in {RadarPriority.P0.value, EXPECTED_NO_RISK_SIGNAL}:
+        return expected
+
+    return None
+
+
+def _normalized_expected_priority(expected: str) -> str:
+    if expected == RadarPriority.P0.value:
         return EXPECTED_RISK_P0
+
     return EXPECTED_NO_RISK_SIGNAL
 
 

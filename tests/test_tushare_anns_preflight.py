@@ -94,6 +94,62 @@ def test_false_positive_expectation_fails_preflight() -> None:
     assert any(issue.code == "risk_false_positive_mismatch" for issue in report.issues)
 
 
+def test_true_positive_expectation_fails_preflight() -> None:
+    report = validate_anns_d_preflight_cases(
+        [
+            {
+                "case_id": "major-risk-labeled-but-ordinary-title",
+                "expected_risk_priority": "P0",
+                "row": {
+                    "ann_date": "20260503",
+                    "ts_code": "SAMPLE-P0.SZ",
+                    "title": "董事会决议公告",
+                },
+            },
+            {
+                "case_id": "ordinary-board-resolution-no-risk",
+                "expected_risk_priority": "none",
+                "row": {
+                    "ann_date": "20260503",
+                    "ts_code": "SAMPLE-NONE.SZ",
+                    "title": "董事会决议公告",
+                },
+            },
+        ]
+    )
+
+    assert not report.ok
+    assert any(issue.code == "risk_true_positive_mismatch" for issue in report.issues)
+
+
+def test_unsupported_expected_priority_fails_preflight() -> None:
+    report = validate_anns_d_preflight_cases(
+        [
+            {
+                "case_id": "unsupported-priority",
+                "expected_risk_priority": "P1",
+                "row": {
+                    "ann_date": "20260503",
+                    "ts_code": "SAMPLE-NONE.SZ",
+                    "title": "董事会决议公告",
+                },
+            },
+            {
+                "case_id": "major-risk-investigation-p0",
+                "expected_risk_priority": "P0",
+                "row": {
+                    "ann_date": "20260503",
+                    "ts_code": "SAMPLE-P0.SZ",
+                    "title": "关于收到中国证监会立案调查通知书的公告",
+                },
+            },
+        ]
+    )
+
+    assert not report.ok
+    assert any(issue.code == "unsupported_expected_risk_priority" for issue in report.issues)
+
+
 def test_cli_reports_default_preflight_success(capsys) -> None:
     exit_code = verify_tushare_anns_d_preflight.main([])
 
