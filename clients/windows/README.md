@@ -172,7 +172,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - GUI 的 `首用诊断` 按钮复用同一个 `clients.windows.smoke_check.run_smoke_check` 和 `format_summary`，传入当前 Server URL、User Key 和 `OPS Lookback (hours)`，只在窗口内显示摘要；默认不写 evidence 文件，也不会打开第二个 GUI 窗口。
 - smoke check 会额外用同一窗口可选读取 `/ops/trends?lookback_hours=<selected>&bucket_count=12`，该端点失败只作为 warning，不阻断首用；默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
-- Telegram 绑定管理调用 `/telegram/bindings`；服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
+- Telegram 绑定管理查看时调用 `/telegram/status` 和 `/telegram/bindings`，显示严格绑定模式和白名单/绑定汇总计数；绑定和禁用仍只调用 `/telegram/bindings`。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
 - P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、OPS readiness、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。
 - 日报/周报和综合评分也来自后端；客户端只负责触发、读取和展示评分窗口、档位和组件明细。
 - 客户端不保存 token、secret、Tushare token 原文、持仓截图或个人数据；Telegram Secret 只在当前进程内用于请求 header。Tushare 状态和自检视图只读取配置、最近抓取日志和数据质量记录，不触发真实抓取或调度。

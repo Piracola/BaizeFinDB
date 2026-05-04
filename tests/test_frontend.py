@@ -93,6 +93,12 @@ def test_frontend_assets_are_served() -> None:
     assert "renderStockBacktraceEvidences" in js_response.text
     assert "stock_backtrace_evidences" in js_response.text
     assert "loadTelegramBindings" in js_response.text
+    assert "/telegram/status" in js_response.text
+    assert "renderTelegramBindingStatus" in js_response.text
+    assert "require_binding" in js_response.text
+    assert "allowed_chat_count" in js_response.text
+    assert "binding_count" in js_response.text
+    assert "active_binding_count" in js_response.text
     assert "saveTelegramBinding" in js_response.text
     assert "executeCommand" in js_response.text
     assert "scrollToPanel" in js_response.text
@@ -162,3 +168,30 @@ def test_frontend_ops_trends_uses_backend_bucket_counts_only() -> None:
     assert "statusCardClass" not in trends_block
     assert "alerts.length" not in trends_block
     assert "recent_scan_failure_rate" not in trends_block
+
+
+def test_frontend_telegram_bindings_loads_status_with_secret_header_contract() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    load_start = js_text.index("async function loadTelegramBindings")
+    load_end = js_text.index("async function loadPeriodicReport")
+    load_block = js_text[load_start:load_end]
+    render_start = js_text.index("function renderTelegramBindings")
+    render_end = js_text.index("async function fetchJson")
+    render_block = js_text[render_start:render_end]
+
+    assert "const headers = telegramHeaders()" in load_block
+    assert 'fetchJson("/telegram/status", { headers })' in load_block
+    assert 'fetchJson("/telegram/bindings?limit=50", { headers })' in load_block
+    assert "renderTelegramBindings(bindings, status)" in load_block
+    assert "require_binding" in render_block
+    assert "allowed_chat_count" in render_block
+    assert "binding_count" in render_block
+    assert "active_binding_count" in render_block
+    assert "TELEGRAM_ALLOWED_CHAT_IDS" not in render_block
+    assert "TELEGRAM_BOT_TOKEN" not in render_block
+    assert "TELEGRAM_WEBHOOK_SECRET" not in render_block

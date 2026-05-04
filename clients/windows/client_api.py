@@ -523,6 +523,21 @@ def fetch_telegram_bindings(
     return [_expect_object(item, "/telegram/bindings item") for item in payload]
 
 
+def fetch_telegram_status(
+    base_url: str | None,
+    *,
+    secret_token: str | None = None,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(
+        base_url,
+        "/telegram/status",
+        secret_token=secret_token,
+        opener=opener,
+    )
+    return _expect_object(payload, "/telegram/status")
+
+
 def upsert_telegram_binding(
     base_url: str | None,
     *,
@@ -1472,20 +1487,30 @@ def _percent_text(value: Any) -> str:
     return f"{percent:.1f}".rstrip("0").rstrip(".") + "%"
 
 
-def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:
+def format_telegram_bindings(
+    bindings: Sequence[Mapping[str, Any]],
+    status: Mapping[str, Any] | None = None,
+) -> str:
+    status_lines = _telegram_status_lines(status)
     if not bindings:
+        empty_message = (
+            "暂无数据库绑定。严格绑定模式已开启，请先写入 active 绑定。"
+            if status is not None and status.get("require_binding") is True
+            else "暂无数据库绑定。未配置环境白名单时，本地 webhook 仍保持开放模式。"
+        )
         return _trim_text(
             "\n".join(
                 [
                     "Telegram 绑定",
-                    "暂无数据库绑定。未配置环境白名单时，本地 webhook 仍保持开放模式。",
+                    *status_lines,
+                    empty_message,
                     "",
                     DISCLAIMER,
                 ],
             ),
         )
 
-    lines = ["Telegram 绑定"]
+    lines = ["Telegram 绑定", *status_lines]
     for binding in bindings[:TELEGRAM_BINDING_PREVIEW_LIMIT]:
         lines.extend(
             [
@@ -1514,6 +1539,23 @@ def format_telegram_bindings(bindings: Sequence[Mapping[str, Any]]) -> str:
         ],
     )
     return _trim_text("\n".join(lines))
+
+
+def _telegram_status_lines(status: Mapping[str, Any] | None) -> list[str]:
+    if status is None:
+        return []
+
+    require_binding = "开启" if status.get("require_binding") is True else "关闭"
+    return [
+        f"严格绑定模式：{require_binding}",
+        (
+            "汇总计数："
+            f"环境白名单={_int_text(status.get('allowed_chat_count'))} | "
+            f"数据库绑定={_int_text(status.get('binding_count'))} | "
+            f"active={_int_text(status.get('active_binding_count'))}"
+        ),
+        "仅显示后端汇总状态，不显示原始环境值、bot token 或 webhook secret。",
+    ]
 
 
 def format_api_error(error: BaseException) -> str:

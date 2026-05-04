@@ -46,7 +46,7 @@
 - `/reports` 查看当前 `user_key` 的报告列表
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
-- 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘/CPU/内存摘要、运维历史、只读 OPS 趋势摘要、运行就绪自检、OPS 告警钻取、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单；命令栏支持 `trend` / `trends` 滚动并刷新 `/ops/trends?lookback_hours=24&bucket_count=12` 的后端趋势桶计数，也支持 `warn` / `warning` 滚动并刷新 OPS 告警钻取。趋势摘要只展示后端返回的扫描、失败和 unhealthy 桶计数；告警钻取只读复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history` 的 24 小时窗口结果，展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events，不在浏览器重算 OPS 状态或触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作
+- 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘/CPU/内存摘要、运维历史、只读 OPS 趋势摘要、运行就绪自检、OPS 告警钻取、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单；Telegram 面板会读取 `/telegram/status`，展示严格绑定模式和白名单/绑定汇总计数，但不展示原始环境值、bot token 或 webhook secret；命令栏支持 `trend` / `trends` 滚动并刷新 `/ops/trends?lookback_hours=24&bucket_count=12` 的后端趋势桶计数，也支持 `warn` / `warning` 滚动并刷新 OPS 告警钻取。趋势摘要只展示后端返回的扫描、失败和 unhealthy 桶计数；告警钻取只读复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history` 的 24 小时窗口结果，展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events，不在浏览器重算 OPS 状态或触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -64,7 +64,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史、就绪自检、告警钻取和首用诊断选择 1 到 168 小时统计窗口，默认 24
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；查看 Telegram 绑定时会同时显示严格绑定模式和汇总计数；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史、就绪自检、告警钻取和首用诊断选择 1 到 168 小时统计窗口，默认 24
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送；Tushare `anns_d` Beat 调度默认不加入，只有 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时才额外启用
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含

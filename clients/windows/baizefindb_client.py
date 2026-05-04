@@ -367,11 +367,15 @@ class BaizeFinDBClientApp:
 
     def view_telegram_bindings(self) -> None:
         def worker() -> str:
+            status = client_api.fetch_telegram_status(
+                self._normalized_server_url(),
+                secret_token=self._normalized_telegram_secret(),
+            )
             bindings = client_api.fetch_telegram_bindings(
                 self._normalized_server_url(),
                 secret_token=self._normalized_telegram_secret(),
             )
-            return client_api.format_telegram_bindings(bindings)
+            return client_api.format_telegram_bindings(bindings, status)
 
         self._run_worker("读取 Telegram 绑定", worker)
 

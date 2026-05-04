@@ -19,6 +19,7 @@ def _app_with_lookback(value: str) -> baizefindb_client.BaizeFinDBClientApp:
     app.server_url = FakeVar("http://localhost:8000")
     app.user_key = FakeVar("analyst")
     app.ops_lookback_hours = FakeVar(value)
+    app.telegram_secret = FakeVar("hook-secret")
     return app
 
 
@@ -274,6 +275,56 @@ def test_gui_declares_ops_trends_button() -> None:
     source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
 
     assert "OPS 趋势" in source
+
+
+def test_view_telegram_bindings_reads_status_before_formatting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    calls: dict[str, Any] = {}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_fetch_status(base_url: str, **kwargs: object) -> dict[str, object]:
+        calls["status_call"] = (base_url, kwargs)
+        return {"require_binding": True}
+
+    def fake_fetch_bindings(base_url: str, **kwargs: object) -> list[dict[str, object]]:
+        calls["bindings_call"] = (base_url, kwargs)
+        return [{"chat_id": 1001}]
+
+    def fake_format(bindings: object, status: object = None) -> str:
+        calls["format_payloads"] = (bindings, status)
+        return "formatted telegram bindings"
+
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "fetch_telegram_status",
+        fake_fetch_status,
+    )
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "fetch_telegram_bindings",
+        fake_fetch_bindings,
+    )
+    monkeypatch.setattr(baizefindb_client.client_api, "format_telegram_bindings", fake_format)
+
+    app.view_telegram_bindings()
+
+    assert calls["action"] == "读取 Telegram 绑定"
+    assert calls["status_call"] == (
+        "http://localhost:8000",
+        {"secret_token": "hook-secret"},
+    )
+    assert calls["bindings_call"] == (
+        "http://localhost:8000",
+        {"secret_token": "hook-secret"},
+    )
+    assert calls["format_payloads"] == ([{"chat_id": 1001}], {"require_binding": True})
+    assert calls["result"] == "formatted telegram bindings"
 
 
 @pytest.mark.parametrize(

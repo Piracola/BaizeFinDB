@@ -263,7 +263,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/bindings
 
 如果 `.env` 未配置 `TELEGRAM_ALLOWED_CHAT_IDS` 且数据库没有任何绑定，本地 webhook 默认保持开放模式；一旦存在绑定，未绑定 chat 默认会被拒绝。生产式调试或公网部署前可设置 `TELEGRAM_REQUIRE_BINDING=true` 关闭这个开放兜底，此时仍可用 `/id` 获取 chat id，再通过 `/telegram/bindings` 写入 active 绑定。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，环境白名单仍是硬过滤。
 
-也可以在 Web 工作台的 `Telegram 绑定 / 白名单` 面板维护绑定。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，在该面板的 `Webhook Secret` 输入框临时填写同一个值；前端不会保存该 secret。
+也可以在 Web 工作台的 `Telegram 绑定 / 白名单` 面板维护绑定。该面板刷新时会同时读取 `/telegram/status` 和 `/telegram/bindings`，展示严格绑定模式、环境白名单数量、数据库绑定数量和 active 绑定数量；它只显示后端汇总计数，不展示原始环境值、bot token 或 webhook secret。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，在该面板的 `Webhook Secret` 输入框临时填写同一个值；前端不会保存该 secret。
 
 本地 preview `/help`：
 

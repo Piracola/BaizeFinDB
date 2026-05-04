@@ -935,6 +935,30 @@ def test_fetch_telegram_bindings_uses_secret_and_limit() -> None:
     }
 
 
+def test_fetch_telegram_status_uses_secret_header() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["secret"] = _telegram_secret_header(request)
+        return FakeResponse(
+            '{"require_binding":true,"allowed_chat_count":2,'
+            '"binding_count":3,"active_binding_count":1}',
+        )
+
+    status = client_api.fetch_telegram_status(
+        "http://localhost:8000",
+        secret_token="hook-secret",
+        opener=opener,
+    )
+
+    assert status["require_binding"] is True
+    assert calls == {
+        "url": "http://localhost:8000/telegram/status",
+        "secret": "hook-secret",
+    }
+
+
 def test_upsert_telegram_binding_posts_payload() -> None:
     calls = {}
 
@@ -1016,14 +1040,28 @@ def test_format_telegram_bindings_lists_allowed_state() -> None:
                 "source": "manual",
             },
         ],
+        {
+            "require_binding": True,
+            "allowed_chat_count": 2,
+            "binding_count": 2,
+            "active_binding_count": 1,
+            "telegram_bot_token": "secret-token",
+            "webhook_secret": "secret-hook",
+        },
     )
 
     assert "Telegram 绑定" in text
+    assert "严格绑定模式：开启" in text
+    assert "环境白名单=2" in text
+    assert "数据库绑定=2" in text
+    assert "active=1" in text
     assert "chat=1001" in text
     assert "状态：允许" in text
     assert "chat=-2002" in text
     assert "状态：禁用" in text
     assert "环境白名单存在时仍会先过滤" in text
+    assert "secret-token" not in text
+    assert "secret-hook" not in text
 
 
 def _telegram_secret_header(request: object) -> str | None:

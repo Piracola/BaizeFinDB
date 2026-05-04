@@ -261,10 +261,12 @@ async function loadReports() {
 
 async function loadTelegramBindings(options = {}) {
   try {
-    const bindings = await fetchJson("/telegram/bindings?limit=50", {
-      headers: telegramHeaders(),
-    });
-    renderTelegramBindings(bindings);
+    const headers = telegramHeaders();
+    const [status, bindings] = await Promise.all([
+      fetchJson("/telegram/status", { headers }),
+      fetchJson("/telegram/bindings?limit=50", { headers }),
+    ]);
+    renderTelegramBindings(bindings, status);
     if (!options.silent) {
       showMessage("info", "Telegram 绑定已刷新。");
     }
@@ -1545,13 +1547,17 @@ function renderScoreComponents(record) {
   `;
 }
 
-function renderTelegramBindings(bindings) {
+function renderTelegramBindings(bindings, status = null) {
+  const statusSummary = renderTelegramBindingStatus(status);
   if (!Array.isArray(bindings) || bindings.length === 0) {
-    elements.telegramBindingsList.innerHTML = emptyState("暂无数据库绑定。未配置环境白名单时，本地 webhook 仍保持开放模式。");
+    const emptyMessage = status?.require_binding === true
+      ? "暂无数据库绑定。严格绑定模式已开启，请先写入 active 绑定。"
+      : "暂无数据库绑定。未配置环境白名单时，本地 webhook 仍保持开放模式。";
+    elements.telegramBindingsList.innerHTML = `${statusSummary}${emptyState(emptyMessage)}`;
     return;
   }
 
-  elements.telegramBindingsList.innerHTML = bindings
+  const bindingCards = bindings
     .map((binding) => {
       const isAllowed = binding.is_allowed === true;
       return `
@@ -1567,6 +1573,26 @@ function renderTelegramBindings(bindings) {
       `;
     })
     .join("");
+  elements.telegramBindingsList.innerHTML = `${statusSummary}${bindingCards}`;
+}
+
+function renderTelegramBindingStatus(status) {
+  const payload = status && typeof status === "object" ? status : {};
+  const strictLabel = payload.require_binding === true ? "已开启" : "未开启";
+  return `
+    <article class="telegram-binding-card">
+      <div class="meta-row">
+        <span class="badge">严格绑定模式</span>
+        <span class="badge">${escapeHtml(strictLabel)}</span>
+      </div>
+      <p class="summary">
+        环境白名单数量 ${escapeHtml(payload.allowed_chat_count ?? 0)}
+        / 数据库绑定 ${escapeHtml(payload.binding_count ?? 0)}
+        / active ${escapeHtml(payload.active_binding_count ?? 0)}
+      </p>
+      <p class="muted">仅展示后端汇总计数，不展示原始环境值、bot token 或 webhook secret。</p>
+    </article>
+  `;
 }
 
 async function fetchJson(path, options = {}) {

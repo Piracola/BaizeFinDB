@@ -225,12 +225,12 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 | 查看日报 | 调用 `/reports/periodic?period=daily`，按 User Key 显示周期汇总。 |
 | 查看周报 | 调用 `/reports/periodic?period=weekly`，按 User Key 显示周期汇总。 |
 | 生成评分 | 读取窗口里的 Signal ID，调用 `/scores/signals/{signal_id}` 生成并显示 1d/3d/5d/10d 综合评分、评分档位和组件明细。 |
-| 查看绑定 | 调用 `/telegram/bindings` 显示当前 Telegram chat 绑定和允许/禁用状态。 |
+| 查看绑定 | 调用 `/telegram/status` 和 `/telegram/bindings`，显示严格绑定模式、白名单/绑定汇总计数、当前 Telegram chat 绑定和允许/禁用状态。 |
 | 绑定 Chat | 读取 Telegram Chat ID 和 User Key，调用 `/telegram/bindings` 新增或启用绑定。 |
 | 禁用 Chat | 读取 Telegram Chat ID，调用 `/telegram/bindings/{chat_id}` 禁用该 chat。 |
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
 
-如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。`OPS 趋势` 和 `告警钻取` 都是只读排障视图，不触发 Provider 采集、雷达扫描、评分、报告生成、Telegram 修改、模型调用、后端 mutation、evidence 写入或交易相关动作。
+如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。Telegram 绑定输出只显示 `/telegram/status` 的严格绑定模式和汇总计数，不显示原始环境值、bot token 或 webhook secret。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。`OPS 趋势` 和 `告警钻取` 都是只读排障视图，不触发 Provider 采集、雷达扫描、评分、报告生成、Telegram 修改、模型调用、后端 mutation、evidence 写入或交易相关动作。
 
 首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号、空 Telegram 绑定和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 读取失败也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；默认不启动 Docker、不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。只有显式加 `-StartDockerBackend` 时，脚本才使用 compose server overlay 先重建当前源码的 `api` 镜像，确保 `/ops/trends` 等新端点来自当前代码，再启动 `postgres` / `redis`、通过 `api` 容器执行迁移、启动 `api` / `worker` / `beat` 并等待 `/health`，然后再进入同一套 smoke/GUI 委托；Docker build、启动、迁移失败或 health 超时会在 GUI 前阻断。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`run-client.ps1 -SmokeOnly` 会隐式执行 smoke check 并在结束后退出，不打开 GUI；`first-trial.ps1 -SmokeOnly` 会透传该模式，和 `-StartDockerBackend` 同用时仍先完成镜像重建、Docker 后端启动和 `/health` 等待；`-SmokeLookbackHours <n>` 会把 OPS readiness 和可选 OPS trends 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeCompactJsonOutput <path>` 会写出首次试运行推荐 compact evidence，不含 endpoint payload/raw response；`-SmokeJsonOutput <path>` 会写出详细脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。GUI 的 `首用诊断` 按钮使用同一套 smoke check 规则和摘要格式，但默认不写 evidence 文件，适合已打开窗口后的再次诊断。
 
