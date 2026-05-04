@@ -18,6 +18,24 @@ except ImportError:
     from clients.windows import client_api
 
 WINDOW_TITLE = "BaizeFinDB Windows Client"
+DEFAULT_OPS_LOOKBACK_HOURS = 24
+MIN_OPS_LOOKBACK_HOURS = 1
+MAX_OPS_LOOKBACK_HOURS = 168
+
+
+def parse_ops_lookback_hours(raw_value: str) -> int:
+    value = raw_value.strip()
+    try:
+        lookback_hours = int(value)
+    except ValueError as exc:
+        msg = "OPS Lookback 必须是 1 到 168 之间的整数小时。"
+        raise ValueError(msg) from exc
+
+    if not MIN_OPS_LOOKBACK_HOURS <= lookback_hours <= MAX_OPS_LOOKBACK_HOURS:
+        msg = "OPS Lookback 必须是 1 到 168 之间的整数小时。"
+        raise ValueError(msg)
+
+    return lookback_hours
 
 
 class BaizeFinDBClientApp:
@@ -30,6 +48,7 @@ class BaizeFinDBClientApp:
             value=os.environ.get("BAIZEFINDB_USER_KEY", client_api.DEFAULT_USER_KEY),
         )
         self.signal_id = tk.StringVar(value=os.environ.get("BAIZEFINDB_SIGNAL_ID", "1"))
+        self.ops_lookback_hours = tk.StringVar(value=str(DEFAULT_OPS_LOOKBACK_HOURS))
         self.telegram_chat_id = tk.StringVar(
             value=os.environ.get("BAIZEFINDB_TELEGRAM_CHAT_ID", ""),
         )
@@ -48,7 +67,7 @@ class BaizeFinDBClientApp:
         main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
         main.columnconfigure(1, weight=1)
-        main.rowconfigure(6, weight=1)
+        main.rowconfigure(7, weight=1)
 
         ttk.Label(main, text="Server URL").grid(row=0, column=0, sticky=tk.W, padx=(0, 8))
         url_entry = ttk.Entry(main, textvariable=self.server_url)
@@ -62,26 +81,35 @@ class BaizeFinDBClientApp:
         signal_entry = ttk.Entry(main, textvariable=self.signal_id, width=18)
         signal_entry.grid(row=2, column=1, sticky=tk.W)
 
-        ttk.Label(main, text="Telegram Chat ID").grid(
+        ttk.Label(main, text="OPS Lookback (hours)").grid(
             row=3,
             column=0,
             sticky=tk.W,
             padx=(0, 8),
         )
-        chat_entry = ttk.Entry(main, textvariable=self.telegram_chat_id, width=24)
-        chat_entry.grid(row=3, column=1, sticky=tk.W)
+        ops_lookback_entry = ttk.Entry(main, textvariable=self.ops_lookback_hours, width=18)
+        ops_lookback_entry.grid(row=3, column=1, sticky=tk.W)
 
-        ttk.Label(main, text="Telegram Secret").grid(
+        ttk.Label(main, text="Telegram Chat ID").grid(
             row=4,
             column=0,
             sticky=tk.W,
             padx=(0, 8),
         )
+        chat_entry = ttk.Entry(main, textvariable=self.telegram_chat_id, width=24)
+        chat_entry.grid(row=4, column=1, sticky=tk.W)
+
+        ttk.Label(main, text="Telegram Secret").grid(
+            row=5,
+            column=0,
+            sticky=tk.W,
+            padx=(0, 8),
+        )
         secret_entry = ttk.Entry(main, textvariable=self.telegram_secret, show="*")
-        secret_entry.grid(row=4, column=1, sticky=tk.EW)
+        secret_entry.grid(row=5, column=1, sticky=tk.EW)
 
         button_frame = ttk.Frame(main)
-        button_frame.grid(row=5, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
+        button_frame.grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=(10, 10))
 
         self._add_button(button_frame, "检查状态", self.check_status)
         self._add_button(button_frame, "运行状态", self.view_ops_overview)
@@ -103,7 +131,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "打开 Web 面板", self.open_web_panel)
 
         self.output = scrolledtext.ScrolledText(main, wrap=tk.WORD, height=24)
-        self.output.grid(row=6, column=0, columnspan=2, sticky=tk.NSEW)
+        self.output.grid(row=7, column=0, columnspan=2, sticky=tk.NSEW)
         self.output.insert(
             tk.END,
             "BaizeFinDB Windows 客户端 MVP\n\n"
@@ -112,7 +140,7 @@ class BaizeFinDBClientApp:
         self.output.configure(state=tk.DISABLED)
 
         status_bar = ttk.Label(main, textvariable=self.status_text, anchor=tk.W)
-        status_bar.grid(row=7, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
+        status_bar.grid(row=8, column=0, columnspan=2, sticky=tk.EW, pady=(8, 0))
 
     def _add_button(self, parent: ttk.Frame, label: str, command: Callable[[], None]) -> None:
         button = ttk.Button(parent, text=label, command=command)
@@ -135,22 +163,50 @@ class BaizeFinDBClientApp:
         self._run_worker("检查 API 状态", worker)
 
     def view_ops_overview(self) -> None:
+        try:
+            lookback_hours = self._normalized_ops_lookback_hours()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
         def worker() -> str:
-            overview = client_api.fetch_ops_overview(self._normalized_server_url())
+            overview = client_api.fetch_ops_overview(
+                self._normalized_server_url(),
+                lookback_hours=lookback_hours,
+            )
             return client_api.format_ops_overview(overview)
 
         self._run_worker("读取运行状态", worker)
 
     def view_ops_history(self) -> None:
+        try:
+            lookback_hours = self._normalized_ops_lookback_hours()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
         def worker() -> str:
-            history = client_api.fetch_ops_history(self._normalized_server_url(), limit=20)
+            history = client_api.fetch_ops_history(
+                self._normalized_server_url(),
+                lookback_hours=lookback_hours,
+                limit=20,
+            )
             return client_api.format_ops_history(history)
 
         self._run_worker("读取运维历史", worker)
 
     def view_ops_readiness(self) -> None:
+        try:
+            lookback_hours = self._normalized_ops_lookback_hours()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
         def worker() -> str:
-            readiness = client_api.fetch_ops_readiness(self._normalized_server_url())
+            readiness = client_api.fetch_ops_readiness(
+                self._normalized_server_url(),
+                lookback_hours=lookback_hours,
+            )
             return client_api.format_ops_readiness(readiness)
 
         self._run_worker("读取运行就绪自检", worker)
@@ -324,6 +380,9 @@ class BaizeFinDBClientApp:
             raise ValueError(msg)
 
         return signal_id
+
+    def _normalized_ops_lookback_hours(self) -> int:
+        return parse_ops_lookback_hours(self.ops_lookback_hours.get())
 
     def _normalized_telegram_chat_id(self) -> int:
         value = self.telegram_chat_id.get().strip()

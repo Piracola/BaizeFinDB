@@ -8,6 +8,7 @@
 - 查看运行状态和服务端磁盘/CPU/内存摘要：`GET /ops/overview`。
 - 查看只读运维历史：`GET /ops/history`。
 - 查看运行就绪自检：`GET /ops/readiness`。
+- GUI 的 `OPS Lookback (hours)` 输入框控制上述三个 OPS 视图的统计窗口，默认 24，范围 1 到 168 小时；非法输入会在请求前阻断。
 - 查看 Tushare 数据源状态：`GET /providers/tushare/status`，只返回 token 是否配置和端点实现状态，不返回 token 原文。
 - 查看 Tushare 数据源自检：`GET /providers/tushare/readiness`，只读取配置、最近抓取日志和数据质量记录，不触发真实抓取或调度。
 - 查看雷达总览、优先级、生命周期分布、市场情绪摘要和个股回推证据：`GET /radar/overview`。
@@ -19,7 +20,7 @@
 - 生成并查看单信号 v2 综合评分明细：`POST /scores/signals/{signal_id}`。
 - 查看、绑定和禁用 Telegram chat：`GET/POST/PATCH /telegram/bindings`。
 - 打开现有 Web 面板：`/`。
-- P0/P1/P2、生命周期、市场情绪摘要、运行状态、数据源状态、审查状态和计数都来自后端 API，客户端不重新计算。
+- P0/P1/P2、生命周期、市场情绪摘要、运行状态、OPS readiness、数据源状态、审查状态和计数都来自后端 API，客户端不重新计算。
 - 日报/周报和评分结果也来自后端，客户端不做本地评分或规则推断。
 - 不保存 token、secret、持仓截图或个人数据；Telegram Secret 输入框只用于本次 API header。
 - Tushare 状态视图只读取 Provider 配置状态，不触发真实抓取。
@@ -106,9 +107,9 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 按钮 | 行为 |
 | --- | --- |
 | 检查状态 | 调用 `/health/ready`，显示 API、PostgreSQL、Redis 状态。 |
-| 运行状态 | 调用 `/ops/overview`，显示服务端运行时、磁盘可用空间、CPU、内存、最近扫描、失败率、Provider、数据质量、推送、模型调用和告警摘要。 |
-| 运维历史 | 调用 `/ops/history`，显示最近扫描和运行异常历史，以及异常汇总。 |
-| 就绪自检 | 调用 `/ops/readiness`，显示部署/运行自检总体状态和逐项检查。 |
+| 运行状态 | 调用 `/ops/overview`，带上 `OPS Lookback (hours)`，显示服务端运行时、磁盘可用空间、CPU、内存、最近扫描、失败率、Provider、数据质量、推送、模型调用和告警摘要。 |
+| 运维历史 | 调用 `/ops/history`，带上 `OPS Lookback (hours)`，显示最近扫描和运行异常历史，以及异常汇总。 |
+| 就绪自检 | 调用 `/ops/readiness`，带上 `OPS Lookback (hours)`，显示部署/运行自检总体状态和逐项检查。 |
 | 数据源状态 | 调用 `/providers/tushare/status`，显示 Tushare token 配置、手动抓取启用状态和已实现端点数；不触发真实抓取。 |
 | 数据源自检 | 调用 `/providers/tushare/readiness`，显示 Tushare token、端点、最近抓取和数据质量准入状态；不触发真实抓取或调度。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
@@ -124,7 +125,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 禁用 Chat | 读取 Telegram Chat ID，调用 `/telegram/bindings/{chat_id}` 禁用该 chat。 |
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
 
-如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。
+如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。
 
 首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeJsonOutput <path>` 会写出同一份脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。
 

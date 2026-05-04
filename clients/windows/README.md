@@ -1,6 +1,6 @@
 # BaizeFinDB Windows Client MVP
 
-这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。
+这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史和就绪自检共用。
 
 它不是安装包，也不会打包成 exe。后续如果需要桌面分发，可以在这个目录基础上再做打包、签名和自动更新。
 
@@ -72,10 +72,11 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 - `--json-output <path>` 可写出有界脱敏 JSON 报告；报告会隐藏 `user_key`、token、secret 和 credential-like 字段。
 - `run-client.ps1 -SmokeJsonOutput <path>` 会把该路径传给 smoke check；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
 - 当 `/ops/readiness` 返回 warning 或 blocked 时，console summary 会列出非 OK 检查项名称和有界脱敏说明，例如 `provider_fetch`、`data_quality`，便于首用时区分历史数据源/数据质量 warning 和真正 blocker。
+- GUI 的 `OPS Lookback (hours)` 会传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`，默认 24，范围 1 到 168；非法输入会在发起 API 请求前弹出校验错误。
 - smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
 - Telegram 绑定管理调用 `/telegram/bindings`；服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
-- P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。
+- P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、OPS readiness、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。
 - 日报/周报和综合评分也来自后端；客户端只负责触发、读取和展示评分窗口、档位和组件明细。
 - 客户端不保存 token、secret、Tushare token 原文、持仓截图或个人数据；Telegram Secret 只在当前进程内用于请求 header。Tushare 状态和自检视图只读取配置、最近抓取日志和数据质量记录，不触发真实抓取或调度。
 - 客户端不提供买卖建议、不接自动交易、不承诺收益。

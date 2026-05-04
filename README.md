@@ -63,7 +63,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史和就绪自检选择 1 到 168 小时统计窗口，默认 24
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送；Tushare `anns_d` Beat 调度默认不加入，只有 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时才额外启用
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含
@@ -166,7 +166,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
 
-smoke check 会验证 Tkinter 可导入、核心健康和 readiness GET，可选写出脱敏有界 JSON；空雷达、空信号和空绑定是 warning，不是 blocker。`run-client.ps1 -SmokeCheck` 会在启动 GUI 前执行同一套检查并传入相同 ServerUrl/UserKey；`-SmokeLookbackHours` 会把 1 到 168 小时的 OPS readiness 窗口传给 smoke check，默认 24；`-SmokeStrict` 会让 warning 阻断启动，默认 warning 仍不阻断。客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、数据源状态、审查状态或评分；Tushare 状态/自检按钮只读取 `/providers/tushare/status` 和 `/providers/tushare/readiness`，不触发真实抓取；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、Tushare token 原文、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
+smoke check 会验证 Tkinter 可导入、核心健康和 readiness GET，可选写出脱敏有界 JSON；空雷达、空信号和空绑定是 warning，不是 blocker。`run-client.ps1 -SmokeCheck` 会在启动 GUI 前执行同一套检查并传入相同 ServerUrl/UserKey；`-SmokeLookbackHours` 会把 1 到 168 小时的 OPS readiness 窗口传给 smoke check，默认 24；`-SmokeStrict` 会让 warning 阻断启动，默认 warning 仍不阻断。GUI 的 `OPS Lookback (hours)` 同样默认 24，范围 1 到 168，并传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`；非法输入会在 API 请求前阻断。客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态、审查状态或评分；Tushare 状态/自检按钮只读取 `/providers/tushare/status` 和 `/providers/tushare/readiness`，不触发真实抓取；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、Tushare token 原文、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 
 ## Telegram Bot MVP
 
