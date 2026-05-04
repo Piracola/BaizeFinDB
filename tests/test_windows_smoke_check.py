@@ -25,6 +25,7 @@ class FakeResponse:
 def test_smoke_check_ready_path_uses_get_only() -> None:
     methods: list[str] = []
     paths: list[str] = []
+    urls: list[str] = []
     payloads = _ready_payloads()
     payloads["/radar/overview"] = {
         "priority_counts": {"P0": 1, "P1": 0, "P2": 0},
@@ -38,7 +39,7 @@ def test_smoke_check_ready_path_uses_get_only() -> None:
         server_url="http://localhost:8000",
         user_key="default",
         importer=lambda name: object(),
-        opener=_opener(payloads, methods=methods, paths=paths),
+        opener=_opener(payloads, methods=methods, paths=paths, urls=urls),
     )
 
     assert report.exit_code() == 0
@@ -66,7 +67,46 @@ def test_smoke_check_ready_path_uses_get_only() -> None:
         "/radar/signals",
         "/telegram/bindings",
     }
+    assert "http://localhost:8000/ops/readiness?lookback_hours=24" in urls
     assert not set(paths).intersection(smoke_check.SKIPPED_USER_SCOPED_ENDPOINTS)
+
+
+def test_smoke_check_passes_custom_ops_readiness_lookback() -> None:
+    urls: list[str] = []
+
+    report = smoke_check.run_smoke_check(
+        server_url="http://localhost:8000",
+        user_key="default",
+        ops_readiness_lookback_hours=6,
+        importer=lambda name: object(),
+        opener=_opener(_ready_payloads(), urls=urls),
+    )
+
+    assert report.exit_code() == 0
+    assert "http://localhost:8000/ops/readiness?lookback_hours=6" in urls
+
+
+@pytest.mark.parametrize("lookback_hours", [0, 169])
+def test_smoke_check_blocks_invalid_ops_readiness_lookback(lookback_hours: int) -> None:
+    called = False
+
+    def opener(*args: object, **kwargs: object) -> FakeResponse:
+        nonlocal called
+        called = True
+        return FakeResponse({})
+
+    report = smoke_check.run_smoke_check(
+        server_url="http://localhost:8000",
+        user_key="default",
+        ops_readiness_lookback_hours=lookback_hours,
+        importer=lambda name: object(),
+        opener=opener,
+    )
+
+    assert report.exit_code() == 1
+    assert report.status == "blocked"
+    assert any("ops_readiness_lookback_hours" in blocker for blocker in report.blockers)
+    assert called is False
 
 
 def test_smoke_check_warning_only_empty_first_use_data_exits_zero() -> None:
@@ -237,10 +277,13 @@ def _opener(
     *,
     methods: list[str] | None = None,
     paths: list[str] | None = None,
+    urls: list[str] | None = None,
 ):
     def open_url(request: object, *, timeout: int) -> FakeResponse:
         if methods is not None:
             methods.append(request.get_method())
+        if urls is not None:
+            urls.append(request.full_url)
         path = urlsplit(request.full_url).path
         if paths is not None:
             paths.append(path)

@@ -53,6 +53,12 @@ uv run uvicorn app.main:app --reload
 python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
 ```
 
+默认 OPS readiness 统计窗口是最近 24 小时。排查时如果要区分最近健康状态和更早的 Provider / 数据质量 warning，可以缩短窗口；允许范围与后端 `/ops/readiness` 一致，为 1 到 168 小时：
+
+```powershell
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default --ops-readiness-lookback-hours 6
+```
+
 需要留存排障记录时写出脱敏 JSON：
 
 ```powershell
@@ -74,7 +80,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 需要同时保存脱敏 JSON evidence，或让 warning 也阻断 GUI 启动：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
 ```
 
 ## 4. 连接 Linux 服务器 API
@@ -120,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 
 如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。
 
-首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeJsonOutput <path>` 会写出同一份脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。
+首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeJsonOutput <path>` 会写出同一份脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。
 
 ## 6. 常见问题
 

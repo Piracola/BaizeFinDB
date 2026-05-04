@@ -19,6 +19,9 @@ MAX_TEXT_LENGTH = 500
 MAX_LIST_ITEMS = 10
 MAX_DICT_ITEMS = 30
 MAX_DEPTH = 4
+DEFAULT_OPS_READINESS_LOOKBACK_HOURS = 24
+MIN_OPS_READINESS_LOOKBACK_HOURS = 1
+MAX_OPS_READINESS_LOOKBACK_HOURS = 168
 REDACTED = "<redacted>"
 SENSITIVE_TEXT_PATTERNS = (
     re.compile(r"(?i)(bearer\s+)[^\s,;]+"),
@@ -75,11 +78,19 @@ def run_smoke_check(
     *,
     server_url: str | None,
     user_key: str | None,
+    ops_readiness_lookback_hours: int = DEFAULT_OPS_READINESS_LOOKBACK_HOURS,
     importer: Callable[[str], Any] = importlib.import_module,
     opener: client_api.UrlOpener | None = None,
 ) -> SmokeReport:
     report = SmokeReport(user_key=REDACTED)
     normalized_user_key = _normalize_user_key(user_key)
+    try:
+        normalized_lookback_hours = _validate_ops_readiness_lookback_hours(
+            ops_readiness_lookback_hours,
+        )
+    except ValueError as exc:
+        report.add_blocker("ops_readiness_lookback_hours", str(exc))
+        return report
 
     try:
         normalized_server_url = client_api.normalize_base_url(server_url)
@@ -92,7 +103,7 @@ def run_smoke_check(
     if report.blockers:
         return report
 
-    _check_core_endpoints(report, normalized_server_url, opener)
+    _check_core_endpoints(report, normalized_server_url, normalized_lookback_hours, opener)
     if report.blockers:
         return report
 
@@ -176,13 +187,28 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional path for a bounded sanitized JSON report.",
     )
     parser.add_argument(
+        "--ops-readiness-lookback-hours",
+        type=int,
+        default=DEFAULT_OPS_READINESS_LOOKBACK_HOURS,
+        help=(
+            "Lookback window for /ops/readiness in hours. "
+            f"Range {MIN_OPS_READINESS_LOOKBACK_HOURS} to "
+            f"{MAX_OPS_READINESS_LOOKBACK_HOURS}; defaults to "
+            f"{DEFAULT_OPS_READINESS_LOOKBACK_HOURS}."
+        ),
+    )
+    parser.add_argument(
         "--fail-on-warning",
         action="store_true",
         help="Return a nonzero exit code when the smoke check reports warnings.",
     )
     args = parser.parse_args(argv)
 
-    report = run_smoke_check(server_url=args.server_url, user_key=args.user_key)
+    report = run_smoke_check(
+        server_url=args.server_url,
+        user_key=args.user_key,
+        ops_readiness_lookback_hours=args.ops_readiness_lookback_hours,
+    )
     if args.json_output:
         write_json_report(report, args.json_output)
 
@@ -203,6 +229,7 @@ def _check_tkinter(report: SmokeReport, importer: Callable[[str], Any]) -> None:
 def _check_core_endpoints(
     report: SmokeReport,
     server_url: str,
+    ops_readiness_lookback_hours: int,
     opener: client_api.UrlOpener | None,
 ) -> None:
     health = _call_endpoint(
@@ -240,7 +267,11 @@ def _check_core_endpoints(
     ops_readiness = _call_endpoint(
         report,
         "ops_readiness",
-        lambda: client_api.fetch_ops_readiness(server_url, opener=opener),
+        lambda: client_api.fetch_ops_readiness(
+            server_url,
+            lookback_hours=ops_readiness_lookback_hours,
+            opener=opener,
+        ),
         required=True,
     )
     if isinstance(ops_readiness, Mapping):
@@ -454,6 +485,15 @@ def _sanitize_message(value: str) -> str:
 def _normalize_user_key(value: str | None) -> str:
     normalized = (value or client_api.DEFAULT_USER_KEY).strip()
     return normalized or client_api.DEFAULT_USER_KEY
+
+
+def _validate_ops_readiness_lookback_hours(value: int) -> int:
+    if MIN_OPS_READINESS_LOOKBACK_HOURS <= value <= MAX_OPS_READINESS_LOOKBACK_HOURS:
+        return value
+    raise ValueError(
+        "OPS readiness lookback must be between "
+        f"{MIN_OPS_READINESS_LOOKBACK_HOURS} and {MAX_OPS_READINESS_LOOKBACK_HOURS} hours.",
+    )
 
 
 def _redacted_user_key(value: str) -> str:

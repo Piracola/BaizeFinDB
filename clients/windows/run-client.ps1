@@ -3,6 +3,8 @@ param(
     [string]$UserKey = $env:BAIZEFINDB_USER_KEY,
     [switch]$SmokeCheck,
     [string]$SmokeJsonOutput,
+    [ValidateRange(1, 168)]
+    [int]$SmokeLookbackHours = 24,
     [switch]$SmokeStrict
 )
 
@@ -30,7 +32,9 @@ if ($SmokeCheck) {
         "--server-url",
         $ServerUrl,
         "--user-key",
-        $UserKey
+        $UserKey,
+        "--ops-readiness-lookback-hours",
+        $SmokeLookbackHours
     )
 
     if (-not [string]::IsNullOrWhiteSpace($SmokeJsonOutput)) {

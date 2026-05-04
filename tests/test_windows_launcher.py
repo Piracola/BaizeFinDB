@@ -32,6 +32,8 @@ def test_launcher_smoke_check_passes_server_user_json_and_strict_args(tmp_path: 
         "-UserKey",
         "tester",
         "-SmokeCheck",
+        "-SmokeLookbackHours",
+        "6",
         "-SmokeJsonOutput",
         str(json_output),
         "-SmokeStrict",
@@ -41,7 +43,7 @@ def test_launcher_smoke_check_passes_server_user_json_and_strict_args(tmp_path: 
     assert calls == [
         (
             "-m clients.windows.smoke_check --server-url https://api.example.test "
-            "--user-key tester --json-output "
+            "--user-key tester --ops-readiness-lookback-hours 6 --json-output "
             f"{json_output} --fail-on-warning"
         ),
         "-m clients.windows.baizefindb_client",
@@ -61,7 +63,10 @@ def test_launcher_blocks_gui_when_smoke_check_fails(tmp_path: Path) -> None:
 
     assert result.returncode == 7
     assert calls == [
-        "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default",
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
     ]
 
 

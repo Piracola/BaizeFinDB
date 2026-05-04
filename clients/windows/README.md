@@ -18,6 +18,12 @@
 python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
 ```
 
+默认使用最近 24 小时的 OPS readiness 窗口；需要隔离最近健康状态和历史 Provider / 数据质量 warning 时，可以缩短窗口，允许范围与后端一致，为 1 到 168 小时：
+
+```powershell
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default --ops-readiness-lookback-hours 6
+```
+
 确认没有 blocker 后再打开 Tkinter 客户端：
 
 ```powershell
@@ -33,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 需要留下脱敏 JSON evidence，或要求 warning 也阻断启动：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeLookbackHours 6 -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
 ```
 
 ## 连接服务器
@@ -62,6 +68,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 ## 功能边界
 
 - 首次使用前可运行 `python -m clients.windows.smoke_check --server-url <api-url> --user-key <key>`，也可用 `run-client.ps1 -SmokeCheck` 在启动 GUI 前自动执行。该命令只做 Tkinter import 检查和 API GET 自检，不打开 GUI，不调用采集、扫描、评分生成、报告生成、Telegram 修改或任何交易相关动作。
+- `--ops-readiness-lookback-hours <n>` 只调整 `/ops/readiness` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
 - `--json-output <path>` 可写出有界脱敏 JSON 报告；报告会隐藏 `user_key`、token、secret 和 credential-like 字段。
 - `run-client.ps1 -SmokeJsonOutput <path>` 会把该路径传给 smoke check；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
 - smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
