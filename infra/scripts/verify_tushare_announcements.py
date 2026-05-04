@@ -11,11 +11,25 @@ from app.providers.tushare import TUSHARE_ENDPOINTS, TushareProvider
 
 ENDPOINT = "anns_d"
 DEFAULT_MAX_SAMPLE_ROWS = 2
-SENSITIVE_FIELD_MARKERS = ("url", "source", "domain", "website", "link")
+SENSITIVE_FIELD_MARKERS = (
+    "url",
+    "source",
+    "domain",
+    "website",
+    "link",
+    "token",
+    "secret",
+)
 URL_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 DOMAIN_PATTERN = re.compile(
     r"\b(?:[a-z0-9-]+\.)+(?:com|cn|net|org|io|test|edu|gov|info|biz)\b",
     re.IGNORECASE,
+)
+TUSHARE_TOKEN_PATTERN = re.compile(
+    r"(?i)\b(TUSHARE_TOKEN\s*(?:=|:)?\s*)([^\s,;]+)"
+)
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)\b((?:api[_-]?key|token|secret)\s*[:=]\s*)([^\s,;&]+)"
 )
 
 
@@ -44,16 +58,22 @@ async def main() -> None:
 
     try:
         dataset = await provider.fetch(ENDPOINT, query_params=query_params)
-        result = build_success_report(
+        report = build_success_report(
             dataset=dataset,
             ann_date=args.ann_date,
             max_sample_rows=args.max_sample_rows,
         )
+        result = (
+            report
+            if args.json_output
+            else build_legacy_success_result(dataset=dataset)
+        )
     except Exception as exc:
-        result = build_failure_report(exc=exc, ann_date=args.ann_date)
+        report = build_failure_report(exc=exc, ann_date=args.ann_date)
+        result = report if args.json_output else build_legacy_failure_result(exc=exc)
 
     if args.json_output:
-        write_json_report(Path(args.json_output), result)
+        write_json_report(Path(args.json_output), report)
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -106,6 +126,27 @@ def build_failure_report(exc: Exception, ann_date: str | None) -> dict[str, Any]
     }
 
 
+def build_legacy_success_result(dataset: ProviderDataset) -> dict[str, Any]:
+    return {
+        "endpoint": ENDPOINT,
+        "status": "success",
+        "row_count": dataset.row_count,
+        "quality": dataset.quality.model_dump(mode="json"),
+        "sample": [
+            _sanitize_normalized_row(row)
+            for row in dataset.normalized_rows[:DEFAULT_MAX_SAMPLE_ROWS]
+        ],
+    }
+
+
+def build_legacy_failure_result(exc: Exception) -> dict[str, Any]:
+    return {
+        "endpoint": ENDPOINT,
+        "status": "failure",
+        "error": _sanitize_error(exc),
+    }
+
+
 def write_json_report(path: Path, report: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -141,6 +182,8 @@ def _redact_text(text: str) -> str:
     if token:
         redacted = redacted.replace(token, "<redacted>")
 
+    redacted = TUSHARE_TOKEN_PATTERN.sub(r"\1<redacted>", redacted)
+    redacted = SECRET_ASSIGNMENT_PATTERN.sub(r"\1<redacted>", redacted)
     redacted = URL_PATTERN.sub("<redacted-url>", redacted)
     return DOMAIN_PATTERN.sub("<redacted-domain>", redacted)
 

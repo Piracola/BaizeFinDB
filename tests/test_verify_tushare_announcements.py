@@ -27,6 +27,8 @@ def _announcements_dataset():
                     "name": "浦发银行",
                     "title": "董事会决议公告",
                     "url": "https://example.test/notice.pdf?token=secret-token",
+                    "source_domain": "example.test",
+                    "access_token": "secret-token",
                     "rec_time": "2026-05-03 20:00:00",
                 }
             ]
@@ -129,6 +131,37 @@ async def test_cli_writes_success_report_from_mocked_provider(
     assert "url" not in payload["sample"][0]
 
 
+async def test_cli_default_output_keeps_legacy_shape_and_sanitizes(
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "secret-token")
+    monkeypatch.setattr(verify_tushare_announcements, "TushareProvider", FakeTushareProvider)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "verify_tushare_announcements.py",
+            "--ann-date",
+            "20260503",
+        ],
+    )
+
+    await verify_tushare_announcements.main()
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert set(payload) == {"endpoint", "status", "row_count", "quality", "sample"}
+    assert payload["status"] == "success"
+    assert payload["row_count"] == 1
+    assert "secret-token" not in captured.out
+    assert "https://" not in captured.out
+    assert "example.test" not in captured.out
+    assert "url" not in payload["sample"][0]
+    assert "source_domain" not in payload["sample"][0]
+    assert "access_token" not in payload["sample"][0]
+
+
 def test_failure_report_redacts_token_url_and_domain(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("TUSHARE_TOKEN", "secret-token")
     exc = RuntimeError(
@@ -157,6 +190,24 @@ def test_failure_report_redacts_token_url_and_domain(monkeypatch, tmp_path) -> N
     assert "https://" not in encoded
     assert "api.example.test" not in encoded
     assert "example.test" not in encoded
+
+
+def test_failure_report_redacts_token_from_error_without_env(tmp_path) -> None:
+    exc = RuntimeError(
+        "TUSHARE_TOKEN secret-token rejected; token=secret-token; domain example.test"
+    )
+
+    report = verify_tushare_announcements.build_failure_report(
+        exc=exc,
+        ann_date="20260503",
+    )
+    output_path = tmp_path / "failed-without-env.json"
+    verify_tushare_announcements.write_json_report(output_path, report)
+    encoded = output_path.read_text(encoding="utf-8")
+
+    assert "secret-token" not in encoded
+    assert "example.test" not in encoded
+    assert "<redacted>" in encoded
 
 
 async def test_cli_writes_failure_report_from_mocked_provider(
