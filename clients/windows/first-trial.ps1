@@ -6,6 +6,7 @@ param(
     [string]$SmokeJsonOutput,
     [string]$SmokeCompactJsonOutput,
     [string]$DeployCheckJsonOutput,
+    [switch]$DeployCheckM5Smoke,
     [switch]$SmokeStrict,
     [switch]$SmokeOnly,
     [switch]$StartDockerBackend,
@@ -80,10 +81,23 @@ function Wait-BackendHealth {
 function Invoke-DeployCheck {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$JsonOutput
+        [string]$JsonOutput,
+        [switch]$IncludeM5Smoke
     )
 
-    & python infra/scripts/server_deploy_check.py --check-containers --check-api --json-output $JsonOutput
+    $DeployCheckArgs = @(
+        "infra/scripts/server_deploy_check.py",
+        "--check-containers",
+        "--check-api",
+        "--json-output",
+        $JsonOutput
+    )
+
+    if ($IncludeM5Smoke) {
+        $DeployCheckArgs += "--check-m5-smoke"
+    }
+
+    & python @DeployCheckArgs
     if ($LASTEXITCODE -ne 0) {
         [Console]::Error.WriteLine("Server deploy preflight failed with exit code $LASTEXITCODE")
         exit $LASTEXITCODE
@@ -92,6 +106,11 @@ function Invoke-DeployCheck {
 
 if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput) -and -not $StartDockerBackend) {
     [Console]::Error.WriteLine("-DeployCheckJsonOutput requires -StartDockerBackend")
+    exit 2
+}
+
+if ($DeployCheckM5Smoke -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
+    [Console]::Error.WriteLine("-DeployCheckM5Smoke requires -DeployCheckJsonOutput")
     exit 2
 }
 
@@ -104,7 +123,7 @@ if ($StartDockerBackend) {
     Wait-BackendHealth -HealthUrl (Join-HealthUrl -BaseUrl $ServerUrl) -TimeoutSeconds $BackendHealthTimeoutSeconds -PollIntervalSeconds $BackendHealthPollIntervalSeconds
 
     if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
-        Invoke-DeployCheck -JsonOutput $DeployCheckJsonOutput
+        Invoke-DeployCheck -JsonOutput $DeployCheckJsonOutput -IncludeM5Smoke:$DeployCheckM5Smoke
     }
 }
 

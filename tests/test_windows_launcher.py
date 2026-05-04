@@ -171,6 +171,48 @@ def test_first_trial_launcher_start_docker_backend_can_write_deploy_check_json(
     ]
 
 
+def test_first_trial_launcher_deploy_check_m5_smoke_appends_server_m5_check(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckM5Smoke",
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output} --check-m5-smoke"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
 def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
     tmp_path: Path,
 ) -> None:
@@ -183,6 +225,16 @@ def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
     assert result.returncode == 2
     assert calls == []
     assert "-DeployCheckJsonOutput requires -StartDockerBackend" in result.stderr
+
+
+def test_first_trial_launcher_deploy_check_m5_smoke_requires_json_output(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(tmp_path, "-DeployCheckM5Smoke")
+
+    assert result.returncode == 2
+    assert calls == []
+    assert "-DeployCheckM5Smoke requires -DeployCheckJsonOutput" in result.stderr
 
 
 def test_first_trial_launcher_deploy_check_failure_blocks_smoke_and_gui(
