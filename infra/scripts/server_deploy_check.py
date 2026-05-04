@@ -41,6 +41,17 @@ M5_SMOKE_ENDPOINTS = (
         ),
     ),
     (
+        "/ops/trends",
+        (
+            "generated_at",
+            "lookback_hours",
+            "bucket_count",
+            "bucket_seconds",
+            "server",
+            "buckets",
+        ),
+    ),
+    (
         "/ops/readiness",
         (
             "generated_at",
