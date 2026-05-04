@@ -10,6 +10,7 @@
 GET  /health/ready
 GET  /ops/overview
 GET  /ops/history
+GET  /ops/trends
 GET  /ops/readiness
 GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
@@ -137,6 +138,24 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20"
 
 - `lookback_hours`：统计窗口，范围 1 到 168，默认 24。
 - `limit`：最多返回事件数，范围 1 到 100，默认 30。
+
+### `GET /ops/trends`
+
+用途：读取只读 OPS 趋势快照，用固定数量时间桶汇总已有运行表，作为后续趋势图和监控接入的后端基础。该接口只读取雷达扫描批次、Provider 拉取日志、数据质量检查、Telegram 推送日志和模型调用日志，并附带当前服务端资源快照；它不持久化资源采样，也不触发采集、扫描、推送、模型调用、报告生成或 evidence 写入。
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/trends?lookback_hours=24&bucket_count=12"
+```
+
+响应重点：
+
+- `server`：当前服务端磁盘、CPU、内存和进程上下文，复用 `/ops/overview` 的后端资源字段。
+- `buckets`：按时间从旧到新排列的固定桶。每个桶包含 radar scan / radar failure、Provider fetch total / unhealthy、data quality total / unhealthy、Telegram push total / unhealthy、model call total / unhealthy 计数。
+
+查询参数：
+
+- `lookback_hours`：统计窗口，范围 1 到 168，默认 24。
+- `bucket_count`：时间桶数量，范围 1 到 48，默认 12。
 
 ### `GET /ops/readiness`
 

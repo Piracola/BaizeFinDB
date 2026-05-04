@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -281,6 +282,239 @@ async def test_ops_overview_handles_empty_database(
             "message": "尚未找到雷达扫描记录。",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_ops_trends_returns_ordered_buckets_and_count_semantics(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        user = UserProfile(user_key="ops-trends-user", display_name="Ops Trends User")
+        session.add(user)
+        await session.flush()
+        session.add_all(
+            [
+                RadarScanBatch(
+                    status="success",
+                    started_at=now - timedelta(hours=3, minutes=30),
+                    finished_at=now - timedelta(hours=3, minutes=29),
+                    source_snapshot_ids=[],
+                    summary={},
+                ),
+                RadarScanBatch(
+                    status="failure",
+                    started_at=now - timedelta(hours=1, minutes=30),
+                    finished_at=now - timedelta(hours=1, minutes=29),
+                    source_snapshot_ids=[],
+                    summary={},
+                    error_message="failed",
+                ),
+                ProviderFetchLog(
+                    provider_name="akshare",
+                    endpoint="stock_zh_a_spot_em",
+                    status="success",
+                    fetch_started_at=now - timedelta(hours=2, minutes=35),
+                    fetch_finished_at=now - timedelta(hours=2, minutes=30),
+                    source_time=None,
+                    row_count=100,
+                    error_message=None,
+                    freshness="unknown_source_time",
+                    confidence=0.95,
+                    missing_fields=[],
+                    raw_snapshot_id=None,
+                    normalization_version="test",
+                ),
+                ProviderFetchLog(
+                    provider_name="akshare",
+                    endpoint="stock_board_concept_name_em",
+                    status="failure",
+                    fetch_started_at=now - timedelta(hours=2, minutes=10),
+                    fetch_finished_at=now - timedelta(hours=2),
+                    source_time=None,
+                    row_count=0,
+                    error_message="network",
+                    freshness="unavailable",
+                    confidence=0.0,
+                    missing_fields=[],
+                    raw_snapshot_id=None,
+                    normalization_version="test",
+                ),
+                DataQualityCheck(
+                    provider_name="akshare",
+                    endpoint="stock_zh_a_spot_em",
+                    check_name="normalization",
+                    status="ok",
+                    confidence=0.95,
+                    missing_fields=[],
+                    details={},
+                    created_at=now - timedelta(hours=1, minutes=40),
+                ),
+                DataQualityCheck(
+                    provider_name="akshare",
+                    endpoint="stock_board_concept_name_em",
+                    check_name="normalization",
+                    status="degraded",
+                    confidence=0.4,
+                    missing_fields=["amount"],
+                    details={},
+                    created_at=now - timedelta(hours=1, minutes=30),
+                ),
+                PushLog(
+                    user_id=user.id,
+                    channel="telegram",
+                    target_ref="1001",
+                    source_kind="radar_scan",
+                    source_id=1,
+                    status="sent",
+                    title="push sent",
+                    message_text="sent",
+                    included_signal_ids=[],
+                    blocked_signal_ids=[],
+                    needs_human_review_signal_ids=[],
+                    delivery_details={},
+                    created_at=now - timedelta(minutes=45),
+                ),
+                PushLog(
+                    user_id=user.id,
+                    channel="telegram",
+                    target_ref="1001",
+                    source_kind="radar_scan",
+                    source_id=2,
+                    status="failure",
+                    title="push failed",
+                    message_text="failed",
+                    included_signal_ids=[],
+                    blocked_signal_ids=[],
+                    needs_human_review_signal_ids=[],
+                    delivery_details={},
+                    created_at=now - timedelta(minutes=30),
+                ),
+                ModelCallLog(
+                    call_site="review",
+                    primary_model="primary",
+                    fallback_model=None,
+                    status="success",
+                    error_type=None,
+                    error_message=None,
+                    prompt_hash="d" * 64,
+                    prompt_length=100,
+                    raw_prompt=None,
+                    response_excerpt=None,
+                    details={},
+                    created_at=now - timedelta(minutes=20),
+                ),
+                ModelCallLog(
+                    call_site="report",
+                    primary_model="primary",
+                    fallback_model="fallback",
+                    status="fallback",
+                    error_type="RateLimitError",
+                    error_message="rate limit",
+                    prompt_hash="e" * 64,
+                    prompt_length=100,
+                    raw_prompt=None,
+                    response_excerpt=None,
+                    details={},
+                    created_at=now - timedelta(minutes=10),
+                ),
+            ],
+        )
+        await session.commit()
+
+    response = await _get_ops_trends(
+        session_factory,
+        lookback_hours=4,
+        bucket_count=4,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["lookback_hours"] == 4
+    assert payload["bucket_count"] == 4
+    assert payload["bucket_seconds"] == 3600.0
+    assert payload["server"]["disk_free_percent"] == 60.0
+    buckets = payload["buckets"]
+    assert [bucket["bucket_index"] for bucket in buckets] == [0, 1, 2, 3]
+    assert [bucket["bucket_started_at"] for bucket in buckets] == sorted(
+        bucket["bucket_started_at"] for bucket in buckets
+    )
+    assert buckets[0]["radar_scan_count"] == 1
+    assert buckets[0]["radar_failure_count"] == 0
+    assert buckets[1]["provider_fetch_total_count"] == 2
+    assert buckets[1]["provider_fetch_unhealthy_count"] == 1
+    assert buckets[2]["radar_scan_count"] == 1
+    assert buckets[2]["radar_failure_count"] == 1
+    assert buckets[2]["data_quality_total_count"] == 2
+    assert buckets[2]["data_quality_unhealthy_count"] == 1
+    assert buckets[3]["telegram_push_total_count"] == 2
+    assert buckets[3]["telegram_push_unhealthy_count"] == 1
+    assert buckets[3]["model_call_total_count"] == 2
+    assert buckets[3]["model_call_unhealthy_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_ops_trends_handles_empty_database(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    response = await _get_ops_trends(
+        session_factory,
+        lookback_hours=1,
+        bucket_count=3,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["server"]["disk_free_percent"] == 60.0
+    assert len(payload["buckets"]) == 3
+    for bucket in payload["buckets"]:
+        assert bucket["radar_scan_count"] == 0
+        assert bucket["radar_failure_count"] == 0
+        assert bucket["provider_fetch_total_count"] == 0
+        assert bucket["provider_fetch_unhealthy_count"] == 0
+        assert bucket["data_quality_total_count"] == 0
+        assert bucket["data_quality_unhealthy_count"] == 0
+        assert bucket["telegram_push_total_count"] == 0
+        assert bucket["telegram_push_unhealthy_count"] == 0
+        assert bucket["model_call_total_count"] == 0
+        assert bucket["model_call_unhealthy_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ops_trends_validates_window_and_bucket_bounds(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    low_window = await _get_ops_trends(
+        session_factory,
+        lookback_hours=0,
+        bucket_count=12,
+    )
+    high_bucket = await _get_ops_trends(
+        session_factory,
+        lookback_hours=24,
+        bucket_count=49,
+    )
+
+    assert low_window.status_code == 422
+    assert high_bucket.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ops_trends_is_read_only(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed_ready_runtime(session_factory)
+    before = await _runtime_table_counts(session_factory)
+
+    response = await _get_ops_trends(
+        session_factory,
+        lookback_hours=24,
+        bucket_count=12,
+    )
+    after = await _runtime_table_counts(session_factory)
+
+    assert response.status_code == 200
+    assert after == before
 
 
 @pytest.mark.asyncio
@@ -675,6 +909,31 @@ async def _get_ops_history(
         app.dependency_overrides.clear()
 
 
+async def _get_ops_trends(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    lookback_hours: int,
+    bucket_count: int,
+):
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.get(
+                "/ops/trends",
+                params={"lookback_hours": lookback_hours, "bucket_count": bucket_count},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+
 async def _get_ops_readiness(
     session_factory: async_sessionmaker[AsyncSession],
     *,
@@ -697,3 +956,29 @@ async def _get_ops_readiness(
             )
     finally:
         app.dependency_overrides.clear()
+
+
+async def _runtime_table_counts(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> dict[str, int]:
+    async with session_factory() as session:
+        return {
+            "radar_scan_batches": await session.scalar(
+                select(func.count()).select_from(RadarScanBatch),
+            )
+            or 0,
+            "provider_fetch_logs": await session.scalar(
+                select(func.count()).select_from(ProviderFetchLog),
+            )
+            or 0,
+            "data_quality_checks": await session.scalar(
+                select(func.count()).select_from(DataQualityCheck),
+            )
+            or 0,
+            "push_logs": await session.scalar(select(func.count()).select_from(PushLog))
+            or 0,
+            "model_call_logs": await session.scalar(
+                select(func.count()).select_from(ModelCallLog),
+            )
+            or 0,
+        }

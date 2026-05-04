@@ -37,6 +37,16 @@ def test_build_endpoint_path_adds_runtime_query_params() -> None:
         )
         == "/health"
     )
+    assert (
+        server_runtime_check.build_endpoint_path(
+            "/ops/trends",
+            ("lookback_hours", "bucket_count"),
+            lookback_hours=12,
+            history_limit=5,
+            trend_bucket_count=6,
+        )
+        == "/ops/trends?lookback_hours=12&bucket_count=6"
+    )
 
 
 def test_collect_runtime_sample_reads_only_runtime_endpoints(monkeypatch) -> None:
@@ -74,6 +84,40 @@ def test_collect_runtime_sample_reads_only_runtime_endpoints(monkeypatch) -> Non
         "/ops/history?lookback_hours=24&limit=20",
         "/ops/readiness?lookback_hours=24",
     ]
+
+
+def test_collect_runtime_sample_optionally_reads_ops_trends(monkeypatch) -> None:
+    calls = []
+
+    def fake_fetch(base_url: str, name: str, path: str, *, timeout: int):
+        calls.append((base_url, name, path, timeout))
+        return server_runtime_check.EndpointRead(
+            name=name,
+            path=path,
+            status="ok",
+            payload={"status": "ready" if name.endswith("ready") else "ok"},
+        )
+
+    monkeypatch.setattr(server_runtime_check, "fetch_json_endpoint", fake_fetch)
+
+    sample = server_runtime_check.collect_runtime_sample(
+        "http://api.test",
+        lookback_hours=24,
+        history_limit=20,
+        include_ops_trends=True,
+        trend_bucket_count=8,
+        timeout=3,
+    )
+
+    assert set(sample.endpoints) == {
+        "health",
+        "health_ready",
+        "ops_overview",
+        "ops_history",
+        "ops_readiness",
+        "ops_trends",
+    }
+    assert calls[-1][2] == "/ops/trends?lookback_hours=24&bucket_count=8"
 
 
 def test_runtime_report_passes_with_ready_samples() -> None:
@@ -121,6 +165,55 @@ def test_runtime_report_warns_on_ops_alerts_without_failing_by_default() -> None
         "warnings"
     ]
     assert any(warning["kind"] == "failure_summary" for warning in report["warnings"])
+
+
+def test_runtime_report_summarizes_optional_ops_trends() -> None:
+    sample = _sample(
+        readiness_status="ready",
+        overview_alerts=[],
+        failure_summary=[],
+        trend_buckets=[
+            {
+                "bucket_started_at": "2026-05-04T00:00:00+00:00",
+                "bucket_finished_at": "2026-05-04T01:00:00+00:00",
+                "radar_scan_count": 1,
+                "radar_failure_count": 0,
+                "provider_fetch_unhealthy_count": 0,
+                "data_quality_unhealthy_count": 0,
+                "telegram_push_unhealthy_count": 0,
+                "model_call_unhealthy_count": 0,
+            },
+            {
+                "bucket_started_at": "2026-05-04T01:00:00+00:00",
+                "bucket_finished_at": "2026-05-04T02:00:00+00:00",
+                "radar_scan_count": 2,
+                "radar_failure_count": 1,
+                "provider_fetch_unhealthy_count": 1,
+                "data_quality_unhealthy_count": 1,
+                "telegram_push_unhealthy_count": 1,
+                "model_call_unhealthy_count": 1,
+            },
+        ],
+    )
+
+    report = server_runtime_check.build_runtime_report(
+        [sample],
+        base_url="http://api.test",
+        fail_on_warning=False,
+    )
+
+    assert report["status"] == "ok"
+    assert report["latest_trend"] == {
+        "bucket_count": 2,
+        "latest_bucket_started_at": "2026-05-04T01:00:00+00:00",
+        "latest_bucket_finished_at": "2026-05-04T02:00:00+00:00",
+        "radar_scan_count": 2,
+        "radar_failure_count": 1,
+        "provider_fetch_unhealthy_count": 1,
+        "data_quality_unhealthy_count": 1,
+        "telegram_push_unhealthy_count": 1,
+        "model_call_unhealthy_count": 1,
+    }
 
 
 def test_runtime_report_fails_when_warning_is_strict() -> None:
@@ -247,8 +340,18 @@ def test_fetch_json_endpoint_fails_for_non_json_response(monkeypatch) -> None:
 def test_run_runtime_check_collects_requested_sample_count(monkeypatch) -> None:
     calls = []
 
-    def fake_collect(base_url: str, *, lookback_hours: int, history_limit: int, timeout: int):
+    def fake_collect(
+        base_url: str,
+        *,
+        lookback_hours: int,
+        history_limit: int,
+        include_ops_trends: bool,
+        trend_bucket_count: int,
+        timeout: int,
+    ):
         calls.append((base_url, lookback_hours, history_limit, timeout))
+        assert include_ops_trends is False
+        assert trend_bucket_count == 12
         return _sample(readiness_status="ready", overview_alerts=[], failure_summary=[])
 
     monkeypatch.setattr(server_runtime_check, "collect_runtime_sample", fake_collect)
@@ -260,6 +363,8 @@ def test_run_runtime_check_collects_requested_sample_count(monkeypatch) -> None:
         interval_seconds=0.1,
         lookback_hours=12,
         history_limit=5,
+        include_ops_trends=False,
+        trend_bucket_count=12,
         timeout=2,
         fail_on_warning=False,
     )
@@ -415,6 +520,7 @@ def _sample(
     readiness_status: str,
     overview_alerts: list[dict[str, object]],
     failure_summary: list[dict[str, object]],
+    trend_buckets: list[dict[str, object]] | None = None,
 ):
     endpoints = {
         "health": server_runtime_check.EndpointRead(
@@ -459,6 +565,13 @@ def _sample(
             payload={"status": readiness_status, "checks": []},
         ),
     }
+    if trend_buckets is not None:
+        endpoints["ops_trends"] = server_runtime_check.EndpointRead(
+            name="ops_trends",
+            path="/ops/trends?lookback_hours=24&bucket_count=2",
+            status="ok",
+            payload={"bucket_count": len(trend_buckets), "buckets": trend_buckets},
+        )
     return server_runtime_check.RuntimeSample(
         collected_at="2026-05-04T00:00:00+00:00",
         endpoints=endpoints,
@@ -481,6 +594,7 @@ def _runtime_report(
         "readiness_status_counts": {"ready": 1},
         "alert_counts": {},
         "latest_server": None,
+        "latest_trend": None,
         "failures": failures or [],
         "warnings": warnings or [],
     }

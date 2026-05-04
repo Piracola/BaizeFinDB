@@ -11,7 +11,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, ops overview, AKShare/Tushare status, Tushare readiness, and M5 read-only smoke checks. |
-| `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, and ops readiness after the API is running. |
+| `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
@@ -163,6 +163,15 @@ Sample the running API for a short validation window. Endpoint failures or
 
 ```bash
 python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
+```
+
+Add `--include-ops-trends` when the same read-only runtime report should include
+a compact summary of the latest `/ops/trends` bucket. This only reads existing
+runtime tables and current server context; it does not persist resource samples
+or provide a full monitoring stack:
+
+```bash
+python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends --trend-bucket-count 12 --json-output runtime-check.json
 ```
 
 When warning or blocked readiness needs shareable sanitized evidence, opt in to

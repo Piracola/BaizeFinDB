@@ -74,6 +74,31 @@ class OpsOverviewRead(BaseModel):
     alerts: list[OpsAlertRead] = Field(default_factory=list)
 
 
+class OpsTrendBucketRead(BaseModel):
+    bucket_index: int = Field(ge=0)
+    bucket_started_at: datetime
+    bucket_finished_at: datetime
+    radar_scan_count: int = Field(ge=0)
+    radar_failure_count: int = Field(ge=0)
+    provider_fetch_total_count: int = Field(ge=0)
+    provider_fetch_unhealthy_count: int = Field(ge=0)
+    data_quality_total_count: int = Field(ge=0)
+    data_quality_unhealthy_count: int = Field(ge=0)
+    telegram_push_total_count: int = Field(ge=0)
+    telegram_push_unhealthy_count: int = Field(ge=0)
+    model_call_total_count: int = Field(ge=0)
+    model_call_unhealthy_count: int = Field(ge=0)
+
+
+class OpsTrendRead(BaseModel):
+    generated_at: datetime
+    lookback_hours: int = Field(ge=1, le=168)
+    bucket_count: int = Field(ge=1, le=48)
+    bucket_seconds: float = Field(gt=0)
+    server: OpsServerSummary
+    buckets: list[OpsTrendBucketRead] = Field(default_factory=list)
+
+
 class OpsHistoryEventRead(BaseModel):
     id: int = Field(ge=0)
     kind: str

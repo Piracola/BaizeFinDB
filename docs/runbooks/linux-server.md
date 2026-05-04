@@ -10,7 +10,7 @@
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
 | `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
-| `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，用退出码区分阻塞状态。 |
+| `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，可选读取 Ops 趋势快照，用退出码区分阻塞状态。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
@@ -84,6 +84,12 @@ uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
 
 ```powershell
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
+```
+
+需要在同一份 JSON/text 报告里查看最近时间桶趋势时，显式加 `--include-ops-trends`。该选项只额外 GET `/ops/trends`，不触发采集、扫描、推送、模型、报告、evidence 写入或数据库变更：
+
+```powershell
+uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends --trend-bucket-count 12 --json-output runtime-check.json
 ```
 
 当 readiness 因历史 Provider 或数据质量失败显示 `warning`，或运行采样已经判断为 `blocked`，但需要给开发者保留一份可分享的排障证据时，可以在 runtime check 同一条命令里加 `--ops-evidence-output <path>`。runtime check 会继续做原本的短窗口采样，并额外复用 `export_ops_evidence.py` 的脱敏报告逻辑写入只读 OPS evidence；evidence 导出只 GET `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不会触发采集、扫描、推送、模型、备份、清理或数据库写入。若 evidence 导出本身读取失败或导出的 readiness 为 `blocked`，runtime check 会带清晰错误返回失败；普通 `warning` 仍为零退出码：
@@ -206,7 +212,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
 ```
 
-该脚本只读，不触发采集、扫描、推送或模型调用；它基于 `/health/ready` 和 `/ops/readiness` 判断阻塞状态，并汇总 `/ops/overview` 的资源摘要、alerts 以及 `/ops/history` 的 failure summary。需要在同一次运行里保存脱敏 evidence 时加 `--ops-evidence-output evidence/ops-evidence.json`，尤其适用于 `warning` 或 `blocked` 状态下把可分享证据随 runtime check 一起留存。
+该脚本只读，不触发采集、扫描、推送或模型调用；它基于 `/health/ready` 和 `/ops/readiness` 判断阻塞状态，并汇总 `/ops/overview` 的资源摘要、alerts 以及 `/ops/history` 的 failure summary。需要趋势上下文时加 `--include-ops-trends`，脚本会读取 `/ops/trends` 并汇总最新桶的 unhealthy 计数；这只是后续图表和监控的基础，不代表完整监控系统。需要在同一次运行里保存脱敏 evidence 时加 `--ops-evidence-output evidence/ops-evidence.json`，尤其适用于 `warning` 或 `blocked` 状态下把可分享证据随 runtime check 一起留存。
 
 Windows 本机演练 server overlay 时，确认 `127.0.0.1:8000` 没有被本机 `uvicorn` 占用，否则浏览器和 `curl` 可能命中本地开发进程而不是 Docker API：
 

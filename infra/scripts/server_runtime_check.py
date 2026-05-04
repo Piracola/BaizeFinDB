@@ -28,6 +28,7 @@ import export_ops_evidence  # noqa: E402
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_LOOKBACK_HOURS = 24
+DEFAULT_TREND_BUCKET_COUNT = 12
 RUNTIME_ENDPOINTS = (
     ("health", "/health", ()),
     ("health_ready", "/health/ready", ()),
@@ -35,6 +36,7 @@ RUNTIME_ENDPOINTS = (
     ("ops_history", "/ops/history", ("lookback_hours", "limit")),
     ("ops_readiness", "/ops/readiness", ("lookback_hours",)),
 )
+OPS_TRENDS_ENDPOINT = ("ops_trends", "/ops/trends", ("lookback_hours", "bucket_count"))
 
 
 @dataclass(frozen=True)
@@ -67,12 +69,15 @@ def build_endpoint_path(
     *,
     lookback_hours: int,
     history_limit: int,
+    trend_bucket_count: int = DEFAULT_TREND_BUCKET_COUNT,
 ) -> str:
     query: dict[str, int] = {}
     if "lookback_hours" in query_keys:
         query["lookback_hours"] = lookback_hours
     if "limit" in query_keys:
         query["limit"] = history_limit
+    if "bucket_count" in query_keys:
+        query["bucket_count"] = trend_bucket_count
     if not query:
         return path
     return f"{path}?{urlencode(query)}"
@@ -129,15 +134,21 @@ def collect_runtime_sample(
     *,
     lookback_hours: int,
     history_limit: int,
+    include_ops_trends: bool = False,
+    trend_bucket_count: int = DEFAULT_TREND_BUCKET_COUNT,
     timeout: int,
 ) -> RuntimeSample:
     endpoints: dict[str, EndpointRead] = {}
-    for name, path, query_keys in RUNTIME_ENDPOINTS:
+    endpoint_specs = list(RUNTIME_ENDPOINTS)
+    if include_ops_trends:
+        endpoint_specs.append(OPS_TRENDS_ENDPOINT)
+    for name, path, query_keys in endpoint_specs:
         full_path = build_endpoint_path(
             path,
             query_keys,
             lookback_hours=lookback_hours,
             history_limit=history_limit,
+            trend_bucket_count=trend_bucket_count,
         )
         endpoints[name] = fetch_json_endpoint(
             base_url,
@@ -159,6 +170,7 @@ def build_runtime_report(
     readiness_status_counts: Counter[str] = Counter()
     alert_counts: Counter[str] = Counter()
     latest_server: dict[str, Any] | None = None
+    latest_trend: dict[str, Any] | None = None
 
     for index, sample in enumerate(samples, start=1):
         for read in sample.endpoints.values():
@@ -218,6 +230,10 @@ def build_runtime_report(
                         },
                     )
 
+        trends_payload = _payload(sample.endpoints.get("ops_trends"))
+        if trends_payload:
+            latest_trend = _trend_snapshot(trends_payload)
+
         ops_readiness = sample.endpoints.get("ops_readiness")
         readiness_payload = _payload(ops_readiness)
         readiness_status = _readiness_status(readiness_payload)
@@ -264,6 +280,7 @@ def build_runtime_report(
         "readiness_status_counts": dict(sorted(readiness_status_counts.items())),
         "alert_counts": dict(sorted(alert_counts.items())),
         "latest_server": latest_server,
+        "latest_trend": latest_trend,
         "failures": endpoint_failures,
         "warnings": warnings,
     }
@@ -276,6 +293,8 @@ def run_runtime_check(
     interval_seconds: float,
     lookback_hours: int,
     history_limit: int,
+    include_ops_trends: bool,
+    trend_bucket_count: int,
     timeout: int,
     fail_on_warning: bool,
 ) -> dict[str, Any]:
@@ -286,6 +305,8 @@ def run_runtime_check(
                 base_url,
                 lookback_hours=lookback_hours,
                 history_limit=history_limit,
+                include_ops_trends=include_ops_trends,
+                trend_bucket_count=trend_bucket_count,
                 timeout=timeout,
             ),
         )
@@ -364,6 +385,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="OPS history event limit, default: 20.",
     )
     parser.add_argument(
+        "--include-ops-trends",
+        action="store_true",
+        help="Also read the read-only /ops/trends endpoint and summarize latest buckets.",
+    )
+    parser.add_argument(
+        "--trend-bucket-count",
+        type=int,
+        default=DEFAULT_TREND_BUCKET_COUNT,
+        help=f"OPS trend bucket count, default: {DEFAULT_TREND_BUCKET_COUNT}.",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=5,
@@ -401,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.history_limit < 1:
         print("[FAIL] --history-limit must be >= 1")
         return 2
+    if args.trend_bucket_count < 1:
+        print("[FAIL] --trend-bucket-count must be >= 1")
+        return 2
     if args.timeout < 1:
         print("[FAIL] --timeout must be >= 1")
         return 2
@@ -411,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
         interval_seconds=max(args.interval_seconds, 0),
         lookback_hours=args.lookback_hours,
         history_limit=args.history_limit,
+        include_ops_trends=args.include_ops_trends,
+        trend_bucket_count=args.trend_bucket_count,
         timeout=args.timeout,
         fail_on_warning=args.fail_on_warning,
     )
@@ -460,6 +497,9 @@ def _format_report(report: dict[str, Any]) -> str:
     latest_server = report.get("latest_server")
     if latest_server:
         lines.append(f"server={latest_server}")
+    latest_trend = report.get("latest_trend")
+    if latest_trend:
+        lines.append(f"trend={latest_trend}")
     if report.get("ops_evidence_output"):
         lines.append(f"ops_evidence_output={report['ops_evidence_output']}")
     if report.get("ops_evidence_status"):
@@ -510,6 +550,30 @@ def _server_snapshot(server: dict[str, Any]) -> dict[str, Any]:
         "is_disk_space_low": server.get("is_disk_space_low"),
         "is_cpu_pressure_high": server.get("is_cpu_pressure_high"),
         "is_memory_pressure_high": server.get("is_memory_pressure_high"),
+    }
+
+
+def _trend_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    buckets = _list_of_dicts(payload.get("buckets"))
+    latest_bucket = buckets[-1] if buckets else {}
+    return {
+        "bucket_count": _as_int(payload.get("bucket_count")),
+        "latest_bucket_started_at": latest_bucket.get("bucket_started_at"),
+        "latest_bucket_finished_at": latest_bucket.get("bucket_finished_at"),
+        "radar_scan_count": _as_int(latest_bucket.get("radar_scan_count")),
+        "radar_failure_count": _as_int(latest_bucket.get("radar_failure_count")),
+        "provider_fetch_unhealthy_count": _as_int(
+            latest_bucket.get("provider_fetch_unhealthy_count"),
+        ),
+        "data_quality_unhealthy_count": _as_int(
+            latest_bucket.get("data_quality_unhealthy_count"),
+        ),
+        "telegram_push_unhealthy_count": _as_int(
+            latest_bucket.get("telegram_push_unhealthy_count"),
+        ),
+        "model_call_unhealthy_count": _as_int(
+            latest_bucket.get("model_call_unhealthy_count"),
+        ),
     }
 
 

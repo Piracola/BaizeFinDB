@@ -25,6 +25,8 @@ from app.ops.schemas import (
     OpsReadinessCheckRead,
     OpsReadinessRead,
     OpsServerSummary,
+    OpsTrendBucketRead,
+    OpsTrendRead,
 )
 
 RADAR_STALE_INTERVAL_MULTIPLIER = 2
@@ -139,6 +141,52 @@ async def get_ops_history(
         limit=limit,
         recent_events=events,
         failure_summary=failure_summary,
+    )
+
+
+async def get_ops_trends(
+    session: AsyncSession,
+    *,
+    lookback_hours: int = 24,
+    bucket_count: int = 12,
+    now: datetime | None = None,
+) -> OpsTrendRead:
+    generated_at = _as_utc(now or datetime.now(UTC))
+    since = generated_at - timedelta(hours=lookback_hours)
+    settings = get_settings()
+    server = _server_summary(
+        now=generated_at,
+        disk_check_path=settings.ops_disk_check_path,
+        disk_free_percent_alert_threshold=(
+            settings.ops_disk_free_percent_alert_threshold
+        ),
+        cpu_usage_percent_alert_threshold=(
+            settings.ops_cpu_usage_percent_alert_threshold
+        ),
+        memory_used_percent_alert_threshold=(
+            settings.ops_memory_used_percent_alert_threshold
+        ),
+    )
+    buckets = _empty_trend_buckets(
+        since=since,
+        until=generated_at,
+        bucket_count=bucket_count,
+    )
+    await _fill_trend_counts(
+        session,
+        buckets=buckets,
+        since=since,
+        until=generated_at,
+    )
+    bucket_seconds = (generated_at - since).total_seconds() / bucket_count
+
+    return OpsTrendRead(
+        generated_at=generated_at,
+        lookback_hours=lookback_hours,
+        bucket_count=bucket_count,
+        bucket_seconds=round(bucket_seconds, 3),
+        server=server,
+        buckets=buckets,
     )
 
 
@@ -739,6 +787,163 @@ async def _failure_summary(
     )
 
     return summary
+
+
+def _empty_trend_buckets(
+    *,
+    since: datetime,
+    until: datetime,
+    bucket_count: int,
+) -> list[OpsTrendBucketRead]:
+    bucket_seconds = (until - since).total_seconds() / bucket_count
+    buckets: list[OpsTrendBucketRead] = []
+    for index in range(bucket_count):
+        started_at = since + timedelta(seconds=bucket_seconds * index)
+        finished_at = (
+            until
+            if index == bucket_count - 1
+            else since + timedelta(seconds=bucket_seconds * (index + 1))
+        )
+        buckets.append(
+            OpsTrendBucketRead(
+                bucket_index=index,
+                bucket_started_at=started_at,
+                bucket_finished_at=finished_at,
+                radar_scan_count=0,
+                radar_failure_count=0,
+                provider_fetch_total_count=0,
+                provider_fetch_unhealthy_count=0,
+                data_quality_total_count=0,
+                data_quality_unhealthy_count=0,
+                telegram_push_total_count=0,
+                telegram_push_unhealthy_count=0,
+                model_call_total_count=0,
+                model_call_unhealthy_count=0,
+            ),
+        )
+    return buckets
+
+
+async def _fill_trend_counts(
+    session: AsyncSession,
+    *,
+    buckets: list[OpsTrendBucketRead],
+    since: datetime,
+    until: datetime,
+) -> None:
+    await _fill_radar_trend_counts(session, buckets=buckets, since=since, until=until)
+    await _fill_status_trend_counts(
+        session,
+        status_column=ProviderFetchLog.status,
+        time_column=ProviderFetchLog.fetch_finished_at,
+        since=since,
+        until=until,
+        total_field="provider_fetch_total_count",
+        unhealthy_field="provider_fetch_unhealthy_count",
+        healthy_statuses={"success"},
+        buckets=buckets,
+    )
+    await _fill_status_trend_counts(
+        session,
+        status_column=DataQualityCheck.status,
+        time_column=DataQualityCheck.created_at,
+        since=since,
+        until=until,
+        total_field="data_quality_total_count",
+        unhealthy_field="data_quality_unhealthy_count",
+        healthy_statuses={"ok"},
+        buckets=buckets,
+    )
+    await _fill_status_trend_counts(
+        session,
+        status_column=PushLog.status,
+        time_column=PushLog.created_at,
+        since=since,
+        until=until,
+        total_field="telegram_push_total_count",
+        unhealthy_field="telegram_push_unhealthy_count",
+        healthy_statuses={"sent", "preview", "skipped"},
+        buckets=buckets,
+    )
+    await _fill_status_trend_counts(
+        session,
+        status_column=ModelCallLog.status,
+        time_column=ModelCallLog.created_at,
+        since=since,
+        until=until,
+        total_field="model_call_total_count",
+        unhealthy_field="model_call_unhealthy_count",
+        healthy_statuses={"success"},
+        buckets=buckets,
+    )
+
+
+async def _fill_radar_trend_counts(
+    session: AsyncSession,
+    *,
+    buckets: list[OpsTrendBucketRead],
+    since: datetime,
+    until: datetime,
+) -> None:
+    rows = await session.execute(
+        select(RadarScanBatch.started_at, RadarScanBatch.status).where(
+            RadarScanBatch.started_at >= since,
+            RadarScanBatch.started_at <= until,
+        ),
+    )
+    for occurred_at, status in rows.all():
+        bucket = _trend_bucket_for(_as_utc(occurred_at), buckets=buckets)
+        if bucket is None:
+            continue
+        bucket.radar_scan_count += 1
+        if str(status) == "failure":
+            bucket.radar_failure_count += 1
+
+
+async def _fill_status_trend_counts(
+    session: AsyncSession,
+    *,
+    status_column: Any,
+    time_column: Any,
+    since: datetime,
+    until: datetime,
+    total_field: str,
+    unhealthy_field: str,
+    healthy_statuses: set[str],
+    buckets: list[OpsTrendBucketRead],
+) -> None:
+    rows = await session.execute(
+        select(time_column, status_column).where(
+            time_column >= since,
+            time_column <= until,
+        ),
+    )
+    for occurred_at, status in rows.all():
+        bucket = _trend_bucket_for(_as_utc(occurred_at), buckets=buckets)
+        if bucket is None:
+            continue
+        setattr(bucket, total_field, getattr(bucket, total_field) + 1)
+        if str(status) not in healthy_statuses:
+            setattr(bucket, unhealthy_field, getattr(bucket, unhealthy_field) + 1)
+
+
+def _trend_bucket_for(
+    occurred_at: datetime,
+    *,
+    buckets: list[OpsTrendBucketRead],
+) -> OpsTrendBucketRead | None:
+    if not buckets:
+        return None
+    first = buckets[0]
+    last = buckets[-1]
+    if occurred_at < first.bucket_started_at or occurred_at > last.bucket_finished_at:
+        return None
+    for bucket in buckets:
+        if bucket.bucket_started_at <= occurred_at < bucket.bucket_finished_at:
+            return bucket
+    if occurred_at == last.bucket_finished_at:
+        return last
+    return None
 
 
 def _server_summary(

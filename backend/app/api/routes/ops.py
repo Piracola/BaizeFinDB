@@ -5,13 +5,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
-from app.ops.schemas import OpsHistoryRead, OpsOverviewRead, OpsReadinessRead
-from app.ops.service import get_ops_history, get_ops_overview, get_ops_readiness
+from app.ops.schemas import OpsHistoryRead, OpsOverviewRead, OpsReadinessRead, OpsTrendRead
+from app.ops.service import get_ops_history, get_ops_overview, get_ops_readiness, get_ops_trends
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 LookbackHoursQuery = Annotated[int, Query(ge=1, le=168)]
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
+BucketCountQuery = Annotated[int, Query(ge=1, le=48)]
 
 
 @router.get("/overview", response_model=OpsOverviewRead)
@@ -44,6 +45,25 @@ async def ops_history(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"database unavailable while reading ops history: {exc.__class__.__name__}",
+        ) from exc
+
+
+@router.get("/trends", response_model=OpsTrendRead)
+async def ops_trends(
+    session: SessionDep,
+    lookback_hours: LookbackHoursQuery = 24,
+    bucket_count: BucketCountQuery = 12,
+) -> OpsTrendRead:
+    try:
+        return await get_ops_trends(
+            session,
+            lookback_hours=lookback_hours,
+            bucket_count=bucket_count,
+        )
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"database unavailable while reading ops trends: {exc.__class__.__name__}",
         ) from exc
 
 

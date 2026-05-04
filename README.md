@@ -21,6 +21,7 @@
 - `/health/ready` PostgreSQL / Redis 就绪检查
 - `/ops/overview` 只读运行状态汇总：服务端进程、磁盘/CPU/内存资源、最近扫描、失败率、Provider 拉取、数据质量、Telegram 推送、模型降级和告警摘要
 - `/ops/history` 只读运维历史：最近扫描、Provider 异常、数据质量异常、Telegram 推送异常、模型降级/失败事件和异常汇总
+- `/ops/trends` 只读 OPS 趋势快照：按固定时间桶聚合已有运行表的扫描、Provider、数据质量、Telegram 推送和模型调用计数，并附带当前服务端资源上下文；它是后续趋势图和监控接入基础，不持久化资源采样，也不是完整监控系统
 - `/ops/readiness` 只读运行就绪自检：基于服务端磁盘/CPU/内存、雷达新鲜度、扫描失败率、Provider、数据质量、推送和模型调用给出 `ready` / `warning` / `blocked`
 - AKShare 最小 Provider：A 股行情、行业板块、概念板块
 - AKShare 情绪 Provider：涨停股池、跌停股池、炸板股池
@@ -118,13 +119,14 @@ uv run uvicorn app.main:app --reload
 - `http://127.0.0.1:8000/health/ready`
 - `http://127.0.0.1:8000/ops/overview?lookback_hours=24`
 - `http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20`
+- `http://127.0.0.1:8000/ops/trends?lookback_hours=24&bucket_count=12`
 - `http://127.0.0.1:8000/ops/readiness?lookback_hours=24`
 
 如果 PostgreSQL / Redis 还没启动，`/health` 仍会正常，`/health/ready` 会显示依赖未就绪。
 
 更完整的本地开发、数据库重置、AKShare 采集和雷达扫描流程见 [docs/runbooks/local-dev.md](docs/runbooks/local-dev.md)。
 
-Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、`/ops/readiness` 就绪自检契约、Tushare 状态契约、可选 Tushare `anns_d` Beat enablement 离线/no-token checklist 和 `pg_dump` 可用性，`infra/scripts/server_runtime_check.py` 可对运行中的 API 连续采样健康、OPS 和就绪状态并生成 JSON 报告，也可用 `--ops-evidence-output <path>` 在 warning/blocked 排障时同步写出脱敏 OPS evidence；`infra/scripts/export_ops_evidence.py` 可从同一组只读健康/OPS 端点单独导出脱敏 JSON evidence，用于区分历史 warning 与真正 blocker，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
+Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/runbooks/linux-server.md) 和 [infra/linux/](infra/linux/)。该骨架用于后续部署 API、静态 Web、Telegram webhook、Celery worker 和 Celery beat；`infra/scripts/server_deploy_check.py` 可检查 `.env`、compose 配置、容器状态、API 健康状态、只读 M5 JSON 契约、`/ops/overview` 运行状态和服务端资源契约、`/ops/history` 运维历史契约、`/ops/readiness` 就绪自检契约、Tushare 状态契约、可选 Tushare `anns_d` Beat enablement 离线/no-token checklist 和 `pg_dump` 可用性，`infra/scripts/server_runtime_check.py` 可对运行中的 API 连续采样健康、OPS 和就绪状态并生成 JSON 报告，也可用 `--include-ops-trends` 额外读取只读 `/ops/trends` 并输出 compact trend summary，还可用 `--ops-evidence-output <path>` 在 warning/blocked 排障时同步写出脱敏 OPS evidence；`infra/scripts/export_ops_evidence.py` 可从同一组只读健康/OPS 端点单独导出脱敏 JSON evidence，用于区分历史 warning 与真正 blocker，`infra/scripts/postgres_backup.py` 可通过 server compose overlay 生成 PostgreSQL `pg_dump` 备份，`infra/scripts/postgres_restore.py` 可在显式确认后从备份恢复。不代表完整生产部署已经完成。
 
 ## Windows 客户端 MVP
 
