@@ -377,7 +377,7 @@ def test_smoke_check_writes_compact_json_without_payloads_or_raw_responses(
             "message": "Provider failed with token=<redacted> and source_url=<redacted>",
         },
     ]
-    assert '"payload"' not in encoded
+    assert "payload" not in encoded.lower()
     assert "endpoint_payload" not in encoded
     assert "raw_token" not in encoded
     assert "metadata-secret" not in encoded
@@ -394,7 +394,11 @@ def test_smoke_check_main_can_write_detailed_and_compact_json(
     detailed_output = tmp_path / "smoke.json"
     compact_output = tmp_path / "compact-smoke.json"
     report = smoke_check.SmokeReport(server_url="http://localhost:8000")
-    report.add_ok("tkinter", "Tkinter imports without opening a GUI window.", {"raw": "payload"})
+    report.add_ok(
+        "health",
+        "Endpoint returned a valid JSON payload.",
+        {"raw": "payload"},
+    )
 
     monkeypatch.setattr(smoke_check, "run_smoke_check", lambda **kwargs: report)
 
@@ -407,8 +411,13 @@ def test_smoke_check_main_can_write_detailed_and_compact_json(
         ],
     ) == 0
 
-    assert "payload" in detailed_output.read_text(encoding="utf-8")
-    assert "payload" not in compact_output.read_text(encoding="utf-8")
+    detailed_encoded = detailed_output.read_text(encoding="utf-8")
+    compact_encoded = compact_output.read_text(encoding="utf-8")
+
+    assert "Endpoint returned a valid JSON payload." in detailed_encoded
+    assert '"payload"' in detailed_encoded
+    assert "Endpoint returned a valid JSON response." in compact_encoded
+    assert "payload" not in compact_encoded.lower()
 
 
 def test_smoke_check_sanitizes_warning_and_blocker_text() -> None:

@@ -168,12 +168,12 @@ def report_to_compact_json(report: SmokeReport) -> JsonObject:
             {
                 "name": check.name,
                 "status": check.status,
-                "message": _sanitize_message(check.message),
+                "message": _sanitize_compact_message(check.message),
             }
             for check in report.checks
         ],
-        "warnings": [_sanitize_message(item) for item in report.warnings],
-        "blockers": [_sanitize_message(item) for item in report.blockers],
+        "warnings": [_sanitize_compact_message(item) for item in report.warnings],
+        "blockers": [_sanitize_compact_message(item) for item in report.blockers],
         "ops_readiness_non_ok_checks": _compact_ops_readiness_non_ok_checks(report),
     }
 
@@ -506,6 +506,13 @@ def _ops_readiness_diagnostics(payload: Mapping[str, Any]) -> list[str]:
     return diagnostics
 
 
+def _sanitize_compact_message(message: str) -> str:
+    sanitized = _sanitize_message(message)
+    sanitized = re.sub(r"(?i)\bJSON payloads?\b", "JSON response", sanitized)
+    sanitized = re.sub(r"(?i)\bendpoint payloads?\b", "endpoint responses", sanitized)
+    return re.sub(r"(?i)\bpayloads?\b", "response data", sanitized)
+
+
 def _compact_ops_readiness_non_ok_checks(report: SmokeReport) -> list[JsonObject]:
     for check in report.checks:
         if check.name != "ops_readiness" or not isinstance(check.payload, Mapping):
@@ -527,7 +534,7 @@ def _compact_ops_readiness_non_ok_checks(report: SmokeReport) -> list[JsonObject
                         _bounded_text(str(readiness_check.get("name") or "unnamed_check")),
                     ),
                     "status": _sanitize_message(_bounded_text(status)),
-                    "message": _sanitize_message(
+                    "message": _sanitize_compact_message(
                         _bounded_text(
                             str(readiness_check.get("message") or "No message returned."),
                         ),
