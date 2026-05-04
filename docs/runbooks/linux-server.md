@@ -86,7 +86,7 @@ uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
 ```
 
-当 readiness 因历史 Provider 或数据质量失败显示 `warning`，或运行采样已经判断为 `blocked`，但需要给开发者保留一份可分享的排障证据时，可以在 runtime check 同一条命令里加 `--ops-evidence-output <path>`。runtime check 会继续做原本的短窗口采样，并额外复用 `export_ops_evidence.py` 的脱敏报告逻辑写入只读 OPS evidence；evidence 导出只 GET `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不会触发采集、扫描、推送、模型、备份、清理或数据库写入。若 evidence 导出本身失败，runtime check 会带清晰错误返回失败：
+当 readiness 因历史 Provider 或数据质量失败显示 `warning`，或运行采样已经判断为 `blocked`，但需要给开发者保留一份可分享的排障证据时，可以在 runtime check 同一条命令里加 `--ops-evidence-output <path>`。runtime check 会继续做原本的短窗口采样，并额外复用 `export_ops_evidence.py` 的脱敏报告逻辑写入只读 OPS evidence；evidence 导出只 GET `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不会触发采集、扫描、推送、模型、备份、清理或数据库写入。若 evidence 导出本身读取失败或导出的 readiness 为 `blocked`，runtime check 会带清晰错误返回失败；普通 `warning` 仍为零退出码：
 
 ```powershell
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --ops-evidence-output evidence/ops-evidence.json

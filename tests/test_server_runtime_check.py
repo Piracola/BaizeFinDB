@@ -346,10 +346,37 @@ def test_main_writes_ops_evidence_for_blocked_runtime(monkeypatch, tmp_path, cap
     payload = json.loads(output_path.read_text(encoding="utf-8"))
 
     assert exit_code == 1
-    assert captured.err == ""
+    assert "OPS evidence export returned a failing status" in captured.err
     assert payload["status"] == "blocked"
     assert payload["summary"]["blocked"] is True
-    assert "ops_evidence_status=blocked" in captured.out
+    assert "ops_evidence_error=" in captured.out
+
+
+def test_main_fails_when_ops_evidence_is_blocked_even_if_runtime_is_ok(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    monkeypatch.setattr(
+        server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(status="ok"),
+    )
+    monkeypatch.setattr(
+        server_runtime_check.export_ops_evidence,
+        "collect_ops_evidence",
+        lambda *args, **kwargs: _evidence_reads(readiness_status="blocked"),
+    )
+    output_path = tmp_path / "ops-evidence.json"
+
+    exit_code = server_runtime_check.main(["--ops-evidence-output", str(output_path)])
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 1
+    assert payload["status"] == "blocked"
+    assert "OPS evidence export returned a failing status" in captured.err
+    assert "ops_evidence_error=" in captured.out
 
 
 def test_main_fails_when_ops_evidence_export_fails(monkeypatch, tmp_path, capsys) -> None:
@@ -379,7 +406,7 @@ def test_main_fails_when_ops_evidence_export_fails(monkeypatch, tmp_path, capsys
 
     assert exit_code == 1
     assert payload["status"] == "error"
-    assert "OPS evidence export failed" in captured.err
+    assert "OPS evidence export returned a failing status" in captured.err
     assert "ops_evidence_error=" in captured.out
 
 

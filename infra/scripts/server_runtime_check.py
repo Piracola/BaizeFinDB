@@ -321,11 +321,11 @@ def write_ops_evidence_report(
     encoded = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(encoded, encoding="utf-8")
-    if report.get("status") == "error":
+    if export_ops_evidence.exit_code_for_report(report) != 0:
         failures = report.get("failures")
         raise OpsEvidenceExportError(
-            "OPS evidence export failed while reading allowed health/OPS endpoints: "
-            f"{failures}",
+            "OPS evidence export returned a failing status while reading allowed "
+            f"health/OPS endpoints: status={report.get('status')!r} failures={failures}",
         )
     return report
 
