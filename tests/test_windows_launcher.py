@@ -130,6 +130,97 @@ def test_first_trial_launcher_start_docker_backend_runs_compose_before_delegatio
     ]
 
 
+def test_first_trial_launcher_start_docker_backend_can_write_deploy_check_json(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output}"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(
+        tmp_path,
+        "-DeployCheckJsonOutput",
+        str(tmp_path / "server-deploy-check.json"),
+    )
+
+    assert result.returncode == 2
+    assert calls == []
+    assert "-DeployCheckJsonOutput requires -StartDockerBackend" in result.stderr
+
+
+def test_first_trial_launcher_deploy_check_failure_blocks_smoke_and_gui(
+    tmp_path: Path,
+) -> None:
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(tmp_path / "server-deploy-check.json"),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+            deploy_check_exit=31,
+        )
+
+    assert result.returncode == 31
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {tmp_path / 'server-deploy-check.json'}"
+        ),
+    ]
+
+
 def test_first_trial_launcher_start_docker_backend_smoke_only_runs_compose_before_smoke(
     tmp_path: Path,
 ) -> None:
@@ -395,6 +486,7 @@ def _run_first_trial_launcher_with_docker(
     smoke_exit: int = 0,
     docker_fail_match: str = "",
     docker_exit: int = 11,
+    deploy_check_exit: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if powershell is None:
@@ -415,6 +507,7 @@ def _run_first_trial_launcher_with_docker(
     env["BAIZEFINDB_FAKE_GUI_EXIT"] = "0"
     env["BAIZEFINDB_FAKE_DOCKER_FAIL_MATCH"] = docker_fail_match
     env["BAIZEFINDB_FAKE_DOCKER_EXIT"] = str(docker_exit)
+    env["BAIZEFINDB_FAKE_DEPLOY_CHECK_EXIT"] = str(deploy_check_exit)
 
     result = subprocess.run(
         [
@@ -492,6 +585,8 @@ def _write_fake_python(path: Path) -> None:
             [
                 "@echo off",
                 "echo %*>> \"%BAIZEFINDB_PYTHON_CALLS%\"",
+                "if \"%1\"==\"infra/scripts/server_deploy_check.py\" "
+                "exit /b %BAIZEFINDB_FAKE_DEPLOY_CHECK_EXIT%",
                 "if \"%1\"==\"-m\" if \"%2\"==\"clients.windows.smoke_check\" "
                 "exit /b %BAIZEFINDB_FAKE_SMOKE_EXIT%",
                 "if \"%1\"==\"-m\" if \"%2\"==\"clients.windows.baizefindb_client\" "

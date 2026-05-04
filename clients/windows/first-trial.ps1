@@ -5,6 +5,7 @@ param(
     [int]$SmokeLookbackHours = 24,
     [string]$SmokeJsonOutput,
     [string]$SmokeCompactJsonOutput,
+    [string]$DeployCheckJsonOutput,
     [switch]$SmokeStrict,
     [switch]$SmokeOnly,
     [switch]$StartDockerBackend,
@@ -76,6 +77,24 @@ function Wait-BackendHealth {
     exit 1
 }
 
+function Invoke-DeployCheck {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$JsonOutput
+    )
+
+    & python infra/scripts/server_deploy_check.py --check-containers --check-api --json-output $JsonOutput
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("Server deploy preflight failed with exit code $LASTEXITCODE")
+        exit $LASTEXITCODE
+    }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput) -and -not $StartDockerBackend) {
+    [Console]::Error.WriteLine("-DeployCheckJsonOutput requires -StartDockerBackend")
+    exit 2
+}
+
 if ($StartDockerBackend) {
     Set-Location $RepoRoot
     Invoke-BackendCompose -ComposeArgs @("build", "api")
@@ -83,6 +102,10 @@ if ($StartDockerBackend) {
     Invoke-BackendCompose -ComposeArgs @("run", "--rm", "api", "alembic", "upgrade", "head")
     Invoke-BackendCompose -ComposeArgs @("up", "-d", "api", "worker", "beat")
     Wait-BackendHealth -HealthUrl (Join-HealthUrl -BaseUrl $ServerUrl) -TimeoutSeconds $BackendHealthTimeoutSeconds -PollIntervalSeconds $BackendHealthPollIntervalSeconds
+
+    if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
+        Invoke-DeployCheck -JsonOutput $DeployCheckJsonOutput
+    }
 }
 
 $RunParams = @{
