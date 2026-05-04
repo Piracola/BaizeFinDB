@@ -67,6 +67,23 @@ class SuccessfulTushareStockProvider:
         return normalize_tushare_dataframe(dataframe, TUSHARE_ENDPOINTS[endpoint])
 
 
+class SuccessfulTushareAnnouncementProvider:
+    async def fetch(self, endpoint: str, **kwargs):
+        dataframe = pd.DataFrame(
+            [
+                {
+                    "ann_date": "20260504",
+                    "ts_code": "600000.SH",
+                    "name": "浦发银行",
+                    "title": "年度报告摘要",
+                    "url": "https://example.invalid/announcement",
+                    "rec_time": "09:30:00",
+                }
+            ]
+        )
+        return normalize_tushare_dataframe(dataframe, TUSHARE_ENDPOINTS[endpoint])
+
+
 @pytest_asyncio.fixture
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(
@@ -284,11 +301,11 @@ async def test_tushare_readiness_api_returns_database_state(
         payload["scheduler_policy"]
         == "anns_d_celery_beat_disabled_by_default_enable_with_tushare_anns_d_beat_enabled"
     )
-    assert payload["scheduler_ready_endpoint_count"] == 1
+    assert payload["scheduler_ready_endpoint_count"] == 0
     assert "secret-tushare-token" not in response.text
 
     by_endpoint = {item["endpoint"]: item for item in payload["endpoints"]}
-    assert by_endpoint["stock_basic"]["scheduler_eligible"] is True
+    assert by_endpoint["stock_basic"]["scheduler_eligible"] is False
     assert by_endpoint["stock_basic"]["latest_status"] == "success"
     assert by_endpoint["stock_basic"]["latest_quality_status"] == "ok"
     assert by_endpoint["anns_d"]["status"] == "warning"
@@ -313,3 +330,30 @@ async def test_tushare_readiness_reflects_explicit_scheduler_enablement(
         "anns_d_celery_beat_enabled_explicitly;interval_seconds=1800"
     )
     assert "secret-tushare-token" not in readiness.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_tushare_readiness_only_announcements_are_scheduler_eligible(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        await collect_tushare_endpoint(
+            session,
+            SuccessfulTushareStockProvider(),
+            "stock_basic",
+        )
+        await collect_tushare_endpoint(
+            session,
+            SuccessfulTushareAnnouncementProvider(),
+            "anns_d",
+        )
+        readiness = await get_tushare_readiness(
+            session,
+            settings=Settings(TUSHARE_TOKEN="secret-tushare-token"),
+        )
+
+    by_endpoint = {item.endpoint: item for item in readiness.endpoints}
+
+    assert readiness.scheduler_ready_endpoint_count == 1
+    assert by_endpoint["anns_d"].scheduler_eligible is True
+    assert by_endpoint["stock_basic"].scheduler_eligible is False

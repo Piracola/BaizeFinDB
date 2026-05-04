@@ -332,7 +332,8 @@ async def get_tushare_readiness(
         endpoint_status = _provider_readiness_status(checks)
         manual_fetch_eligible = spec.implemented and provider_status.token_configured
         scheduler_eligible = (
-            manual_fetch_eligible
+            spec.endpoint == "anns_d"
+            and manual_fetch_eligible
             and latest_log is not None
             and latest_log.status == ProviderStatus.SUCCESS.value
             and latest_log.row_count > 0

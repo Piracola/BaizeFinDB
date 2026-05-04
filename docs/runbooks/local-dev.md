@@ -146,7 +146,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=s
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
-如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。后续接调度前，还需要补真实 token 验证、字段漂移样例和端到端误报样例。
+如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，还需要补真实 token 验证、字段漂移样例、积分消耗评估和端到端误报样例。
 
 ### 4.4 基于最新快照运行雷达扫描
 

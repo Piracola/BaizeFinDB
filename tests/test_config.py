@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 
@@ -45,6 +48,17 @@ def test_settings_reads_environment(monkeypatch) -> None:
     assert settings.tushare_anns_d_beat_interval_seconds == 1800
     assert settings.ops_cpu_usage_percent_alert_threshold == 85.0
     assert settings.ops_memory_used_percent_alert_threshold == 88.0
+
+
+@pytest.mark.parametrize("interval_seconds", ["0", "-1"])
+def test_tushare_announcements_beat_interval_must_be_positive(
+    monkeypatch,
+    interval_seconds: str,
+) -> None:
+    monkeypatch.setenv("TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS", interval_seconds)
+
+    with pytest.raises(ValidationError):
+        Settings()
 
 
 def test_settings_reads_telegram_environment(monkeypatch) -> None:
