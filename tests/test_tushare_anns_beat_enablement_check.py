@@ -54,6 +54,37 @@ def test_enabled_env_behavior_is_visible_warning() -> None:
     assert by_id["beat_enabled_state"]["details"]["enabled"] is True
     assert by_id["beat_interval"]["status"] == "pass"
     assert by_id["beat_interval"]["details"]["interval_seconds"] == 1800
+    assert payload["safe_to_enable_beat"] is False
+
+
+def test_readiness_opt_in_does_not_make_checklist_safe_without_live_verify(monkeypatch) -> None:
+    def fake_fetch_json(url: str, timeout_seconds: float) -> dict[str, object]:
+        assert url == "http://example.test/readiness"
+        assert timeout_seconds == 1.5
+        return {
+            "status": "ready",
+            "scheduler_enabled": False,
+        }
+
+    monkeypatch.setattr(check_tushare_anns_d_beat_enablement, "_fetch_json", fake_fetch_json)
+
+    payload = check_tushare_anns_d_beat_enablement.build_report(
+        environ={
+            "TUSHARE_TOKEN": "secret-token",
+            "TUSHARE_ANNS_D_BEAT_ENABLED": "false",
+            "TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS": "1800",
+        },
+        check_readiness=True,
+        readiness_url="http://example.test/readiness",
+        timeout_seconds=1.5,
+    )
+    by_id = {item["id"]: item for item in payload["checklist"]}
+
+    assert payload["mode"] == "readiness_opt_in"
+    assert by_id["readiness_live_data"]["status"] == "pass"
+    assert by_id["live_tushare_verify"]["status"] == "warn"
+    assert payload["safe_to_enable_beat"] is False
+    assert "secret-token" not in json.dumps(payload)
 
 
 def test_disabled_env_behavior_uses_default_interval() -> None:

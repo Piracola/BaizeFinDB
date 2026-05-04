@@ -343,7 +343,9 @@ def _safe_to_enable(checklist: list[dict[str, object]]) -> bool:
     required_gate_ids = {
         "offline_sample_preflight",
         "tushare_token",
+        "beat_enabled_state",
         "beat_interval",
+        "live_tushare_verify",
         "readiness_live_data",
     }
     by_id = {str(item["id"]): item for item in checklist}
