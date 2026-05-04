@@ -111,6 +111,31 @@ def test_ops_warning_drilldown_blocks_invalid_lookback_before_worker(
     ]
 
 
+def test_ops_trends_blocks_invalid_lookback_before_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("0")
+    errors: list[tuple[str, str]] = []
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start for invalid lookback")
+
+    def fake_showerror(title: str, message: str) -> None:
+        errors.append((title, message))
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "showerror", fake_showerror)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.view_ops_trends()
+
+    assert errors == [
+        (
+            baizefindb_client.WINDOW_TITLE,
+            "OPS Lookback 必须是 1 到 168 之间的整数小时。",
+        ),
+    ]
+
+
 def test_first_use_smoke_check_passes_current_gui_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -213,11 +238,50 @@ def test_ops_warning_drilldown_reads_three_ops_endpoints_with_selected_lookback(
     assert calls["result"] == "formatted drilldown"
 
 
+def test_ops_trends_reads_endpoint_with_selected_lookback_and_default_bucket_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("6")
+    calls: dict[str, Any] = {}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_fetch(base_url: str, **kwargs: object) -> dict[str, object]:
+        calls["base_url"] = base_url
+        calls["kwargs"] = kwargs
+        return {"bucket_count": 12}
+
+    def fake_format(payload: object) -> str:
+        calls["format_payload"] = payload
+        return "formatted trends"
+
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(baizefindb_client.client_api, "fetch_ops_trends", fake_fetch)
+    monkeypatch.setattr(baizefindb_client.client_api, "format_ops_trends", fake_format)
+
+    app.view_ops_trends()
+
+    assert calls["action"] == "读取 OPS 趋势"
+    assert calls["base_url"] == "http://localhost:8000"
+    assert calls["kwargs"] == {"lookback_hours": 6, "bucket_count": 12}
+    assert calls["format_payload"] == {"bucket_count": 12}
+    assert calls["result"] == "formatted trends"
+
+
+def test_gui_declares_ops_trends_button() -> None:
+    source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
+
+    assert "OPS 趋势" in source
+
+
 @pytest.mark.parametrize(
     "method_name,fetch_name,format_name,expected_action",
     [
         ("view_ops_overview", "fetch_ops_overview", "format_ops_overview", "读取运行状态"),
         ("view_ops_history", "fetch_ops_history", "format_ops_history", "读取运维历史"),
+        ("view_ops_trends", "fetch_ops_trends", "format_ops_trends", "读取 OPS 趋势"),
         (
             "view_ops_readiness",
             "fetch_ops_readiness",
@@ -260,4 +324,6 @@ def test_ops_views_pass_selected_lookback_to_api_helpers(
     assert calls["kwargs"]["lookback_hours"] == 6
     if method_name == "view_ops_history":
         assert calls["kwargs"]["limit"] == 20
+    if method_name == "view_ops_trends":
+        assert calls["kwargs"]["bucket_count"] == 12
     assert calls["result"] == "formatted:ok"

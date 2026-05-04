@@ -115,6 +115,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "运行状态", self.view_ops_overview)
         self._add_button(button_frame, "运维历史", self.view_ops_history)
         self._add_button(button_frame, "就绪自检", self.view_ops_readiness)
+        self._add_button(button_frame, "OPS 趋势", self.view_ops_trends)
         self._add_button(button_frame, "告警钻取", self.view_ops_warning_drilldown)
         self._add_button(button_frame, "首用诊断", self.run_first_use_smoke_check)
         self._add_button(button_frame, "数据源状态", self.view_tushare_status)
@@ -212,6 +213,23 @@ class BaizeFinDBClientApp:
             return client_api.format_ops_readiness(readiness)
 
         self._run_worker("读取运行就绪自检", worker)
+
+    def view_ops_trends(self) -> None:
+        try:
+            lookback_hours = self._normalized_ops_lookback_hours()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        def worker() -> str:
+            trends = client_api.fetch_ops_trends(
+                self._normalized_server_url(),
+                lookback_hours=lookback_hours,
+                bucket_count=client_api.OPS_TREND_BUCKET_COUNT,
+            )
+            return client_api.format_ops_trends(trends)
+
+        self._run_worker("读取 OPS 趋势", worker)
 
     def view_ops_warning_drilldown(self) -> None:
         try:

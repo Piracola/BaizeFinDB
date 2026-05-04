@@ -187,6 +187,33 @@ def test_fetch_ops_readiness_uses_lookback_query() -> None:
     assert payload["status"] == "ready"
 
 
+def test_fetch_ops_trends_uses_lookback_and_bucket_count_query() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        return FakeResponse(
+            json.dumps(
+                {
+                    "generated_at": "2026-05-04T09:30:00Z",
+                    "lookback_hours": 12,
+                    "bucket_count": 12,
+                    "buckets": [],
+                },
+            ),
+        )
+
+    payload = client_api.fetch_ops_trends(
+        "http://localhost:8000",
+        lookback_hours=12,
+        bucket_count=12,
+        opener=opener,
+    )
+
+    assert calls["url"] == "http://localhost:8000/ops/trends?lookback_hours=12&bucket_count=12"
+    assert payload["bucket_count"] == 12
+
+
 def test_fetch_tushare_status_uses_provider_status_endpoint() -> None:
     calls = {}
 
@@ -456,6 +483,52 @@ def test_format_ops_warning_drilldown_prioritizes_backend_warning_fields() -> No
     )
     assert "timeout" in text
     assert "不触发采集、扫描、推送、模型调用或证据写入" in text
+
+
+def test_format_ops_trends_uses_backend_bucket_counts_only() -> None:
+    text = client_api.format_ops_trends(
+        {
+            "lookback_hours": 12,
+            "bucket_count": 12,
+            "buckets": [
+                {
+                    "bucket_started_at": "2026-05-04T07:00:00Z",
+                    "bucket_finished_at": "2026-05-04T08:00:00Z",
+                    "radar_scan_count": 1,
+                    "radar_failure_count": 0,
+                    "provider_fetch_unhealthy_count": 1,
+                    "data_quality_unhealthy_count": 0,
+                    "telegram_push_unhealthy_count": 0,
+                    "model_call_unhealthy_count": 0,
+                    "recent_scan_failure_rate": 0.0,
+                    "status": "ready",
+                },
+                {
+                    "bucket_started_at": "2026-05-04T08:00:00Z",
+                    "bucket_finished_at": "2026-05-04T09:00:00Z",
+                    "radar_scan_count": 2,
+                    "radar_failure_count": 1,
+                    "provider_fetch_unhealthy_count": 2,
+                    "data_quality_unhealthy_count": 3,
+                    "telegram_push_unhealthy_count": 4,
+                    "model_call_unhealthy_count": 5,
+                    "alerts": [{"message": "do not inspect"}],
+                    "status": "blocked",
+                },
+            ],
+        },
+    )
+
+    assert "OPS 趋势" in text
+    assert "统计窗口：最近 12 小时" in text
+    assert "趋势桶：12 桶" in text
+    assert "扫描：2 / 失败 1" in text
+    assert "Provider=2 / 数据质量=3 / Telegram 推送=4 / 模型调用=5" in text
+    assert "扫描=1 | 失败=0 | Provider=1 | 数据质量=0 | 推送=0 | 模型=0" in text
+    assert "不本地推导 OPS readiness 或状态" in text
+    assert "recent_scan_failure_rate" not in text
+    assert "blocked" not in text
+    assert "do not inspect" not in text
 
 
 def test_format_tushare_status_outputs_read_only_provider_state() -> None:

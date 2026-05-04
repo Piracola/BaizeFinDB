@@ -18,6 +18,8 @@ SUBJECTS_PREVIEW_LIMIT = 8
 REPORT_PREVIEW_LIMIT = 20
 TELEGRAM_BINDING_PREVIEW_LIMIT = 20
 OPS_HISTORY_PREVIEW_LIMIT = 12
+OPS_TREND_BUCKET_COUNT = 12
+OPS_TREND_PREVIEW_LIMIT = 6
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
@@ -324,6 +326,25 @@ def fetch_ops_readiness(
         opener=opener,
     )
     return _expect_object(payload, "/ops/readiness")
+
+
+def fetch_ops_trends(
+    base_url: str | None,
+    *,
+    lookback_hours: int = 24,
+    bucket_count: int = OPS_TREND_BUCKET_COUNT,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    payload = get_json(
+        base_url,
+        "/ops/trends",
+        query={
+            "lookback_hours": _positive_int(lookback_hours, "lookback_hours"),
+            "bucket_count": _positive_int(bucket_count, "bucket_count"),
+        },
+        opener=opener,
+    )
+    return _expect_object(payload, "/ops/trends")
 
 
 def fetch_tushare_status(
@@ -760,6 +781,65 @@ def format_ops_warning_drilldown(
             )
     else:
         lines.append("- 暂无")
+
+    lines.extend(
+        [
+            "该视图只读取已有运行记录，不触发采集、扫描、推送、模型调用或证据写入。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def format_ops_trends(payload: Mapping[str, Any]) -> str:
+    buckets = [_mapping(bucket) for bucket in _sequence(payload.get("buckets"))]
+    lines = [
+        "OPS 趋势",
+        f"统计窗口：最近 {_int_text(payload.get('lookback_hours'))} 小时",
+        f"趋势桶：{_int_text(payload.get('bucket_count'))} 桶",
+        "该视图只展示后端 /ops/trends 返回的趋势桶计数，不本地推导 OPS readiness 或状态。",
+    ]
+
+    if not buckets:
+        lines.extend(["最新桶：暂无", "最近桶：暂无", "", DISCLAIMER])
+        return _trim_text("\n".join(lines))
+
+    latest = buckets[-1]
+    lines.extend(
+        [
+            "",
+            "最新桶：",
+            f"时间：{_ops_bucket_range_text(latest)}",
+            (
+                "扫描："
+                f"{_int_text(latest.get('radar_scan_count'))} / "
+                f"失败 {_int_text(latest.get('radar_failure_count'))}"
+            ),
+            (
+                "异常计数："
+                f"Provider={_int_text(latest.get('provider_fetch_unhealthy_count'))} / "
+                f"数据质量={_int_text(latest.get('data_quality_unhealthy_count'))} / "
+                f"Telegram 推送={_int_text(latest.get('telegram_push_unhealthy_count'))} / "
+                f"模型调用={_int_text(latest.get('model_call_unhealthy_count'))}"
+            ),
+            "",
+            "最近桶：",
+        ],
+    )
+
+    for bucket in reversed(buckets[-OPS_TREND_PREVIEW_LIMIT:]):
+        lines.append(
+            (
+                f"- {_ops_bucket_range_text(bucket)} | "
+                f"扫描={_int_text(bucket.get('radar_scan_count'))} | "
+                f"失败={_int_text(bucket.get('radar_failure_count'))} | "
+                f"Provider={_int_text(bucket.get('provider_fetch_unhealthy_count'))} | "
+                f"数据质量={_int_text(bucket.get('data_quality_unhealthy_count'))} | "
+                f"推送={_int_text(bucket.get('telegram_push_unhealthy_count'))} | "
+                f"模型={_int_text(bucket.get('model_call_unhealthy_count'))}"
+            ),
+        )
 
     lines.extend(
         [
@@ -1293,6 +1373,13 @@ def _ops_failure_summary_text(items: Sequence[Any]) -> str:
             ),
         )
     return " / ".join(parts)
+
+
+def _ops_bucket_range_text(bucket: Mapping[str, Any]) -> str:
+    return (
+        f"{_text(bucket.get('bucket_started_at'), '未返回')} - "
+        f"{_text(bucket.get('bucket_finished_at'), '未返回')}"
+    )
 
 
 def _prioritized_ops_failure_summary(items: Sequence[Any]) -> list[Any]:
