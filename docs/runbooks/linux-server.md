@@ -148,6 +148,15 @@ uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 uv run python infra/scripts/server_deploy_check.py --check-backup
 ```
 
+需要把同一项备份工具链检查纳入部署预检证据时，可以让部署预检直接写
+check-only evidence。该路径复用 `postgres_backup.py --check-only`，只验证
+repo root、输出路径元数据、compose 命令形态和 `pg_dump --version`，不会导出
+数据库内容：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --check-backup --backup-check-json-output evidence/postgres-backup-check.json
+```
+
 通过备份脚本验证 repo root、输出路径元数据、compose 命令形态和
 `pg_dump --version`，并保存不含数据库内容的有界证据：
 

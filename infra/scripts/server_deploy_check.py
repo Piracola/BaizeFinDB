@@ -124,6 +124,40 @@ def pg_dump_version_command(service: str = DEFAULT_POSTGRES_SERVICE) -> list[str
     return server_compose_command("exec", "-T", service, "pg_dump", "--version")
 
 
+def check_backup_evidence(
+    root: Path,
+    *,
+    service: str,
+    check_json_output: str,
+) -> CheckResult:
+    try:
+        exit_code = _run_postgres_backup_check_only(
+            root,
+            service=service,
+            check_json_output=check_json_output,
+        )
+    except Exception as exc:
+        detail = _truncate(str(exc), limit=250)
+        return CheckResult(
+            "postgres backup check evidence",
+            "fail",
+            f"backup check evidence failed: {exc.__class__.__name__}: {detail}",
+        )
+
+    if exit_code == 0:
+        return CheckResult(
+            "postgres backup check evidence",
+            "ok",
+            f"evidence written: {check_json_output}",
+        )
+
+    return CheckResult(
+        "postgres backup check evidence",
+        "fail",
+        f"backup check-only returned exit code {exit_code}",
+    )
+
+
 def check_env(root: Path, *, strict: bool) -> CheckResult:
     env_path = root / ".env"
     if env_path.exists():
@@ -297,6 +331,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verify pg_dump is available in the PostgreSQL compose service.",
     )
     parser.add_argument(
+        "--backup-check-json-output",
+        default=None,
+        help=(
+            "Write sanitized PostgreSQL backup check-only evidence JSON to this path. "
+            "Requires --check-backup and does not export database data."
+        ),
+    )
+    parser.add_argument(
         "--postgres-service",
         default=DEFAULT_POSTGRES_SERVICE,
         help=f"PostgreSQL compose service for --check-backup, default: {DEFAULT_POSTGRES_SERVICE}",
@@ -321,7 +363,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.backup_check_json_output and not args.check_backup:
+        parser.error("--backup-check-json-output requires --check-backup")
+
     root = find_repo_root()
     checks = [
         check_env(root, strict=args.strict_env),
@@ -356,13 +402,22 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.check_backup:
-        checks.append(
-            run_command(
-                "postgres pg_dump available",
-                pg_dump_version_command(args.postgres_service),
-                root,
-            ),
-        )
+        if args.backup_check_json_output:
+            checks.append(
+                check_backup_evidence(
+                    root,
+                    service=args.postgres_service,
+                    check_json_output=args.backup_check_json_output,
+                ),
+            )
+        else:
+            checks.append(
+                run_command(
+                    "postgres pg_dump available",
+                    pg_dump_version_command(args.postgres_service),
+                    root,
+                ),
+            )
 
     if args.check_api:
         checks.extend(
@@ -400,6 +455,36 @@ def _build_tushare_anns_d_beat_enablement_report() -> dict[str, object]:
         from check_tushare_anns_d_beat_enablement import build_report
 
     return build_report(check_readiness=False)
+
+
+def _load_postgres_backup_helper():
+    try:
+        from infra.scripts import postgres_backup
+    except ModuleNotFoundError:
+        import postgres_backup
+
+    return postgres_backup
+
+
+def _run_postgres_backup_check_only(
+    root: Path,
+    *,
+    service: str,
+    check_json_output: str,
+) -> int:
+    postgres_backup = _load_postgres_backup_helper()
+    backup_dir = "backups"
+    output_path = postgres_backup.backup_path(root, backup_dir, None)
+    return postgres_backup.run_check_only(
+        root,
+        output_path,
+        backup_dir=backup_dir,
+        explicit_output=None,
+        check_json_output=check_json_output,
+        service=service,
+        db_user=postgres_backup.DEFAULT_DB_USER,
+        db_name=postgres_backup.DEFAULT_DB_NAME,
+    )
 
 
 def _format_tushare_anns_d_beat_enablement_summary(report: dict[str, object]) -> str:

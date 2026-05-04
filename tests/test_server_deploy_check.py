@@ -2,6 +2,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 MODULE_PATH = (
     Path(__file__).resolve().parents[1]
     / "infra"
@@ -43,6 +45,88 @@ def test_pg_dump_version_command_uses_postgres_service() -> None:
         "pg_dump",
         "--version",
     ]
+
+
+def test_backup_check_json_output_requires_check_backup_before_checks(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: calls.append("root"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        server_deploy_check.main(["--backup-check-json-output", "evidence.json"])
+
+    assert exc_info.value.code == 2
+    assert calls == []
+
+
+def test_check_backup_evidence_delegates_to_check_only_without_dump(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    calls = []
+
+    def fake_run_check_only(
+        root: Path,
+        *,
+        service: str,
+        check_json_output: str,
+    ) -> int:
+        calls.append((root, service, check_json_output))
+        return 0
+
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_run_postgres_backup_check_only",
+        fake_run_check_only,
+    )
+
+    result = server_deploy_check.check_backup_evidence(
+        tmp_path,
+        service="postgres",
+        check_json_output=str(tmp_path / "backup-check.json"),
+    )
+
+    assert result.status == "ok"
+    assert result.ok
+    assert calls == [(tmp_path, "postgres", str(tmp_path / "backup-check.json"))]
+
+
+def test_check_backup_evidence_failure_is_fatal(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_run_postgres_backup_check_only",
+        lambda *args, **kwargs: 9,
+    )
+
+    result = server_deploy_check.check_backup_evidence(
+        tmp_path,
+        service="postgres",
+        check_json_output=str(tmp_path / "backup-check.json"),
+    )
+
+    assert result.status == "fail"
+    assert not result.ok
+    assert "exit code 9" in result.detail
+
+
+def test_check_backup_evidence_exception_is_fatal(monkeypatch, tmp_path: Path) -> None:
+    def fail_check_only(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_run_postgres_backup_check_only",
+        fail_check_only,
+    )
+
+    result = server_deploy_check.check_backup_evidence(
+        tmp_path,
+        service="postgres",
+        check_json_output=str(tmp_path / "backup-check.json"),
+    )
+
+    assert result.status == "fail"
+    assert not result.ok
+    assert "disk full" in result.detail
 
 
 def test_find_repo_root_from_nested_path(tmp_path: Path) -> None:
@@ -230,6 +314,82 @@ def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
 
     assert exit_code == 0
     assert calls == []
+
+
+def test_main_check_backup_with_evidence_uses_check_only_not_direct_command(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    run_command_calls = []
+    check_only_calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: run_command_calls.append((name, command, root))
+        or server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_run_postgres_backup_check_only",
+        lambda root, *, service, check_json_output: check_only_calls.append(
+            (root, service, check_json_output)
+        )
+        or 0,
+    )
+
+    exit_code = server_deploy_check.main(
+        [
+            "--check-backup",
+            "--postgres-service",
+            "db",
+            "--backup-check-json-output",
+            str(tmp_path / "evidence" / "backup-check.json"),
+        ],
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "[OK] postgres backup check evidence" in captured.out
+    assert check_only_calls == [
+        (tmp_path, "db", str(tmp_path / "evidence" / "backup-check.json"))
+    ]
+    assert "postgres pg_dump available" not in [call[0] for call in run_command_calls]
+
+
+def test_main_check_backup_without_evidence_keeps_direct_pg_dump_check(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    run_command_calls = []
+    check_only_calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: run_command_calls.append((name, command, root))
+        or server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_run_postgres_backup_check_only",
+        lambda *args, **kwargs: check_only_calls.append((args, kwargs)) or 0,
+    )
+
+    exit_code = server_deploy_check.main(["--check-backup", "--postgres-service", "db"])
+
+    assert exit_code == 0
+    assert check_only_calls == []
+    assert (
+        "postgres pg_dump available",
+        server_deploy_check.pg_dump_version_command("db"),
+        tmp_path,
+    ) in run_command_calls
 
 
 def test_main_tushare_anns_d_beat_enablement_warn_exits_zero(

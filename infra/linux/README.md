@@ -201,6 +201,7 @@ Verify the backup toolchain without exporting data:
 
 ```bash
 python infra/scripts/server_deploy_check.py --check-backup
+python infra/scripts/server_deploy_check.py --check-backup --backup-check-json-output evidence/postgres-backup-check.json
 python infra/scripts/postgres_backup.py --check-only --check-json-output evidence/postgres-backup-check.json
 ```
 
@@ -303,11 +304,13 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T postgr
   pg_dump -U baizefindb -d baizefindb
 ```
 
-For a no-data preflight, use `--check-only --check-json-output <path>`. That mode
-only runs `pg_dump --version` through the server compose overlay and writes bounded
+For a no-data preflight, use
+`server_deploy_check.py --check-backup --backup-check-json-output <path>` or run
+`postgres_backup.py --check-only --check-json-output <path>` directly. Both paths
+only run `pg_dump --version` through the server compose overlay and write bounded
 metadata about the repo root, output path, command shape, service, database user,
-database name, and version-check result. It does not create a `.sql` file or stream
-database contents.
+database name, and version-check result. They do not create a `.sql` file or
+stream database contents.
 
 `backups/` is ignored by git. Also back up `.env` through a secure server-side
 secret process, not through git.
