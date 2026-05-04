@@ -6,6 +6,7 @@ param(
     [string]$SmokeJsonOutput,
     [string]$SmokeCompactJsonOutput,
     [string]$DeployCheckJsonOutput,
+    [string]$DeployCheckBackupJsonOutput,
     [switch]$DeployCheckM5Smoke,
     [switch]$SmokeStrict,
     [switch]$SmokeOnly,
@@ -82,6 +83,7 @@ function Invoke-DeployCheck {
     param(
         [Parameter(Mandatory = $true)]
         [string]$JsonOutput,
+        [string]$BackupJsonOutput,
         [switch]$IncludeM5Smoke
     )
 
@@ -95,6 +97,10 @@ function Invoke-DeployCheck {
 
     if ($IncludeM5Smoke) {
         $DeployCheckArgs += "--check-m5-smoke"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($BackupJsonOutput)) {
+        $DeployCheckArgs += @("--check-backup", "--backup-check-json-output", $BackupJsonOutput)
     }
 
     & python @DeployCheckArgs
@@ -114,6 +120,11 @@ if ($DeployCheckM5Smoke -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput
     exit 2
 }
 
+if (-not [string]::IsNullOrWhiteSpace($DeployCheckBackupJsonOutput) -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
+    [Console]::Error.WriteLine("-DeployCheckBackupJsonOutput requires -DeployCheckJsonOutput")
+    exit 2
+}
+
 if ($StartDockerBackend) {
     Set-Location $RepoRoot
     Invoke-BackendCompose -ComposeArgs @("build", "api")
@@ -123,7 +134,7 @@ if ($StartDockerBackend) {
     Wait-BackendHealth -HealthUrl (Join-HealthUrl -BaseUrl $ServerUrl) -TimeoutSeconds $BackendHealthTimeoutSeconds -PollIntervalSeconds $BackendHealthPollIntervalSeconds
 
     if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
-        Invoke-DeployCheck -JsonOutput $DeployCheckJsonOutput -IncludeM5Smoke:$DeployCheckM5Smoke
+        Invoke-DeployCheck -JsonOutput $DeployCheckJsonOutput -BackupJsonOutput $DeployCheckBackupJsonOutput -IncludeM5Smoke:$DeployCheckM5Smoke
     }
 }
 

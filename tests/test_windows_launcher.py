@@ -213,6 +213,81 @@ def test_first_trial_launcher_deploy_check_m5_smoke_appends_server_m5_check(
     ]
 
 
+def test_first_trial_launcher_deploy_check_backup_evidence_appends_backup_check(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    backup_output = tmp_path / "evidence" / "postgres-backup-check.json"
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckBackupJsonOutput",
+            str(backup_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output} --check-backup --backup-check-json-output "
+            f"{backup_output}"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_deploy_check_backup_evidence_composes_with_m5(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    backup_output = tmp_path / "evidence" / "postgres-backup-check.json"
+    with _health_server() as server_url:
+        result, python_calls, _docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckM5Smoke",
+            "-DeployCheckBackupJsonOutput",
+            str(backup_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls[0] == (
+        "infra/scripts/server_deploy_check.py --check-containers --check-api "
+        f"--json-output {deploy_output} --check-m5-smoke --check-backup "
+        f"--backup-check-json-output {backup_output}"
+    )
+
+
 def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
     tmp_path: Path,
 ) -> None:
@@ -235,6 +310,20 @@ def test_first_trial_launcher_deploy_check_m5_smoke_requires_json_output(
     assert result.returncode == 2
     assert calls == []
     assert "-DeployCheckM5Smoke requires -DeployCheckJsonOutput" in result.stderr
+
+
+def test_first_trial_launcher_deploy_check_backup_evidence_requires_json_output(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(
+        tmp_path,
+        "-DeployCheckBackupJsonOutput",
+        str(tmp_path / "postgres-backup-check.json"),
+    )
+
+    assert result.returncode == 2
+    assert calls == []
+    assert "-DeployCheckBackupJsonOutput requires -DeployCheckJsonOutput" in result.stderr
 
 
 def test_first_trial_launcher_deploy_check_failure_blocks_smoke_and_gui(
