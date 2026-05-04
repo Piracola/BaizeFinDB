@@ -110,6 +110,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "/ops" in data["preview"]
     assert "/ops_history" in data["preview"]
     assert "/ops_ready" in data["preview"]
+    assert "/ops_warn" in data["preview"]
     assert "/tushare" in data["preview"]
     assert "/tushare_ready" in data["preview"]
     assert "/holding" in data["preview"]
