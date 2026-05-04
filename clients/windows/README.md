@@ -15,6 +15,12 @@
 在仓库根目录执行：
 
 ```powershell
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
+```
+
+确认没有 blocker 后再打开 Tkinter 客户端：
+
+```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000
 ```
 
@@ -29,6 +35,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 指定个人数据隔离键：
 
 ```powershell
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default
 ```
 
@@ -42,6 +49,9 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 
 ## 功能边界
 
+- 首次使用前可运行 `python -m clients.windows.smoke_check --server-url <api-url> --user-key <key>`。该命令只做 Tkinter import 检查和 API GET 自检，不打开 GUI，不调用采集、扫描、评分生成、报告生成、Telegram 修改或任何交易相关动作。
+- `--json-output <path>` 可写出有界脱敏 JSON 报告；报告会隐藏 `user_key`、token、secret 和 credential-like 字段。
+- smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
 - Telegram 绑定管理调用 `/telegram/bindings`；服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
 - P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。

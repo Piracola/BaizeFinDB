@@ -47,7 +47,19 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-再启动客户端：
+先运行首次使用 smoke check。该命令只检查 Tkinter import 和只读 API GET，不打开 GUI，不触发采集、扫描、评分生成、报告生成或 Telegram 修改：
+
+```powershell
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
+```
+
+需要留存排障记录时写出脱敏 JSON：
+
+```powershell
+python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default --json-output evidence/windows-client-smoke.json
+```
+
+确认没有 blocker 后再启动客户端：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default
@@ -58,6 +70,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 服务器应已经部署 API，并通过 HTTPS 域名暴露：
 
 ```powershell
+python -m clients.windows.smoke_check --server-url https://<your-domain> --user-key default
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain> -UserKey default
 ```
 
@@ -93,6 +106,8 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
 
 如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。
+
+首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。
 
 ## 6. 常见问题
 
