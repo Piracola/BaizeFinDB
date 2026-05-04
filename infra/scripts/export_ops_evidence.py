@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_LOOKBACK_HOURS = 24
 DEFAULT_HISTORY_LIMIT = 20
+DEFAULT_TREND_BUCKET_COUNT = 12
 MAX_TEXT_LENGTH = 500
 MAX_MAPPING_ITEMS = 40
 MAX_LIST_ITEMS = 20
@@ -32,6 +33,7 @@ OPS_EVIDENCE_ENDPOINTS = (
     ("ops_history", "/ops/history", ("lookback_hours", "limit")),
     ("ops_readiness", "/ops/readiness", ("lookback_hours",)),
 )
+OPS_TRENDS_ENDPOINT = ("ops_trends", "/ops/trends", ("lookback_hours", "bucket_count"))
 
 SENSITIVE_FIELD_MARKERS = (
     "authorization",
@@ -86,12 +88,15 @@ def build_endpoint_path(
     *,
     lookback_hours: int,
     history_limit: int,
+    trend_bucket_count: int = DEFAULT_TREND_BUCKET_COUNT,
 ) -> str:
     query: dict[str, int] = {}
     if "lookback_hours" in query_keys:
         query["lookback_hours"] = lookback_hours
     if "limit" in query_keys:
         query["limit"] = history_limit
+    if "bucket_count" in query_keys:
+        query["bucket_count"] = trend_bucket_count
     if not query:
         return path
     return f"{path}?{urlencode(query)}"
@@ -152,15 +157,21 @@ def collect_ops_evidence(
     *,
     lookback_hours: int,
     history_limit: int,
+    include_ops_trends: bool = False,
+    trend_bucket_count: int = DEFAULT_TREND_BUCKET_COUNT,
     timeout: int,
 ) -> list[EndpointRead]:
     reads: list[EndpointRead] = []
-    for name, path, query_keys in OPS_EVIDENCE_ENDPOINTS:
+    endpoint_specs = list(OPS_EVIDENCE_ENDPOINTS)
+    if include_ops_trends:
+        endpoint_specs.append(OPS_TRENDS_ENDPOINT)
+    for name, path, query_keys in endpoint_specs:
         full_path = build_endpoint_path(
             path,
             query_keys,
             lookback_hours=lookback_hours,
             history_limit=history_limit,
+            trend_bucket_count=trend_bucket_count,
         )
         reads.append(fetch_json_endpoint(base_url, name, full_path, timeout=timeout))
     return reads
@@ -177,6 +188,7 @@ def build_evidence_report(
     overview = _payload(endpoint_map.get("ops_overview"))
     history = _payload(endpoint_map.get("ops_history"))
     readiness = _payload(endpoint_map.get("ops_readiness"))
+    trends = _payload(endpoint_map.get("ops_trends"))
     health = _payload(endpoint_map.get("health"))
     health_ready = _payload(endpoint_map.get("health_ready"))
 
@@ -197,6 +209,19 @@ def build_evidence_report(
     recent_events = _list_of_dicts(history.get("recent_events") if history else None)
     bounded_events = recent_events[:MAX_RECENT_EVENTS]
 
+    allowed_endpoints = [path for _, path, _ in OPS_EVIDENCE_ENDPOINTS]
+    if "ops_trends" in endpoint_map:
+        allowed_endpoints.append(OPS_TRENDS_ENDPOINT[1])
+    snapshots = {
+        "health": sanitize_value(health or {}),
+        "health_ready": sanitize_value(health_ready or {}),
+        "ops_overview": sanitize_value(overview or {}),
+        "ops_history": sanitize_value(history or {}),
+        "ops_readiness": sanitize_value(readiness or {}),
+    }
+    if "ops_trends" in endpoint_map:
+        snapshots["ops_trends"] = sanitize_value(trends or {})
+
     return {
         "generated_at": _now_iso(),
         "report_type": "ops_evidence",
@@ -216,7 +241,7 @@ def build_evidence_report(
             "base_url": REDACTED_URL,
             "lookback_hours": lookback_hours,
             "history_limit": history_limit,
-            "allowed_endpoints": [path for _, path, _ in OPS_EVIDENCE_ENDPOINTS],
+            "allowed_endpoints": allowed_endpoints,
             "boundary": (
                 "read-only HTTP GET evidence export; no collection, scan, push, "
                 "provider, model, backup, cleanup, or database calls"
@@ -238,13 +263,7 @@ def build_evidence_report(
         "recent_events_count": len(recent_events),
         "recent_events": sanitize_value(bounded_events),
         "recent_events_truncated": len(recent_events) > len(bounded_events),
-        "snapshots": {
-            "health": sanitize_value(health or {}),
-            "health_ready": sanitize_value(health_ready or {}),
-            "ops_overview": sanitize_value(overview or {}),
-            "ops_history": sanitize_value(history or {}),
-            "ops_readiness": sanitize_value(readiness or {}),
-        },
+        "snapshots": snapshots,
         "failures": sanitize_value(endpoint_failures),
     }
 
@@ -324,6 +343,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"OPS history event limit, default: {DEFAULT_HISTORY_LIMIT}.",
     )
     parser.add_argument(
+        "--include-ops-trends",
+        action="store_true",
+        help="Also read the read-only /ops/trends endpoint into sanitized evidence.",
+    )
+    parser.add_argument(
+        "--trend-bucket-count",
+        type=int,
+        default=DEFAULT_TREND_BUCKET_COUNT,
+        help=f"OPS trend bucket count, default: {DEFAULT_TREND_BUCKET_COUNT}.",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=5,
@@ -345,6 +375,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.history_limit < 1:
         print("[FAIL] --history-limit must be >= 1", file=sys.stderr)
         return 2
+    if args.trend_bucket_count < 1:
+        print("[FAIL] --trend-bucket-count must be >= 1", file=sys.stderr)
+        return 2
     if args.timeout < 1:
         print("[FAIL] --timeout must be >= 1", file=sys.stderr)
         return 2
@@ -353,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
         args.base_url,
         lookback_hours=args.lookback_hours,
         history_limit=args.history_limit,
+        include_ops_trends=args.include_ops_trends,
+        trend_bucket_count=args.trend_bucket_count,
         timeout=args.timeout,
     )
     report = build_evidence_report(

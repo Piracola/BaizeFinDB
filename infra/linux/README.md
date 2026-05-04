@@ -176,12 +176,17 @@ python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 -
 
 When warning or blocked readiness needs shareable sanitized evidence, opt in to
 writing OPS evidence during the same read-only runtime check. The evidence path
-uses the `export_ops_evidence.py` report logic and only reads health/OPS
-endpoints:
+uses the `export_ops_evidence.py` report logic and defaults to the health/OPS
+evidence endpoints without `/ops/trends`:
 
 ```bash
 python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --ops-evidence-output evidence/ops-evidence.json
 ```
+
+If the same command also includes `--include-ops-trends --trend-bucket-count <n>`,
+the evidence report additionally reads `/ops/trends` and writes sanitized
+`snapshots.ops_trends`. This remains read-only and bounded by the requested
+bucket count.
 
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:

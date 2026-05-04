@@ -398,6 +398,65 @@ def test_main_writes_ops_evidence_for_ready_runtime(monkeypatch, tmp_path, capsy
     assert "ops_evidence_status=ok" in captured.out
 
 
+def test_main_passes_ops_trends_into_ops_evidence(monkeypatch, tmp_path, capsys) -> None:
+    evidence_calls = []
+
+    monkeypatch.setattr(
+        server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(status="ok"),
+    )
+
+    def fake_collect_ops_evidence(*args, **kwargs):
+        evidence_calls.append((args, kwargs))
+        reads = _evidence_reads(readiness_status="ready")
+        reads.append(
+            server_runtime_check.export_ops_evidence.EndpointRead(
+                name="ops_trends",
+                path="/ops/trends?lookback_hours=24&bucket_count=4",
+                status="ok",
+                payload={
+                    "bucket_count": 4,
+                    "buckets": [
+                        {
+                            "bucket_started_at": "2026-05-04T00:00:00+00:00",
+                            "source_url": "https://provider.example.test/raw",
+                            "radar_scan_count": 1,
+                        }
+                    ],
+                },
+            )
+        )
+        return reads
+
+    monkeypatch.setattr(
+        server_runtime_check.export_ops_evidence,
+        "collect_ops_evidence",
+        fake_collect_ops_evidence,
+    )
+    output_path = tmp_path / "ops-evidence.json"
+
+    exit_code = server_runtime_check.main(
+        [
+            "--include-ops-trends",
+            "--trend-bucket-count",
+            "4",
+            "--ops-evidence-output",
+            str(output_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert evidence_calls[0][1]["include_ops_trends"] is True
+    assert evidence_calls[0][1]["trend_bucket_count"] == 4
+    assert "/ops/trends" in payload["request"]["allowed_endpoints"]
+    assert payload["snapshots"]["ops_trends"]["buckets"][0]["source_url"] == "<redacted>"
+    assert "ops_evidence_status=ok" in captured.out
+
+
 def test_main_writes_ops_evidence_for_warning_runtime(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setattr(
         server_runtime_check,

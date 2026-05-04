@@ -325,12 +325,16 @@ def write_ops_evidence_report(
     base_url: str,
     lookback_hours: int,
     history_limit: int,
+    include_ops_trends: bool,
+    trend_bucket_count: int,
     timeout: int,
 ) -> dict[str, Any]:
     reads = export_ops_evidence.collect_ops_evidence(
         base_url,
         lookback_hours=lookback_hours,
         history_limit=history_limit,
+        include_ops_trends=include_ops_trends,
+        trend_bucket_count=trend_bucket_count,
         timeout=timeout,
     )
     report = export_ops_evidence.build_evidence_report(
@@ -459,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
                 base_url=args.base_url,
                 lookback_hours=args.lookback_hours,
                 history_limit=args.history_limit,
+                include_ops_trends=args.include_ops_trends,
+                trend_bucket_count=args.trend_bucket_count,
                 timeout=args.timeout,
             )
         except OpsEvidenceExportError as exc:

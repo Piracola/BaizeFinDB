@@ -51,6 +51,40 @@ def test_collect_ops_evidence_reads_only_allowed_endpoints(monkeypatch) -> None:
     assert all(call[3] == 3 for call in calls)
 
 
+def test_collect_ops_evidence_optionally_reads_ops_trends(monkeypatch) -> None:
+    calls = []
+
+    def fake_fetch(base_url: str, name: str, path: str, *, timeout: int):
+        calls.append((base_url, name, path, timeout))
+        return export_ops_evidence.EndpointRead(
+            name=name,
+            path=path,
+            status="ok",
+            payload={"status": "ready" if name == "ops_readiness" else "ok"},
+        )
+
+    monkeypatch.setattr(export_ops_evidence, "fetch_json_endpoint", fake_fetch)
+
+    reads = export_ops_evidence.collect_ops_evidence(
+        "http://api.test",
+        lookback_hours=12,
+        history_limit=7,
+        include_ops_trends=True,
+        trend_bucket_count=6,
+        timeout=3,
+    )
+
+    assert [read.name for read in reads] == [
+        "health",
+        "health_ready",
+        "ops_overview",
+        "ops_history",
+        "ops_readiness",
+        "ops_trends",
+    ]
+    assert calls[-1][2] == "/ops/trends?lookback_hours=12&bucket_count=6"
+
+
 def test_ready_report_exits_zero_and_contains_required_sections() -> None:
     report = export_ops_evidence.build_evidence_report(
         _reads(readiness_status="ready"),
@@ -74,6 +108,51 @@ def test_ready_report_exits_zero_and_contains_required_sections() -> None:
         "/ops/history",
         "/ops/readiness",
     ]
+    assert "ops_trends" not in report["snapshots"]
+
+
+def test_opt_in_report_contains_sanitized_ops_trends_snapshot() -> None:
+    reads = _reads(readiness_status="ready")
+    reads.append(
+        export_ops_evidence.EndpointRead(
+            name="ops_trends",
+            path="/ops/trends?lookback_hours=24&bucket_count=2",
+            status="ok",
+            payload={
+                "bucket_count": 2,
+                "buckets": [
+                    {
+                        "bucket_started_at": "2026-05-04T00:00:00+00:00",
+                        "provider_url": "https://provider.example.test/raw",
+                        "token": "secret-token",
+                        "radar_scan_count": 1,
+                    }
+                ],
+            },
+        )
+    )
+
+    report = export_ops_evidence.build_evidence_report(
+        reads,
+        base_url="http://api.test",
+        lookback_hours=24,
+        history_limit=20,
+    )
+    encoded = json.dumps(report, ensure_ascii=False)
+
+    assert report["request"]["allowed_endpoints"] == [
+        "/health",
+        "/health/ready",
+        "/ops/overview",
+        "/ops/history",
+        "/ops/readiness",
+        "/ops/trends",
+    ]
+    assert report["snapshots"]["ops_trends"]["buckets"][0]["provider_url"] == "<redacted>"
+    assert report["snapshots"]["ops_trends"]["buckets"][0]["token"] == "<redacted>"
+    assert "provider.example.test" not in encoded
+    assert "https://" not in encoded
+    assert "secret-token" not in encoded
 
 
 def test_warning_report_is_non_fatal() -> None:
