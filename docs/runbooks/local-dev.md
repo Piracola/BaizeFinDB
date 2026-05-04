@@ -140,7 +140,7 @@ uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/collect_tushare_stock_basic.py
-uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
@@ -153,7 +153,9 @@ Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=s
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
-如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，至少要先通过 `check_tushare_anns_d_beat_enablement.py` 的 checklist 和 `verify_tushare_anns_d_preflight.py` 的本地字段漂移、风险映射样例校验，再补真实 token 验证、积分消耗评估、实时接口字段校验和端到端误报样例。
+`verify_tushare_announcements.py --json-output <path>` 不写数据库，只把 live verify 的脱敏 JSON 证据保存到本地；报告包含状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和去掉 URL/source 字段的少量归一化样例。失败时也会写入脱敏 failure report，便于留存权限、积分或字段漂移问题，但不保存 token、原始 URL/域名或付费原始数据。
+
+如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，至少要先通过 `check_tushare_anns_d_beat_enablement.py` 的 checklist 和 `verify_tushare_anns_d_preflight.py` 的本地字段漂移、风险映射样例校验，再保存真实 token live evidence，补充积分消耗评估、实时接口字段校验和端到端误报样例。
 
 ### 4.4 基于最新快照运行雷达扫描
 
@@ -404,7 +406,7 @@ TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=3600
 TELEGRAM_PUSH_ENABLED=false
 ```
 
-`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 和 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 checklist、`anns_d` 归一化必需字段、重大风险 P0 样例和普通公告无信号样例仍符合预期。
+`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 和 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 checklist、`anns_d` 归一化必需字段、重大风险 P0 样例和普通公告无信号样例仍符合预期，再执行 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存脱敏 live evidence。
 
 需要调试后台任务时，先启动 worker：
 
@@ -553,7 +555,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
-uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness

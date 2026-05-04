@@ -228,7 +228,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
-uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 ```
 
@@ -243,6 +243,8 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 该集成仍是离线/no-token 模式，输出精简摘要；`warn` 不阻断部署预检，只有 checklist `fail` 会返回失败退出码。
 
 `verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。它是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
+
+`verify_tushare_announcements.py --json-output <path>` 会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和少量去 URL/source 字段的归一化样例，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存这份 live evidence。
 
 PostgreSQL 迁移完成后，手动采集并写入数据库：
 
@@ -271,7 +273,7 @@ uv run celery -A app.tasks.celery_app.celery_app worker --loglevel=INFO
 uv run celery -A app.tasks.celery_app.celery_app beat --loglevel=INFO
 ```
 
-Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 的 `RADAR_SCAN_INTERVAL_SECONDS` 调整本地/服务器调度间隔；`RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 控制连续 P1 快报候选阈值，默认 30 分钟内连续 3 次。Tushare `anns_d` 公告 Beat 调度默认关闭；只有设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 后才额外加入 `baizefindb.providers.collect_tushare_announcements`，间隔由 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 控制，默认 3600 秒。改成 `true` 前先执行 `check_tushare_anns_d_beat_enablement.py` 和离线 `verify_tushare_anns_d_preflight.py`，再确认真实 token 权限、积分消耗和 `/providers/tushare/readiness`。
+Beat 默认每 300 秒触发一次 `baizefindb.radar.collect_and_scan`，顺序执行最小 AKShare 采集和雷达扫描。可通过 `.env` 的 `RADAR_SCAN_INTERVAL_SECONDS` 调整本地/服务器调度间隔；`RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 控制连续 P1 快报候选阈值，默认 30 分钟内连续 3 次。Tushare `anns_d` 公告 Beat 调度默认关闭；只有设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 后才额外加入 `baizefindb.providers.collect_tushare_announcements`，间隔由 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 控制，默认 3600 秒。改成 `true` 前先执行 `check_tushare_anns_d_beat_enablement.py` 和离线 `verify_tushare_anns_d_preflight.py`，再用 `verify_tushare_announcements.py --json-output <path>` 保存脱敏 live evidence，并确认真实 token 权限、积分消耗和 `/providers/tushare/readiness`。
 
 手动维护持仓和自选：
 

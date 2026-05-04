@@ -105,9 +105,11 @@ uv run python infra/scripts/server_runtime_check.py --samples 5 --interval-secon
 uv run python infra/scripts/verify_tushare_stock_basic.py
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
-uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
+uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 ```
+
+`verify_tushare_announcements.py --json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、`ann_date`、行数、质量状态、必需字段、缺失字段和少量去 URL/source 字段的归一化样例；失败时也会写入脱敏 failure report。该步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
 
 手动写入 Tushare 股票基础信息或公告快照：
 
@@ -145,7 +147,7 @@ uv run python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confir
 
 Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整调度间隔，可用 `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 调整连续 P1 快报候选阈值。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。
 
-Tushare `anns_d` 公告采集有独立的可选 Beat 开关，默认关闭，不影响上述 5 分钟 AKShare+雷达闭环。只有在服务器 `.env` 中显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`；间隔由 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 控制，默认 `3600` 秒。启用前先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 汇总本地 sample gate、token、Beat 启停、interval、live verify 和 readiness/live data 状态；默认 checklist 不访问 Tushare、不写数据库、不触发抓取、扫描或推送。随后确认 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness`，并通过 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py` 的本地字段漂移和风险映射样例校验；离线门禁不替代这些真实环境验证。
+Tushare `anns_d` 公告采集有独立的可选 Beat 开关，默认关闭，不影响上述 5 分钟 AKShare+雷达闭环。只有在服务器 `.env` 中显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`；间隔由 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 控制，默认 `3600` 秒。启用前先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 汇总本地 sample gate、token、Beat 启停、interval、live verify 和 readiness/live data 状态；默认 checklist 不访问 Tushare、不写数据库、不触发抓取、扫描或推送。随后通过 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py` 的本地字段漂移和风险映射样例校验，再用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存脱敏 live evidence，最后确认 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness`；离线门禁不替代这些真实环境验证。
 
 不改 `.env` 的情况下，可以用一次性容器验证 Beat schedule 形态：
 
