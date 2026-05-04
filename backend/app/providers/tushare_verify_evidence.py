@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,10 @@ from app.providers.schemas import DataQualityStatus, ProviderDataset
 from app.providers.tushare import TUSHARE_ENDPOINTS
 
 DEFAULT_MAX_SAMPLE_ROWS = 2
+MAX_SANITIZED_TEXT_LENGTH = 240
+MAX_SANITIZED_MAPPING_ITEMS = 20
+MAX_SANITIZED_SEQUENCE_ITEMS = 10
+MAX_ERROR_TEXT_LENGTH = 800
 SENSITIVE_FIELD_MARKERS = (
     "url",
     "source",
@@ -149,14 +154,33 @@ def sanitize_normalized_row(row: dict[str, object]) -> dict[str, object]:
 
 def sanitize_value(value: object) -> object:
     if isinstance(value, str):
-        return redact_text(value)
+        return bound_text(redact_text(value))
     if isinstance(value, int | float | bool) or value is None:
         return value
-    return redact_text(str(value))
+    if isinstance(value, Mapping):
+        sanitized: dict[str, object] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= MAX_SANITIZED_MAPPING_ITEMS:
+                sanitized["_truncated"] = True
+                break
+            key_text = str(key)
+            if is_sensitive_field(key_text):
+                continue
+            sanitized[key_text] = sanitize_value(item)
+        return sanitized
+    if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+        items: list[object] = [
+            sanitize_value(item)
+            for item in value[:MAX_SANITIZED_SEQUENCE_ITEMS]
+        ]
+        if len(value) > MAX_SANITIZED_SEQUENCE_ITEMS:
+            items.append("<truncated>")
+        return items
+    return bound_text(redact_text(str(value)))
 
 
 def sanitize_error(exc: Exception) -> str:
-    return redact_text(f"{exc.__class__.__name__}: {exc}")[:800]
+    return bound_text(redact_text(f"{exc.__class__.__name__}: {exc}"), MAX_ERROR_TEXT_LENGTH)
 
 
 def redact_text(text: str) -> str:
@@ -172,6 +196,12 @@ def redact_text(text: str) -> str:
     redacted = URL_PATTERN.sub("<redacted-url>", redacted)
     redacted = DOMAIN_PATTERN.sub("<redacted-domain>", redacted)
     return LONG_TOKEN_PATTERN.sub("<redacted>", redacted)
+
+
+def bound_text(text: str, limit: int = MAX_SANITIZED_TEXT_LENGTH) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "...<truncated>"
 
 
 def is_sensitive_field(field: str) -> bool:

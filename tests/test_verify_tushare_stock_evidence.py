@@ -156,6 +156,44 @@ async def test_stock_basic_cli_writes_sanitized_success_report(
     assert "access_token" not in payload["sample"][0]
 
 
+async def test_stock_basic_success_report_bounds_nested_sample_values(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "secret-token")
+    dataset = _stock_basic_dataset()
+    dataset.normalized_rows[0]["name"] = "长文本 " * 250
+    dataset.normalized_rows[0]["metadata"] = {
+        "source_url": "https://example.test/raw",
+        "safe_note": "备注 " * 250,
+        "token": "secret-token",
+    }
+    dataset.normalized_rows[0]["tags"] = ["标签 " * 250 for _ in range(12)]
+
+    report = verify_tushare_stock_basic.build_success_report(
+        endpoint="stock_basic",
+        dataset=dataset,
+        query_params={},
+        max_sample_rows=1,
+    )
+    output_path = tmp_path / "bounded.json"
+    verify_tushare_stock_basic.write_json_report(output_path, report)
+    encoded = output_path.read_text(encoding="utf-8")
+    payload = json.loads(encoded)
+    sample = payload["sample"][0]
+
+    assert "secret-token" not in encoded
+    assert "https://" not in encoded
+    assert "example.test" not in encoded
+    assert sample["name"].endswith("...<truncated>")
+    assert len(sample["name"]) < 300
+    assert "source_url" not in sample["metadata"]
+    assert "token" not in sample["metadata"]
+    assert sample["metadata"]["safe_note"].endswith("...<truncated>")
+    assert len(sample["tags"]) == 11
+    assert sample["tags"][-1] == "<truncated>"
+
+
 async def test_stock_basic_default_output_keeps_legacy_shape_and_sanitizes(
     monkeypatch,
     capsys,
