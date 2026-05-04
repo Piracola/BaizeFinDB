@@ -21,7 +21,7 @@
 - 查看报告摘要：`GET /reports`。
 - 查看日报/周报汇总：`GET /reports/periodic`。
 - 生成并查看单信号 v2 综合评分明细：`POST /scores/signals/{signal_id}`。
-- 查看、绑定和禁用 Telegram chat：`GET/POST/PATCH /telegram/bindings`。
+- 查看 Telegram 绑定状态：`GET /telegram/status` 和 `GET /telegram/bindings`；绑定和禁用 Telegram chat：`POST/PATCH /telegram/bindings`。
 - 打开现有 Web 面板：`/`。
 - P0/P1/P2、生命周期、市场情绪摘要、运行状态、OPS readiness、数据源状态、审查状态和计数都来自后端 API，客户端不重新计算。
 - 日报/周报和评分结果也来自后端，客户端不做本地评分或规则推断。
