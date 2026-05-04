@@ -15,6 +15,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.telegram.formatter import (
     format_holdings,
+    format_ops_warning_drilldown,
     format_radar_overview,
     format_reports,
     format_signal_detail,
@@ -378,6 +379,177 @@ async def test_telegram_ops_ready_command_reports_readiness(client: AsyncClient)
     assert "雷达新鲜度：失败" in preview
     assert "该视图只读取已有运行记录" in preview
     assert "不构成投资建议" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_ops_warn_command_routes_read_only_ops_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    calls: list[tuple[str, int, int | None]] = []
+    now = datetime(2026, 5, 4, 12, 0, tzinfo=UTC)
+
+    async def fake_readiness(session: AsyncSession, *, lookback_hours: int) -> SimpleNamespace:
+        calls.append(("readiness", lookback_hours, None))
+        return SimpleNamespace(
+            status="warning",
+            lookback_hours=lookback_hours,
+            checks=[
+                SimpleNamespace(name="server_disk", status="ok", message="服务端磁盘空间充足。"),
+                SimpleNamespace(
+                    name="provider_fetch",
+                    status="warning",
+                    message="Provider 存在异常记录。",
+                ),
+            ],
+        )
+
+    async def fake_overview(session: AsyncSession, *, lookback_hours: int) -> SimpleNamespace:
+        calls.append(("overview", lookback_hours, None))
+        return SimpleNamespace(
+            alerts=[
+                SimpleNamespace(
+                    severity="warning",
+                    code="provider_fetch_unhealthy",
+                    message="Provider 拉取存在 2 条异常记录。",
+                ),
+            ],
+        )
+
+    async def fake_history(
+        session: AsyncSession,
+        *,
+        lookback_hours: int,
+        limit: int,
+    ) -> SimpleNamespace:
+        calls.append(("history", lookback_hours, limit))
+        return SimpleNamespace(
+            failure_summary=[
+                SimpleNamespace(kind="provider_fetch", key="akshare/news/failure", count=2),
+            ],
+            recent_events=[
+                SimpleNamespace(
+                    id=1,
+                    kind="provider_fetch",
+                    status="failure",
+                    occurred_at=now,
+                    detail="provider down",
+                ),
+            ],
+        )
+
+    async def forbidden_async(*args: object, **kwargs: object) -> object:
+        raise AssertionError("forbidden Telegram /ops_warn side effect")
+
+    def forbidden_sync(*args: object, **kwargs: object) -> object:
+        raise AssertionError("forbidden Telegram /ops_warn side effect")
+
+    monkeypatch.setattr("app.telegram.service.get_ops_readiness", fake_readiness)
+    monkeypatch.setattr("app.telegram.service.get_ops_overview", fake_overview)
+    monkeypatch.setattr("app.telegram.service.get_ops_history", fake_history)
+    for name in (
+        "get_latest_radar_scan",
+        "get_radar_overview",
+        "get_radar_signal_detail",
+        "list_radar_signals",
+        "list_holdings",
+        "list_watchlist_items",
+        "get_tushare_readiness",
+        "list_reports",
+        "generate_periodic_report",
+        "generate_signal_scores",
+    ):
+        monkeypatch.setattr(f"app.telegram.service.{name}", forbidden_async)
+    monkeypatch.setattr("app.telegram.service.get_tushare_provider_status", forbidden_sync)
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/ops_warn"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["command"] == "/ops_warn"
+    assert data["delivery"] == "preview"
+    assert calls == [
+        ("readiness", 24, None),
+        ("overview", 24, None),
+        ("history", 24, 10),
+    ]
+    assert "OPS 告警钻取" in data["preview"]
+    assert "非 OK 自检" in data["preview"]
+    assert "Provider：警告" in data["preview"]
+    assert "告警：" in data["preview"]
+    assert "异常汇总：" in data["preview"]
+    assert "最近事件：" in data["preview"]
+    assert "不触发采集、扫描、评分、报告、推送、模型调用" in data["preview"]
+
+
+def test_telegram_ops_warn_formatter_prioritizes_backend_warning_fields() -> None:
+    now = datetime(2026, 5, 4, 12, 0, tzinfo=UTC)
+    readiness = SimpleNamespace(
+        status="blocked",
+        lookback_hours=24,
+        checks=[
+            SimpleNamespace(name="server_disk", status="ok", message="服务端磁盘空间充足。"),
+            SimpleNamespace(
+                name="provider_fetch",
+                status="fail",
+                message="Provider 最近记录全部异常。",
+            ),
+            SimpleNamespace(
+                name="data_quality",
+                status="warning",
+                message="数据质量存在异常记录。",
+            ),
+        ],
+    )
+    overview = SimpleNamespace(
+        alerts=[
+            SimpleNamespace(
+                severity="warning",
+                code="provider_fetch_unhealthy",
+                message="Provider 异常。",
+            ),
+            SimpleNamespace(
+                severity="warning",
+                code="data_quality_unhealthy",
+                message="数据质量异常。",
+            ),
+        ],
+    )
+    history = SimpleNamespace(
+        failure_summary=[
+            SimpleNamespace(kind="provider_fetch", key="akshare/news/failure", count=3),
+            SimpleNamespace(kind="data_quality", key="akshare/news/degraded", count=2),
+        ],
+        recent_events=[
+            SimpleNamespace(
+                id=index,
+                kind="provider_fetch",
+                status="failure",
+                occurred_at=now - timedelta(minutes=index),
+                detail=f"event {index}",
+            )
+            for index in range(1, 8)
+        ],
+    )
+
+    preview = format_ops_warning_drilldown(
+        readiness=readiness,
+        overview=overview,
+        history=history,
+    )
+
+    assert preview.index("状态：阻断") < preview.index("非 OK 自检：")
+    assert preview.index("非 OK 自检：") < preview.index("告警：")
+    assert preview.index("告警：") < preview.index("异常汇总：")
+    assert preview.index("异常汇总：") < preview.index("最近事件：")
+    assert "服务端磁盘" not in preview
+    assert "Provider：失败" in preview
+    assert "数据质量：警告" in preview
+    assert "provider_fetch_unhealthy" in preview
+    assert "Provider akshare/news/failure=3" in preview
+    assert "event 5" in preview
+    assert "event 6" not in preview
+    assert "不触发采集、扫描、评分、报告、推送、模型调用" in preview
 
 
 @pytest.mark.asyncio

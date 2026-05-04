@@ -797,7 +797,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 
 ## 9. Telegram Bot API
 
-Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、Tushare 数据源状态、Tushare 准入自检和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、数据源状态或审查状态。
+Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、OPS 告警钻取、Tushare 数据源状态、Tushare 准入自检和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态或审查状态。
 
 ### `GET /telegram/status`
 
@@ -842,6 +842,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `/ops` | 查看服务端运行时、磁盘/CPU/内存、最近运行状态、扫描失败率、Provider、数据质量、推送和模型调用摘要 |
 | `/ops_history` | 查看最近运维异常历史和异常汇总 |
 | `/ops_ready` | 查看运行就绪自检 |
+| `/ops_warn` | 查看只读 OPS 告警钻取；固定使用 Telegram 24 小时窗口和有界历史条数，复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history`，优先展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events |
 | `/tushare` | 查看 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取 |
 | `/tushare_ready` | 查看 Tushare token、端点、最近抓取和数据质量准入状态；不返回 token 原文，不触发真实抓取或调度 |
 | `/radar` | 查看雷达总览：P0/P1/P2、生命周期分布、最新扫描、主题数量 |
@@ -884,7 +885,7 @@ Invoke-RestMethod -Method Post "https://api.telegram.org/bot$BotToken/setWebhook
 
 Webhook 输出只用于关注、观察、风险和复盘，不构成投资建议。
 
-`/tushare`、`/tushare_ready`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/tushare` 和 `/tushare_ready` 不触发真实抓取或调度，`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
+`/ops_warn`、`/tushare`、`/tushare_ready`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly` 和 `/score <id>` 只读取或触发后端结果，不改变市场级雷达等级，不输出交易指令；`/ops_warn` 不触发采集、扫描、评分、报告、推送、模型调用、evidence 写入、后端修改或交易相关动作，也不从 alerts/counts/resources/events 重算 OPS 状态；`/tushare` 和 `/tushare_ready` 不触发真实抓取或调度，`/score` 展示后端返回的评分档位和组件明细，不在 Telegram 层计算评分。
 
 ### `GET /telegram/bindings`
 
@@ -980,7 +981,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 ## 11. 接 Telegram / Web / 报告时的推荐用法
 
-- 状态面板：用 `GET /health/ready`、`GET /ops/overview`、`GET /ops/history` 和 `GET /ops/readiness`，展示依赖就绪、服务端磁盘/CPU/内存摘要、扫描新鲜度、失败率、数据质量、推送、模型调用、最近运维异常历史、运行就绪自检和只读 OPS 告警钻取。Web 告警钻取沿用 24 小时窗口，展示后端 readiness、非 OK 检查、overview alerts、history `failure_summary` 和有界 recent events；不要在浏览器从 alerts/counts/events 重算 OPS 状态。
+- 状态面板：用 `GET /health/ready`、`GET /ops/overview`、`GET /ops/history` 和 `GET /ops/readiness`，展示依赖就绪、服务端磁盘/CPU/内存摘要、扫描新鲜度、失败率、数据质量、推送、模型调用、最近运维异常历史、运行就绪自检和只读 OPS 告警钻取。Web 和 Telegram `/ops_warn` 告警钻取沿用 24 小时窗口，展示后端 readiness、非 OK 检查、overview alerts、history `failure_summary` 和有界 recent events；不要在浏览器或 Telegram 层从 alerts/counts/resources/events 重算 OPS 状态。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。

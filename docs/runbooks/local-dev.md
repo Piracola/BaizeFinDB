@@ -296,6 +296,14 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":11,"message":{"message_id":11,"chat":{"id":1001},"text":"/ops"}}'
 ```
 
+本地 preview `/ops_warn` 会固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 `/ops/readiness`、`/ops/overview` 和 `/ops/history` 结果，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；它不在 Telegram 层重算 OPS 状态，也不触发采集、扫描、评分、报告、推送、模型调用、evidence 写入、后端修改或交易相关动作：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":12,"message":{"message_id":12,"chat":{"id":1001},"text":"/ops_warn"}}'
+```
+
 本地 preview `/tushare` 会返回 Tushare token 配置、手动抓取启用状态和已实现端点数；不会返回 token 原文，也不会触发真实抓取：
 
 ```powershell

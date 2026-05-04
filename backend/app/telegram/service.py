@@ -30,6 +30,7 @@ from app.telegram.formatter import (
     format_ops_history,
     format_ops_overview,
     format_ops_readiness,
+    format_ops_warning_drilldown,
     format_periodic_report,
     format_radar_overview,
     format_reports,
@@ -50,6 +51,8 @@ from app.telegram.schemas import (
 )
 
 SIGNALS_COMMAND_LIMIT = 10
+OPS_COMMAND_LOOKBACK_HOURS = 24
+OPS_WARNING_HISTORY_LIMIT = 10
 
 
 def telegram_status(
@@ -148,16 +151,46 @@ class TelegramCommandService:
                 )
 
             if command == "/ops":
-                overview = await get_ops_overview(session, lookback_hours=24)
+                overview = await get_ops_overview(
+                    session,
+                    lookback_hours=OPS_COMMAND_LOOKBACK_HOURS,
+                )
                 return format_ops_overview(overview)
 
             if command == "/ops_history":
-                history = await get_ops_history(session, lookback_hours=24, limit=10)
+                history = await get_ops_history(
+                    session,
+                    lookback_hours=OPS_COMMAND_LOOKBACK_HOURS,
+                    limit=OPS_WARNING_HISTORY_LIMIT,
+                )
                 return format_ops_history(history)
 
             if command == "/ops_ready":
-                readiness = await get_ops_readiness(session, lookback_hours=24)
+                readiness = await get_ops_readiness(
+                    session,
+                    lookback_hours=OPS_COMMAND_LOOKBACK_HOURS,
+                )
                 return format_ops_readiness(readiness)
+
+            if command == "/ops_warn":
+                readiness = await get_ops_readiness(
+                    session,
+                    lookback_hours=OPS_COMMAND_LOOKBACK_HOURS,
+                )
+                overview = await get_ops_overview(
+                    session,
+                    lookback_hours=OPS_COMMAND_LOOKBACK_HOURS,
+                )
+                history = await get_ops_history(
+                    session,
+                    lookback_hours=OPS_COMMAND_LOOKBACK_HOURS,
+                    limit=OPS_WARNING_HISTORY_LIMIT,
+                )
+                return format_ops_warning_drilldown(
+                    readiness=readiness,
+                    overview=overview,
+                    history=history,
+                )
 
             if command == "/tushare":
                 return format_tushare_status(get_tushare_provider_status(self._settings))

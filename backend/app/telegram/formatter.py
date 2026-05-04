@@ -108,6 +108,7 @@ def format_help() -> str:
                 "/ops - 查看最近运行状态、失败率和降级摘要",
                 "/ops_history - 查看最近运维异常历史",
                 "/ops_ready - 查看部署/运行就绪自检",
+                "/ops_warn - 查看 OPS 告警钻取",
                 "/tushare - 查看 Tushare 数据源配置状态",
                 "/tushare_ready - 查看 Tushare 抓取/调度准入自检",
                 "/radar - 查看雷达总览",
@@ -241,6 +242,83 @@ def format_ops_readiness(readiness: OpsReadinessRead) -> str:
         )
 
     lines.extend(["该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。", "", DISCLAIMER])
+    return _trim_message("\n".join(lines))
+
+
+def format_ops_warning_drilldown(
+    *,
+    readiness: OpsReadinessRead,
+    overview: OpsOverviewRead,
+    history: OpsHistoryRead,
+) -> str:
+    lines = [
+        "OPS 告警钻取",
+        f"状态：{_readiness_status_label(readiness.status)}",
+        f"统计窗口：最近 {readiness.lookback_hours} 小时",
+    ]
+
+    non_ok_checks = [check for check in readiness.checks if _value(check.status) != "ok"]
+    if non_ok_checks:
+        lines.append("非 OK 自检：")
+        for check in non_ok_checks[:5]:
+            lines.append(
+                (
+                    f"- {_ops_check_label(check.name)}："
+                    f"{_readiness_check_label(check.status)}，{check.message}"
+                ),
+            )
+    else:
+        lines.append("非 OK 自检：暂无")
+
+    if overview.alerts:
+        lines.append("告警：")
+        for alert in overview.alerts[:5]:
+            lines.append(
+                (
+                    f"- {_ops_alert_severity_label(_field(alert, 'severity', 'warning'))} "
+                    f"{_field(alert, 'code', 'unknown')}："
+                    f"{_field(alert, 'message', '未返回告警说明')}"
+                ),
+            )
+    else:
+        lines.append("告警：暂无")
+
+    if history.failure_summary:
+        lines.append("异常汇总：")
+        for item in history.failure_summary[:5]:
+            lines.append(
+                (
+                    f"- {_ops_kind_label(item.kind)} "
+                    f"{item.key}={item.count}"
+                ),
+            )
+    else:
+        lines.append("异常汇总：暂无")
+
+    if history.recent_events:
+        lines.append("最近事件：")
+        for event in history.recent_events[:5]:
+            detail = f" | {event.detail}" if event.detail else ""
+            lines.append(
+                (
+                    f"- {_ops_kind_label(event.kind)} #{event.id} "
+                    f"{_ops_status_label(event.status)} | "
+                    f"{_format_time(event.occurred_at)}{detail}"
+                ),
+            )
+    else:
+        lines.append("最近事件：暂无")
+
+    lines.extend(
+        [
+            (
+                "该视图只读复用 OPS readiness、overview 和 history，不触发采集、扫描、"
+                "评分、报告、推送、模型调用、evidence 写入、后端修改或交易相关动作。"
+            ),
+            "",
+            DISCLAIMER,
+        ],
+    )
     return _trim_message("\n".join(lines))
 
 
@@ -677,6 +755,16 @@ def _ops_alerts_text(alerts: list[object]) -> str:
         return "暂无"
 
     return " / ".join(str(_field(alert, "message", "未返回告警说明")) for alert in alerts)
+
+
+def _ops_alert_severity_label(value: object) -> str:
+    labels = {
+        "warning": "警告",
+        "blocked": "阻断",
+        "error": "错误",
+        "critical": "严重",
+    }
+    return labels.get(_value(value), _value(value))
 
 
 def _ops_server_text(server: object) -> str:
