@@ -278,6 +278,26 @@ def test_launcher_smoke_only_implies_smoke_check_and_skips_gui(tmp_path: Path) -
     ]
 
 
+def test_launcher_smoke_check_with_smoke_only_skips_gui(tmp_path: Path) -> None:
+    result, calls = _run_launcher(
+        tmp_path,
+        "-ServerUrl",
+        "http://127.0.0.1:8000",
+        "-UserKey",
+        "default",
+        "-SmokeCheck",
+        "-SmokeOnly",
+    )
+
+    assert result.returncode == 0
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+    ]
+
+
 def test_launcher_smoke_only_failure_exits_nonzero_without_gui(tmp_path: Path) -> None:
     result, calls = _run_launcher(
         tmp_path,
