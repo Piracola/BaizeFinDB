@@ -126,11 +126,14 @@ TUSHARE_ANNS_D_BEAT_ENABLED=false
 TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=3600
 ```
 
-配置真实 token 后，`/providers/tushare/status` 只会返回 `token_configured=true`，不会返回 token 原文；`/providers/tushare/readiness` 只读取配置、最近抓取日志、数据质量记录和显式调度开关，不触发真实抓取或调度。`TUSHARE_ANNS_D_BEAT_ENABLED` 默认必须保持 `false`；只有在确认 token 权限、积分消耗、字段稳定性和误报样例后，才把它改成 `true`。启用前先跑离线/no-token 预调度校验，它只读取本地 golden case，不访问 Tushare，也不能替代真实 token 权限、积分消耗、实时接口字段和 readiness 验证：
+配置真实 token 后，`/providers/tushare/status` 只会返回 `token_configured=true`，不会返回 token 原文；`/providers/tushare/readiness` 只读取配置、最近抓取日志、数据质量记录和显式调度开关，不触发真实抓取或调度。`TUSHARE_ANNS_D_BEAT_ENABLED` 默认必须保持 `false`；只有在确认 token 权限、积分消耗、字段稳定性和误报样例后，才把它改成 `true`。启用前先跑 enablement checklist 和离线/no-token 预调度校验；默认 checklist 只输出 JSON，不访问 Tushare、不写数据库、不触发抓取、扫描或推送：
 
 ```powershell
+uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 ```
+
+`check_tushare_anns_d_beat_enablement.py` 会把本地 sample gate、token 是否缺失、Beat 当前启停、interval 是否有效、live verify 仍需执行、readiness/live data 默认未检查等 gate 标成 `pass`、`warn` 或 `fail`。需要把 `/providers/tushare/readiness` 也纳入只读检查时，显式加 `--check-readiness`；它仍不能替代真实 Tushare `anns_d` live verify。
 
 手动抓取股票基础信息：
 
@@ -150,7 +153,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=s
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
-如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，至少要先通过 `verify_tushare_anns_d_preflight.py` 的本地字段漂移和风险映射样例校验，再补真实 token 验证、积分消耗评估、实时接口字段校验和端到端误报样例。
+如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，至少要先通过 `check_tushare_anns_d_beat_enablement.py` 的 checklist 和 `verify_tushare_anns_d_preflight.py` 的本地字段漂移、风险映射样例校验，再补真实 token 验证、积分消耗评估、实时接口字段校验和端到端误报样例。
 
 ### 4.4 基于最新快照运行雷达扫描
 
@@ -401,7 +404,7 @@ TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=3600
 TELEGRAM_PUSH_ENABLED=false
 ```
 
-`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 `anns_d` 归一化必需字段、重大风险 P0 样例和普通公告无信号样例仍符合预期。
+`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 和 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 checklist、`anns_d` 归一化必需字段、重大风险 P0 样例和普通公告无信号样例仍符合预期。
 
 需要调试后台任务时，先启动 worker：
 
@@ -548,6 +551,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py
+uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
