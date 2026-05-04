@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,15 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SCRIPT = REPO_ROOT / "clients" / "windows" / "package-client.ps1"
 GITIGNORE = REPO_ROOT / ".gitignore"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
+UV_LOCK = REPO_ROOT / "uv.lock"
+PACKAGING_DOCS = [
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "README.md",
+    REPO_ROOT / "docs" / "PROJECT_STATUS.md",
+    REPO_ROOT / "docs" / "runbooks" / "windows-client.md",
+    REPO_ROOT / "clients" / "windows" / "README.md",
+]
 
 
 def write_fake_python(fake_bin: Path) -> Path:
@@ -90,6 +100,37 @@ def test_packaging_outputs_are_gitignored() -> None:
     assert "clients/windows/dist/" in gitignore
     assert "clients/windows/package-check-evidence*.json" in gitignore
     assert "*.spec" in gitignore
+
+
+def test_packaging_dependency_group_is_dedicated_and_bounded() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+    dependencies = pyproject["project"]["dependencies"]
+    dependency_groups = pyproject["dependency-groups"]
+    package_group = dependency_groups["package"]
+
+    assert package_group == ["pyinstaller>=6,<7"]
+    assert all("pyinstaller" not in dependency.lower() for dependency in dependencies)
+    assert all("pyinstaller" not in dependency.lower() for dependency in dependency_groups["dev"])
+
+
+def test_packaging_dependency_group_is_locked() -> None:
+    lock = tomllib.loads(UV_LOCK.read_text(encoding="utf-8"))
+    project_package = next(
+        package for package in lock["package"] if package["name"] == "baizefindb"
+    )
+    locked_package_group = project_package["metadata"]["requires-dev"]["package"]
+
+    assert locked_package_group == [{"name": "pyinstaller", "specifier": ">=6,<7"}]
+    assert any(package["name"] == "pyinstaller" for package in lock["package"])
+
+
+def test_packaging_docs_prefer_reproducible_uv_group_commands() -> None:
+    for doc_path in PACKAGING_DOCS:
+        text = doc_path.read_text(encoding="utf-8")
+        assert "uv pip install pyinstaller" not in text, doc_path
+        assert "uv sync --group package" in text, doc_path
+        assert "uv run --group package powershell" in text, doc_path
 
 
 def test_packaging_dry_run_prints_custom_command_without_artifacts(

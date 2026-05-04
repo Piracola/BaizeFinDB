@@ -169,24 +169,24 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 可选 onedir 打包脚手架：
 
 ```powershell
-uv pip install pyinstaller
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
+uv sync --group package
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
 ```
 
 也可以先 dry run 预览命令；该模式不要求已安装 PyInstaller，也不会生成构建产物：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun
 ```
 
 需要验证真实打包前置条件但不生成产物时，用 check-only：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly -CheckJsonOutput clients/windows/package-check-evidence.local.json
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly -CheckJsonOutput clients/windows/package-check-evidence.local.json
 ```
 
-脚本入口仍是 `clients.windows.baizefindb_client`，默认输出 `clients/windows/dist/BaizeFinDB-Windows-Client/`，中间文件在 `clients/windows/build/`；`-DryRun` 会反映自定义 `-Name`、`-DistPath`、`-WorkPath` 和 `-Clean`，并跳过 Python/PyInstaller 检查和所有产物创建。`-CheckOnly` 会运行 Python 3.12、`tkinter` import、入口模块解析 preflight 和 PyInstaller 可用性检查，然后在创建目录、launcher 或调用 PyInstaller 构建前退出；它不能和 `-SkipPreflight` 同用。`-CheckJsonOutput` 只能和 `-CheckOnly` 同用，写出的有界 JSON 只包含打包前置条件、命令和路径元数据；`clients/windows/package-check-evidence*.json` 已忽略，不提交本地证据。非 dry-run 默认先做轻量 Python preflight，验证 Python 3.12、`tkinter` import 和入口模块解析，不创建 `tk.Tk()`、不打开 GUI、不调用 API；特殊本地排查可加 `-SkipPreflight`。生成物和 `*.spec` 已加入 `.gitignore`，不要提交 exe 或构建目录。该脚手架不做 onefile、MSI、代码签名、SmartScreen 信誉或自动更新。
+脚本入口仍是 `clients.windows.baizefindb_client`，默认输出 `clients/windows/dist/BaizeFinDB-Windows-Client/`，中间文件在 `clients/windows/build/`；PyInstaller 通过可选 `package` 依赖组复现，不进入默认运行时或普通 dev 路径。`-DryRun` 会反映自定义 `-Name`、`-DistPath`、`-WorkPath` 和 `-Clean`，并跳过 Python/PyInstaller 检查和所有产物创建。`-CheckOnly` 会运行 Python 3.12、`tkinter` import、入口模块解析 preflight 和 PyInstaller 可用性检查，然后在创建目录、launcher 或调用 PyInstaller 构建前退出；它不能和 `-SkipPreflight` 同用。`-CheckJsonOutput` 只能和 `-CheckOnly` 同用，写出的有界 JSON 只包含打包前置条件、命令和路径元数据；`clients/windows/package-check-evidence*.json` 已忽略，不提交本地证据。非 dry-run 默认先做轻量 Python preflight，验证 Python 3.12、`tkinter` import 和入口模块解析，不创建 `tk.Tk()`、不打开 GUI、不调用 API；特殊本地排查可加 `-SkipPreflight`。生成物和 `*.spec` 已加入 `.gitignore`，不要提交 exe 或构建目录。该脚手架不做 onefile、MSI、代码签名、SmartScreen 信誉或自动更新。
 
 smoke check 会验证 Tkinter 可导入、核心健康和 readiness GET，可选写出脱敏有界 JSON；空雷达、空信号和空绑定是 warning，不是 blocker。`run-client.ps1 -SmokeCheck` 会在启动 GUI 前执行同一套检查并传入相同 ServerUrl/UserKey；`-SmokeLookbackHours` 会把 1 到 168 小时的 OPS readiness 窗口传给 smoke check，默认 24；`-SmokeStrict` 会让 warning 阻断启动，默认 warning 仍不阻断。GUI 的 `OPS Lookback (hours)` 同样默认 24，范围 1 到 168，并传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`；非法输入会在 API 请求前阻断。客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态、审查状态或评分；Tushare 状态/自检按钮只读取 `/providers/tushare/status` 和 `/providers/tushare/readiness`，不触发真实抓取；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、Tushare token 原文、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 

@@ -67,30 +67,30 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 
 ## 可选打包脚手架
 
-源码运行仍是默认路径。需要验证桌面 exe 形态时，先只为打包环境安装 PyInstaller：
+源码运行仍是默认路径。需要验证桌面 exe 形态时，先同步可选 packaging 依赖组；PyInstaller 只在这个打包组中声明，不属于默认运行时或普通 dev 依赖：
 
 ```powershell
-uv pip install pyinstaller
+uv sync --group package
 ```
 
 再在仓库根目录执行 onedir 打包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
 ```
 
 如果只想检查即将执行的 PyInstaller 命令，不安装 PyInstaller 且不生成 `build/`、`dist/`、`spec/` 或 launcher，可以先 dry run：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun -Name CustomClient -DistPath C:\tmp\baize-dist -WorkPath C:\tmp\baize-build -Clean
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun -Name CustomClient -DistPath C:\tmp\baize-dist -WorkPath C:\tmp\baize-build -Clean
 ```
 
 如果只想验证打包前置条件而不生成任何产物，可以使用 check-only。该模式会运行同一套 Python 3.12、`tkinter`、入口模块解析 preflight，并检查 PyInstaller 是否可用，然后在创建 `build/`、`dist/`、`spec/`、launcher 或调用 PyInstaller 构建前退出。`-CheckOnly` 不能和 `-SkipPreflight` 同用：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly -CheckJsonOutput clients/windows/package-check-evidence.local.json
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -CheckOnly -CheckJsonOutput clients/windows/package-check-evidence.local.json
 ```
 
 `-CheckJsonOutput` 只能和 `-CheckOnly` 同用；它写出的 JSON 只包含打包前置条件状态、Python 版本、`tkinter`/GUI 模块/PyInstaller 可用性、命令元数据和输出路径元数据，不包含环境变量、密钥、smoke 报告、后端响应、构建输出或二进制。`clients/windows/package-check-evidence*.json` 已加入 `.gitignore`，本地证据文件不要提交。
@@ -98,7 +98,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -Che
 非 dry-run 打包会先运行轻量 Python preflight：确认当前 Python 是 3.12、`tkinter` 可导入、并且能从仓库路径解析 `clients.windows.baizefindb_client`。该 preflight 不会创建 `tk.Tk()`、打开 GUI、调用后端 API、运行 smoke check 或生成构建产物；只有本地排查特殊问题时才加 `-SkipPreflight` 明确跳过：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -SkipPreflight
+uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -SkipPreflight
 ```
 
 脚本随后会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。

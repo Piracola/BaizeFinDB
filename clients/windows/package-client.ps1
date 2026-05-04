@@ -286,7 +286,7 @@ if ($LASTEXITCODE -ne 0) {
         Set-CheckResult $CheckEvidence "pyinstaller" "fail" @{ available = $false }
         Write-CheckEvidence $CheckEvidence $CheckJsonOutput
     }
-    Write-Error "PyInstaller is not installed. Install it only for packaging, for example: uv pip install pyinstaller"
+    Write-Error "PyInstaller is not installed. Sync the optional packaging group first: uv sync --group package"
     exit $LASTEXITCODE
 }
 
