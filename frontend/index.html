@@ -41,7 +41,7 @@
             type="text"
             autocomplete="off"
             spellcheck="false"
-            placeholder="ops / ready / history / tushare / radar / scan / fetch / portfolio / reports / daily / score / telegram"
+            placeholder="ops / warn / ready / history / tushare / radar / scan / fetch / portfolio / reports / daily / score / telegram"
           />
           <button id="command-run-button" type="button">执行</button>
         </div>
@@ -51,11 +51,12 @@
         <button id="refresh-button" type="button" data-terminal-action="refresh">F1 刷新</button>
         <button id="run-scan-button" type="button" data-terminal-action="scan">F2 扫描</button>
         <button id="fetch-akshare-button" type="button" data-terminal-action="fetch">F3 采集</button>
-        <button type="button" data-scroll-target="signals-panel">F4 信号</button>
-        <button type="button" data-scroll-target="portfolio-panel">F5 持仓</button>
-        <button type="button" data-scroll-target="reports-panel">F6 报告</button>
-        <button type="button" data-scroll-target="analytics-panel">F7 周期</button>
-        <button type="button" data-scroll-target="telegram-panel">F8 绑定</button>
+        <button type="button" data-scroll-target="ops-warning-drilldown">F4 告警</button>
+        <button type="button" data-scroll-target="signals-panel">F5 信号</button>
+        <button type="button" data-scroll-target="portfolio-panel">F6 持仓</button>
+        <button type="button" data-scroll-target="reports-panel">F7 报告</button>
+        <button type="button" data-scroll-target="analytics-panel">F8 周期</button>
+        <button type="button" data-scroll-target="telegram-panel">F9 绑定</button>
       </div>
 
       <main class="layout">
@@ -71,6 +72,8 @@
         <div id="ops-history" class="ops-history-list"></div>
         <h3>就绪自检</h3>
         <div id="ops-readiness" class="ops-readiness-list"></div>
+        <h3>OPS 告警钻取</h3>
+        <div id="ops-warning-drilldown" class="ops-warning-drilldown"></div>
         <h3>数据源状态</h3>
         <div id="tushare-status" class="tushare-grid"></div>
         <div id="action-message" class="message" role="status" aria-live="polite"></div>

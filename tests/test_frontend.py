@@ -18,10 +18,13 @@ def test_frontend_index_returns_static_page() -> None:
     assert "报告列表" in response.text
     assert "周期汇总 / 综合评分" in response.text
     assert "Telegram 绑定 / 白名单" in response.text
+    assert "ops / warn / ready" in response.text
     assert "tushare / radar" in response.text
     assert "ops-overview" in response.text
     assert "ops-history" in response.text
     assert "ops-readiness" in response.text
+    assert "OPS 告警钻取" in response.text
+    assert "ops-warning-drilldown" in response.text
     assert "tushare-status" in response.text
     assert "lifecycle-counts" in response.text
     assert "market-sentiment" in response.text
@@ -46,9 +49,17 @@ def test_frontend_assets_are_served() -> None:
     assert "loadOpsOverview" in js_response.text
     assert "loadOpsHistory" in js_response.text
     assert "loadOpsReadiness" in js_response.text
+    assert "loadOpsWarningDrilldown" in js_response.text
+    assert "renderOpsWarningDrilldown" in js_response.text
     assert "/ops/overview" in js_response.text
     assert "/ops/history" in js_response.text
     assert "/ops/readiness" in js_response.text
+    assert "/ops/overview?lookback_hours=24" in js_response.text
+    assert "/ops/history?lookback_hours=24&limit=8" in js_response.text
+    assert "/ops/readiness?lookback_hours=24" in js_response.text
+    assert 'warn: () => {' in js_response.text
+    assert 'warning: () => {' in js_response.text
+    assert 'scrollToPanel("ops-warning-drilldown")' in js_response.text
     assert "formatOpsAlerts" in js_response.text
     assert "formatOpsServerDetail" in js_response.text
     assert "formatOpsServerResources" in js_response.text
@@ -81,6 +92,8 @@ def test_frontend_assets_are_served() -> None:
     assert "terminal-shell" in css_response.text
     assert "status-panel" in css_response.text
     assert "ops-grid" in css_response.text
+    assert "ops-warning-drilldown" in css_response.text
+    assert "ops-drilldown-section" in css_response.text
     assert "tushare-grid" in css_response.text
     assert "status-warning" in css_response.text
     assert "portfolio-panel" in css_response.text
@@ -92,3 +105,27 @@ def test_frontend_assets_are_served() -> None:
     assert "lifecycle-grid" in css_response.text
     assert "sentiment-grid" in css_response.text
     assert "backtrace-list" in css_response.text
+
+
+def test_frontend_ops_warning_drilldown_keeps_backend_owned_status_boundary() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    drilldown_start = js_text.index("function renderOpsWarningDrilldown")
+    drilldown_end = js_text.index("function renderTushareStatus")
+    drilldown_block = js_text[drilldown_start:drilldown_end]
+
+    assert "check.status !== \"ok\"" in drilldown_block
+    assert "readinessStatusLabel(readiness?.status" in drilldown_block
+    assert "overview?.alerts" in drilldown_block
+    assert "history?.failure_summary" in drilldown_block
+    assert "history?.recent_events" in drilldown_block
+    assert "slice(0, 8)" in drilldown_block
+    assert "alerts.length > 0" not in drilldown_block
+    assert "unhealthy_count" not in drilldown_block
+    assert "recent_scan_failure_count" not in drilldown_block
+    assert "is_cpu_pressure_high" not in drilldown_block
+    assert "is_memory_pressure_high" not in drilldown_block

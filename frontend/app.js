@@ -41,6 +41,7 @@ const elements = {
   opsOverview: document.querySelector("#ops-overview"),
   opsHistory: document.querySelector("#ops-history"),
   opsReadiness: document.querySelector("#ops-readiness"),
+  opsWarningDrilldown: document.querySelector("#ops-warning-drilldown"),
   tushareStatus: document.querySelector("#tushare-status"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
@@ -100,6 +101,7 @@ async function refreshAll() {
       loadOpsOverview(),
       loadOpsHistory(),
       loadOpsReadiness(),
+      loadOpsWarningDrilldown({ silent: true }),
       loadTushareStatus(),
       loadOverview(),
       loadSignals(),
@@ -129,6 +131,7 @@ async function loadReadyStatus() {
     renderOpsUnavailable("无法连接 API。");
     renderOpsHistoryUnavailable("无法连接 API。");
     renderOpsReadinessUnavailable("无法连接 API。");
+    renderOpsWarningDrilldownUnavailable("无法连接 API。");
     return false;
   }
 }
@@ -157,6 +160,25 @@ async function loadOpsReadiness() {
     renderOpsReadiness(readiness);
   } catch (error) {
     renderOpsReadinessUnavailable(`就绪自检暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadOpsWarningDrilldown(options = {}) {
+  try {
+    const [readiness, overview, history] = await Promise.all([
+      fetchJson("/ops/readiness?lookback_hours=24"),
+      fetchJson("/ops/overview?lookback_hours=24"),
+      fetchJson("/ops/history?lookback_hours=24&limit=8"),
+    ]);
+    renderOpsWarningDrilldown(readiness, overview, history);
+    if (!options.silent) {
+      showMessage("info", "OPS 告警钻取已刷新。");
+    }
+  } catch (error) {
+    renderOpsWarningDrilldownUnavailable(`OPS 告警钻取暂不可用：${formatError(error)}`);
+    if (!options.silent) {
+      showMessage("error", `OPS 告警钻取失败：${formatError(error)}`);
+    }
   }
 }
 
@@ -261,6 +283,7 @@ function renderRadarUnavailable(reason) {
   renderOpsUnavailable("依赖服务恢复后再读取运行状态。");
   renderOpsHistoryUnavailable("依赖服务恢复后再读取运维历史。");
   renderOpsReadinessUnavailable("依赖服务恢复后再读取就绪自检。");
+  renderOpsWarningDrilldownUnavailable("依赖服务恢复后再读取 OPS 告警钻取。");
   renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
@@ -479,7 +502,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -487,6 +510,22 @@ function executeCommand() {
   const commands = {
     ops: () => scrollToPanel("status-panel"),
     status: () => scrollToPanel("status-panel"),
+    warn: () => {
+      scrollToPanel("ops-warning-drilldown");
+      loadOpsWarningDrilldown();
+    },
+    warning: () => {
+      scrollToPanel("ops-warning-drilldown");
+      loadOpsWarningDrilldown();
+    },
+    warnings: () => {
+      scrollToPanel("ops-warning-drilldown");
+      loadOpsWarningDrilldown();
+    },
+    opswarn: () => {
+      scrollToPanel("ops-warning-drilldown");
+      loadOpsWarningDrilldown();
+    },
     history: () => {
       scrollToPanel("status-panel");
       loadOpsHistory();
@@ -534,7 +573,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -765,6 +804,120 @@ function renderOpsReadiness(readiness) {
 
 function renderOpsReadinessUnavailable(reason) {
   elements.opsReadiness.innerHTML = emptyState(reason);
+}
+
+function renderOpsWarningDrilldown(readiness, overview, history) {
+  const checks = Array.isArray(readiness?.checks) ? readiness.checks : [];
+  const nonOkChecks = checks.filter((check) => check.status !== "ok");
+  const alerts = Array.isArray(overview?.alerts) ? overview.alerts : [];
+  const failureSummary = Array.isArray(history?.failure_summary) ? history.failure_summary.slice(0, 8) : [];
+  const recentEvents = Array.isArray(history?.recent_events) ? history.recent_events.slice(0, 8) : [];
+
+  elements.opsWarningDrilldown.innerHTML = `
+    <article class="detail-card">
+      <div class="meta-row">
+        <span class="badge">${escapeHtml(readinessStatusLabel(readiness?.status || "unknown"))}</span>
+        <span class="badge">最近 ${escapeHtml(readiness?.lookback_hours ?? 24)} 小时</span>
+        <span class="badge">后端 readiness</span>
+      </div>
+      <h3>就绪状态</h3>
+      <p class="summary">状态来自 /ops/readiness；前端只展示后端结果。</p>
+    </article>
+    <section class="ops-drilldown-section">
+      <h4>非 OK 检查</h4>
+      ${renderOpsWarningChecks(nonOkChecks)}
+    </section>
+    <section class="ops-drilldown-section">
+      <h4>Overview alerts</h4>
+      ${renderOpsWarningAlerts(alerts)}
+    </section>
+    <section class="ops-drilldown-section">
+      <h4>Failure summary</h4>
+      ${renderOpsWarningFailureSummary(failureSummary)}
+    </section>
+    <section class="ops-drilldown-section">
+      <h4>Recent events</h4>
+      ${renderOpsWarningEvents(recentEvents)}
+    </section>
+  `;
+}
+
+function renderOpsWarningChecks(checks) {
+  if (checks.length === 0) {
+    return emptyState("后端 readiness 未返回非 OK 检查。");
+  }
+
+  return checks
+    .map((check) => {
+      return `
+        <article class="detail-card ${statusCardClass(check.status)}">
+          <strong>${escapeHtml(opsCheckLabel(check.name))}</strong>
+          <div>${escapeHtml(readinessCheckLabel(check.status))}</div>
+          <div class="muted">${escapeHtml(check.message || "未返回检查说明")}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderOpsWarningAlerts(alerts) {
+  if (alerts.length === 0) {
+    return emptyState("后端 overview 未返回 alerts。");
+  }
+
+  return alerts
+    .slice(0, 8)
+    .map((alert) => {
+      return `
+        <article class="detail-card status-warning">
+          <strong>${escapeHtml(alert.code || "alert")}</strong>
+          <div>${escapeHtml(label(alert.severity || "warning"))}</div>
+          <div class="muted">${escapeHtml(alert.message || "未返回告警说明")}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderOpsWarningFailureSummary(summary) {
+  if (summary.length === 0) {
+    return emptyState("后端 history 未返回 failure_summary。");
+  }
+
+  return summary
+    .map((item) => {
+      return `
+        <article class="detail-card">
+          <strong>${escapeHtml(opsKindLabel(item.kind))}</strong>
+          <div>${escapeHtml(item.key || "unknown")}</div>
+          <div class="muted">count=${escapeHtml(item.count ?? 0)}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderOpsWarningEvents(events) {
+  if (events.length === 0) {
+    return emptyState("后端 history 未返回最近异常事件。");
+  }
+
+  return events
+    .map((event) => {
+      const detail = event.detail ? `<div class="muted">${escapeHtml(event.detail)}</div>` : "";
+      return `
+        <article class="detail-card">
+          <strong>${escapeHtml(opsKindLabel(event.kind))} #${escapeHtml(event.id)}</strong>
+          <div>${escapeHtml(label(event.status))} / ${escapeHtml(formatDate(event.occurred_at))}</div>
+          ${detail}
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderOpsWarningDrilldownUnavailable(reason) {
+  elements.opsWarningDrilldown.innerHTML = emptyState(reason);
 }
 
 function renderTushareStatus(status, readiness) {

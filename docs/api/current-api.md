@@ -980,7 +980,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 ## 11. 接 Telegram / Web / 报告时的推荐用法
 
-- 状态面板：用 `GET /health/ready`、`GET /ops/overview`、`GET /ops/history` 和 `GET /ops/readiness`，展示依赖就绪、服务端磁盘/CPU/内存摘要、扫描新鲜度、失败率、数据质量、推送、模型调用、最近运维异常历史和运行就绪自检。
+- 状态面板：用 `GET /health/ready`、`GET /ops/overview`、`GET /ops/history` 和 `GET /ops/readiness`，展示依赖就绪、服务端磁盘/CPU/内存摘要、扫描新鲜度、失败率、数据质量、推送、模型调用、最近运维异常历史、运行就绪自检和只读 OPS 告警钻取。Web 告警钻取沿用 24 小时窗口，展示后端 readiness、非 OK 检查、overview alerts、history `failure_summary` 和有界 recent events；不要在浏览器从 alerts/counts/events 重算 OPS 状态。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
