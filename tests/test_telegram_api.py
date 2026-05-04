@@ -80,6 +80,7 @@ async def test_telegram_status_does_not_leak_secrets(
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:secret-token")
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001,1002")
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "hook-secret")
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "true")
     get_settings.cache_clear()
 
     response = await client.get("/telegram/status")
@@ -90,7 +91,7 @@ async def test_telegram_status_does_not_leak_secrets(
         "allowed_chat_count": 2,
         "binding_count": 0,
         "active_binding_count": 0,
-        "require_binding": False,
+        "require_binding": True,
         "webhook_secret_enabled": True,
         "push_enabled": False,
     }
