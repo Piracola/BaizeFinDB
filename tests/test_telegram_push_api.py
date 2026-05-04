@@ -19,6 +19,7 @@ def telegram_push_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "")
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "false")
     monkeypatch.setenv("TELEGRAM_PUSH_ENABLED", "false")
     get_settings.cache_clear()
     yield
@@ -210,6 +211,27 @@ async def test_telegram_push_request_chat_ids_respect_db_bindings(
     data = response.json()
     assert data["recipient_count"] == 1
     assert [delivery["chat_id"] for delivery in data["deliveries"]] == [1001]
+
+
+@pytest.mark.asyncio
+async def test_telegram_push_strict_mode_has_no_implicit_recipients_without_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "true")
+    get_settings.cache_clear()
+    await _seed_push_scan(session_factory)
+
+    response = await client.post(
+        "/telegram/push/latest",
+        json={"dry_run": True},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["recipient_count"] == 0
+    assert data["deliveries"] == []
 
 
 @pytest.mark.asyncio

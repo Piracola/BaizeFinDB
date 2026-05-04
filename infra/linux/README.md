@@ -52,7 +52,8 @@ Required notes:
 - `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` controls how many consecutive P1 scans create a quick-report candidate. The default is `3`.
 - `RADAR_CONTINUITY_WINDOW_MINUTES` controls the continuity window for repeated P1 checks. The default is `30`.
 - `TUSHARE_TOKEN` enables manual Tushare `stock_basic`, `anns_d`, and `stock_company` verification and collection. It does not enable Beat by itself; only `TUSHARE_ANNS_D_BEAT_ENABLED=true` adds the optional `anns_d` Beat task.
-- `TELEGRAM_PUSH_ENABLED=true` makes the collect-then-scan task send a folded Telegram radar push after each successful scan. Keep it `false` until token, chat whitelist, and webhook secret are ready.
+- `TELEGRAM_REQUIRE_BINDING=true` closes the local open fallback when no environment allow-list and no active database binding exist. Keep `/id` available to discover chat ids, then write active bindings before enabling pushes.
+- `TELEGRAM_PUSH_ENABLED=true` makes the collect-then-scan task send a folded Telegram radar push after each successful scan. Keep it `false` until token, chat whitelist or active bindings, webhook secret, and strict binding choice are ready.
 
 Example placeholders:
 
@@ -61,6 +62,7 @@ APP_ENV=server
 TELEGRAM_BOT_TOKEN=<telegram-bot-token>
 TELEGRAM_ALLOWED_CHAT_IDS=<comma-separated-chat-ids>
 TELEGRAM_WEBHOOK_SECRET=<telegram-webhook-secret>
+TELEGRAM_REQUIRE_BINDING=true
 TELEGRAM_PUSH_ENABLED=false
 SERVER_DATABASE_URL=postgresql+asyncpg://<db-user>:<db-password>@postgres:5432/<db-name>
 SERVER_REDIS_URL=redis://redis:6379/0

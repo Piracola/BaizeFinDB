@@ -213,7 +213,7 @@ Telegram bindings 表不负责：
 
 - 保存 Telegram bot token、webhook secret 或消息原文。
 - 修改雷达 P0/P1/P2、生命周期、报告状态或评分。
-- 替代 `TELEGRAM_ALLOWED_CHAT_IDS` 的硬安全门；如果环境白名单存在，环境白名单仍会先过滤。
+- 替代 `TELEGRAM_ALLOWED_CHAT_IDS` 的硬安全门；如果环境白名单存在，环境白名单仍会先过滤。`TELEGRAM_REQUIRE_BINDING=true` 只关闭无环境白名单、无 active 绑定时的本地开放兜底。
 
 ## 5. 当前尚未实现但路线图中出现的表
 

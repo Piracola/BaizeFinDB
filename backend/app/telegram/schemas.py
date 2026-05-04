@@ -31,6 +31,7 @@ class TelegramStatusRead(BaseModel):
     allowed_chat_count: int
     binding_count: int = 0
     active_binding_count: int = 0
+    require_binding: bool
     webhook_secret_enabled: bool
     push_enabled: bool
 

@@ -238,6 +238,7 @@ Invoke-RestMethod http://127.0.0.1:8000/scores/signals/1
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_IDS=
 TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_REQUIRE_BINDING=false
 TELEGRAM_PUSH_ENABLED=false
 MODEL_AUDIT_STORE_RAW_PROMPT=false
 ```
@@ -260,7 +261,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/bindings `
 Invoke-RestMethod http://127.0.0.1:8000/telegram/bindings
 ```
 
-如果 `.env` 未配置 `TELEGRAM_ALLOWED_CHAT_IDS` 且数据库没有任何绑定，本地 webhook 仍保持开放模式；一旦存在绑定，未绑定 chat 默认会被拒绝。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，环境白名单仍是硬过滤。
+如果 `.env` 未配置 `TELEGRAM_ALLOWED_CHAT_IDS` 且数据库没有任何绑定，本地 webhook 默认保持开放模式；一旦存在绑定，未绑定 chat 默认会被拒绝。生产式调试或公网部署前可设置 `TELEGRAM_REQUIRE_BINDING=true` 关闭这个开放兜底，此时仍可用 `/id` 获取 chat id，再通过 `/telegram/bindings` 写入 active 绑定。配置 `TELEGRAM_ALLOWED_CHAT_IDS` 后，环境白名单仍是硬过滤。
 
 也可以在 Web 工作台的 `Telegram 绑定 / 白名单` 面板维护绑定。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，在该面板的 `Webhook Secret` 输入框临时填写同一个值；前端不会保存该 secret。
 
@@ -414,6 +415,7 @@ RADAR_CONTINUITY_WINDOW_MINUTES=30
 TUSHARE_ANNS_D_BEAT_ENABLED=false
 TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=3600
 TELEGRAM_PUSH_ENABLED=false
+TELEGRAM_REQUIRE_BINDING=false
 ```
 
 `TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 和 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 checklist、`anns_d` 归一化必需字段、重大风险 P0 样例和普通公告无信号样例仍符合预期，再执行 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存脱敏 live evidence。

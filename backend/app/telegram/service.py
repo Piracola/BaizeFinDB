@@ -68,6 +68,7 @@ def telegram_status(
         allowed_chat_count=len(settings.telegram_allowed_chat_id_set),
         binding_count=binding_count,
         active_binding_count=active_binding_count,
+        require_binding=settings.telegram_require_binding,
         webhook_secret_enabled=settings.telegram_webhook_secret_enabled,
         push_enabled=settings.telegram_push_enabled,
     )

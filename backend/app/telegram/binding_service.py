@@ -130,6 +130,9 @@ async def is_telegram_chat_authorized(
     if env_allowed_chat_ids:
         return True
 
+    if settings.telegram_require_binding:
+        return False
+
     total_count, _ = await telegram_binding_counts(session)
     return total_count == 0
 

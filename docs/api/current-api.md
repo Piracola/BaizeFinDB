@@ -834,6 +834,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
   "allowed_chat_count": 0,
   "binding_count": 0,
   "active_binding_count": 0,
+  "require_binding": false,
   "webhook_secret_enabled": false,
   "push_enabled": false
 }
@@ -846,6 +847,7 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `allowed_chat_count` | `.env` 中 `TELEGRAM_ALLOWED_CHAT_IDS` 的数量；配置后仍作为硬过滤 |
 | `binding_count` | 数据库 `telegram_bindings` 记录总数 |
 | `active_binding_count` | 当前允许的绑定数量 |
+| `require_binding` | `TELEGRAM_REQUIRE_BINDING` 是否开启；开启后无环境白名单且无 active 绑定的 chat 不再使用本地开放模式 |
 
 ### `POST /telegram/webhook`
 
@@ -935,7 +937,8 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/bindings `
 
 绑定规则：
 
-- 如果 `.env` 没有配置 `TELEGRAM_ALLOWED_CHAT_IDS`，且数据库没有任何绑定，则本地开发保持开放模式。
+- 如果 `.env` 没有配置 `TELEGRAM_ALLOWED_CHAT_IDS`，且数据库没有任何绑定，默认本地开发保持开放模式。
+- 如果设置 `TELEGRAM_REQUIRE_BINDING=true`，无环境白名单且无 active 数据库绑定的 chat 会被拒绝；`/id` 仍可在未授权前返回 chat id，便于管理员写入绑定。
 - 一旦数据库存在绑定，未绑定 chat 默认不再通过 webhook 授权。
 - 如果 `.env` 配置了 `TELEGRAM_ALLOWED_CHAT_IDS`，环境白名单仍先过滤；数据库绑定只能在环境白名单允许的范围内进一步允许或禁用。
 
@@ -963,7 +966,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/push/latest `
 
 | 字段 | 说明 |
 | --- | --- |
-| `chat_ids` | 可选，最多 20 个 chat id；为空时使用 `TELEGRAM_ALLOWED_CHAT_IDS`；配置白名单后，显式传入的 chat id 也会被白名单过滤 |
+| `chat_ids` | 可选，最多 20 个 chat id；为空时使用 `TELEGRAM_ALLOWED_CHAT_IDS` 或 active 数据库绑定；配置白名单后，显式传入的 chat id 也会被白名单过滤；`TELEGRAM_REQUIRE_BINDING=true` 且无白名单/绑定时不会产生隐式收件人 |
 | `dry_run` | `true` 时只返回 preview，不写入 `push_logs`，不调用 Telegram API |
 
 响应重点：

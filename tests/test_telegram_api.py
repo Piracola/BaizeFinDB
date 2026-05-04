@@ -30,6 +30,7 @@ def telegram_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "")
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "false")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -89,6 +90,7 @@ async def test_telegram_status_does_not_leak_secrets(
         "allowed_chat_count": 2,
         "binding_count": 0,
         "active_binding_count": 0,
+        "require_binding": False,
         "webhook_secret_enabled": True,
         "push_enabled": False,
     }
@@ -163,6 +165,84 @@ async def test_telegram_id_command_is_available_before_authorization(
     assert data["delivery"] == "preview"
     assert "当前聊天 ID：9999" in data["preview"]
     assert "不构成投资建议" in data["preview"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_require_binding_rejects_unbound_help_but_allows_id(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "true")
+    get_settings.cache_clear()
+
+    help_response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+    id_response = await client.post("/telegram/webhook", json=_telegram_update("/id"))
+
+    assert help_response.status_code == 200
+    help_data = help_response.json()
+    assert help_data["accepted"] is False
+    assert help_data["authorized"] is False
+    assert help_data["delivery"] == "skipped"
+    assert "白名单" in help_data["preview"]
+
+    assert id_response.status_code == 200
+    id_data = id_response.json()
+    assert id_data["accepted"] is True
+    assert id_data["authorized"] is False
+    assert "当前聊天 ID：1001" in id_data["preview"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_require_binding_allows_active_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "true")
+    get_settings.cache_clear()
+    await client.post("/telegram/bindings", json={"chat_id": 1001, "is_allowed": True})
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["accepted"] is True
+    assert data["authorized"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("require_binding", ["false", "true"])
+async def test_telegram_disabled_binding_rejects_chat(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+    require_binding: str,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", require_binding)
+    get_settings.cache_clear()
+    await client.post("/telegram/bindings", json={"chat_id": 1001, "is_allowed": False})
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["accepted"] is False
+    assert data["authorized"] is False
+
+
+@pytest.mark.asyncio
+async def test_telegram_env_allow_list_still_allows_without_binding_in_strict_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001")
+    monkeypatch.setenv("TELEGRAM_REQUIRE_BINDING", "true")
+    get_settings.cache_clear()
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/help"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["accepted"] is True
+    assert data["authorized"] is True
 
 
 @pytest.mark.asyncio

@@ -168,7 +168,7 @@ uv run python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confir
 
 恢复会覆盖目标数据库当前状态；执行前先确认当前 compose project、目标数据库和备份文件路径。
 
-Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整调度间隔，可用 `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 调整连续 P1 快报候选阈值。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。
+Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整调度间隔，可用 `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 调整连续 P1 快报候选阈值。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。公网部署建议同时设置 `TELEGRAM_REQUIRE_BINDING=true`，避免无环境白名单且无数据库绑定时沿用本地开放模式；`/id` 仍可用于获取 chat id 后写入 active 绑定。
 
 Tushare `anns_d` 公告采集有独立的可选 Beat 开关，默认关闭，不影响上述 5 分钟 AKShare+雷达闭环。只有在服务器 `.env` 中显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`；间隔由 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 控制，默认 `3600` 秒。启用前先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 汇总本地 sample gate、token、Beat 启停、interval、live verify 和 readiness/live data 状态；默认 checklist 不访问 Tushare、不写数据库、不触发抓取、扫描或推送。随后通过 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py` 的本地字段漂移和风险映射样例校验，再用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存脱敏 live evidence，最后确认 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness`；离线门禁不替代这些真实环境验证。
 
@@ -240,5 +240,5 @@ Get-CimInstance Win32_Process -Filter "ProcessId=<pid>" |
 - `backups/` 不进入 git；数据库备份文件只留在服务器安全备份流程里。
 - 文档和示例只使用 `<telegram-bot-token>`、`<telegram-webhook-secret>`、`<db-password>` 这类占位符。
 - Telegram webhook 需要公网 HTTPS 后再设置到 `https://<your-domain>/telegram/webhook`。
-- Telegram 折叠推送只使用 `.env` 中的 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_ALLOWED_CHAT_IDS` 和 `TELEGRAM_PUSH_ENABLED`；不要把真实 chat id、token 或推送日志导出文件提交到 git。
+- Telegram 折叠推送只使用 `.env` 中的 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_REQUIRE_BINDING` 和 `TELEGRAM_PUSH_ENABLED`；不要把真实 chat id、token 或推送日志导出文件提交到 git。
 - 当前只是部署骨架；PostgreSQL 默认凭据、TLS 证书签发、备份策略、监控告警和生产安全加固仍需要后续专门处理。

@@ -237,6 +237,7 @@ smoke check 会验证 Tkinter 可导入、核心健康、readiness GET 和可选
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_IDS=
 TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_REQUIRE_BINDING=false
 TELEGRAM_PUSH_ENABLED=false
 OPS_DISK_CHECK_PATH=.
 OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD=10
@@ -247,9 +248,10 @@ OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD=90
 - `TELEGRAM_BOT_TOKEN` 留空时，`POST /telegram/webhook` 不会调用 Telegram Bot API，而是返回 `preview`，方便本地测试。
 - `TELEGRAM_ALLOWED_CHAT_IDS` 可填逗号分隔的 chat id；配置后只有白名单 chat 会被处理。
 - `TELEGRAM_WEBHOOK_SECRET` 配置后，Webhook 必须携带 `X-Telegram-Bot-Api-Secret-Token`。
+- `TELEGRAM_REQUIRE_BINDING=true` 会关闭无白名单、无绑定时的本地开放模式；生产/公网部署建议开启，并先用 `/id` 获取 chat id 后写入 `/telegram/bindings`。
 - `TELEGRAM_PUSH_ENABLED=true` 后，Celery 扫描任务会向白名单 chat 发送最新扫描的折叠推送；留空或 false 时只保留手动 API 调试。
 - P0 信号完成折叠推送后，会为对应 `user_key=telegram-<chat_id>` 自动生成一份 `standard` report；重复推送同一扫描不会重复生成。
-- `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤。
+- `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤；未配置环境白名单且无绑定时默认仅本地开放，`TELEGRAM_REQUIRE_BINDING=true` 会要求必须有 active 绑定。
 - `/health` 返回 API、数据库、Redis 和最近一次雷达扫描摘要。
 - `/ops` 返回服务端运行时、磁盘/CPU/内存、最近运行状态、扫描失败率、Provider、数据质量、推送、模型调用和告警摘要。
 - `/ops_history` 返回最近运维异常历史和异常汇总，不触发采集、扫描、推送或模型调用。

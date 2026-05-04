@@ -56,6 +56,10 @@ class Settings(BaseSettings):
         default=None,
         alias="TELEGRAM_WEBHOOK_SECRET",
     )
+    telegram_require_binding: bool = Field(
+        default=False,
+        alias="TELEGRAM_REQUIRE_BINDING",
+    )
     telegram_push_enabled: bool = Field(default=False, alias="TELEGRAM_PUSH_ENABLED")
     model_audit_store_raw_prompt: bool = Field(
         default=False,
