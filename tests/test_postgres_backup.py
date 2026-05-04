@@ -186,6 +186,41 @@ def test_check_only_writes_failure_evidence_and_returns_nonzero(
     assert "pg_dump unavailable" in evidence["pg_dump_version"]["detail"]
 
 
+def test_check_evidence_write_recursively_redacts_sensitive_values(
+    tmp_path: Path,
+) -> None:
+    evidence_output = tmp_path / "backup-check.json"
+    evidence = postgres_backup.build_check_evidence(
+        status="fail",
+        root=tmp_path,
+        output_path=tmp_path / "backups" / "check.sql",
+        backup_dir="backups",
+        explicit_output=None,
+        service="postgres-password=should-not-leak",
+        db_user="api_key=should-not-leak",
+        db_name="baizefindb",
+        command=["docker", "compose", "token=should-not-leak"],
+        pg_dump_returncode=1,
+        pg_dump_detail="authorization=should-not-leak\npg_dump unavailable",
+    )
+
+    postgres_backup.write_check_evidence(evidence_output, evidence)
+
+    evidence_text = evidence_output.read_text(encoding="utf-8")
+    written = json.loads(evidence_text)
+    assert "should-not-leak" not in evidence_text
+    assert (
+        written["postgres"]["service"]
+        == "[redacted sensitive output line]"
+    )
+    assert (
+        written["postgres"]["db_user"]
+        == "[redacted sensitive output line]"
+    )
+    assert written["compose_command_shape"][-1] == "[redacted sensitive output line]"
+    assert "pg_dump unavailable" in written["pg_dump_version"]["detail"]
+
+
 def test_check_json_output_requires_check_only_before_shelling_out(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(postgres_backup, "find_repo_root", lambda: calls.append("root"))

@@ -141,9 +141,14 @@ def build_check_evidence(
 
 
 def write_check_evidence(path: Path, evidence: dict[str, object]) -> None:
+    safe_evidence = sanitize_evidence_value(evidence)
+    if not isinstance(safe_evidence, dict):
+        msg = "sanitized evidence must remain a JSON object"
+        raise TypeError(msg)
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(safe_evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -289,6 +294,34 @@ def sanitize_detail(text: str, *, limit: int = 500) -> str:
     if len(sanitized) <= limit:
         return sanitized
     return f"{sanitized[: limit - 15]}\n... truncated"
+
+
+def sanitize_evidence_value(value: object, *, limit: int = 500) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, item in list(value.items())[:50]:
+            safe_key = sanitize_detail(str(key), limit=120)
+            if SENSITIVE_PATTERN.search(str(key)):
+                sanitized[safe_key] = "[redacted sensitive field]"
+            else:
+                sanitized[safe_key] = sanitize_evidence_value(item, limit=limit)
+        return sanitized
+
+    if isinstance(value, list):
+        sanitized_items = [
+            sanitize_evidence_value(item, limit=limit) for item in value[:50]
+        ]
+        if len(value) > 50:
+            sanitized_items.append("... truncated")
+        return sanitized_items
+
+    if isinstance(value, tuple):
+        return sanitize_evidence_value(list(value), limit=limit)
+
+    if isinstance(value, str):
+        return sanitize_detail(value, limit=limit)
+
+    return value
 
 
 if __name__ == "__main__":
