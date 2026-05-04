@@ -197,6 +197,85 @@ def test_tushare_anns_d_beat_enablement_flag_can_be_enabled() -> None:
     assert args.check_tushare_anns_d_beat_enablement is True
 
 
+def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
+    monkeypatch, tmp_path: Path
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+
+    calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_tushare_anns_d_beat_enablement",
+        lambda: calls.append("tushare") or server_deploy_check.CheckResult("tushare", "ok"),
+    )
+
+    exit_code = server_deploy_check.main([])
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_main_tushare_anns_d_beat_enablement_warn_exits_zero(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_tushare_anns_d_beat_enablement",
+        lambda: server_deploy_check.CheckResult(
+            "Tushare anns_d Beat enablement checklist",
+            "warn",
+            "status=warn; summary pass=3 warn=3 fail=0",
+        ),
+    )
+
+    exit_code = server_deploy_check.main(["--check-tushare-anns-d-beat-enablement"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "[WARN] Tushare anns_d Beat enablement checklist" in captured.out
+
+
+def test_main_tushare_anns_d_beat_enablement_fail_exits_nonzero(
+    monkeypatch, tmp_path: Path
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_tushare_anns_d_beat_enablement",
+        lambda: server_deploy_check.CheckResult(
+            "Tushare anns_d Beat enablement checklist",
+            "fail",
+            "status=fail; summary pass=2 warn=1 fail=1; attention gates=beat_interval:fail",
+        ),
+    )
+
+    exit_code = server_deploy_check.main(["--check-tushare-anns-d-beat-enablement"])
+
+    assert exit_code == 1
+
+
 def test_tushare_anns_d_beat_enablement_pass_maps_to_ok(monkeypatch) -> None:
     monkeypatch.setattr(
         server_deploy_check,
