@@ -2,6 +2,7 @@ param(
     [string]$ServerUrl = $env:BAIZEFINDB_SERVER_URL,
     [string]$UserKey = $env:BAIZEFINDB_USER_KEY,
     [switch]$SmokeCheck,
+    [switch]$SmokeOnly,
     [string]$SmokeJsonOutput,
     [string]$SmokeCompactJsonOutput,
     [ValidateRange(1, 168)]
@@ -25,6 +26,10 @@ if ([string]::IsNullOrWhiteSpace($UserKey)) {
 
 $env:BAIZEFINDB_USER_KEY = $UserKey
 Set-Location $RepoRoot
+
+if ($SmokeOnly -and -not $SmokeCheck) {
+    $SmokeCheck = $true
+}
 
 if ($SmokeCheck) {
     $SmokeArgs = @(
@@ -53,6 +58,10 @@ if ($SmokeCheck) {
     & python @SmokeArgs
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
+    }
+
+    if ($SmokeOnly) {
+        exit 0
     }
 }
 

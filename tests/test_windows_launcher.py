@@ -59,6 +59,20 @@ def test_first_trial_launcher_delegates_overrides_json_compact_and_strict(
     ]
 
 
+def test_first_trial_launcher_smoke_only_delegates_without_gui(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(tmp_path, "-SmokeOnly")
+
+    assert result.returncode == 0
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+    ]
+
+
 def test_first_trial_launcher_blocks_gui_when_delegated_smoke_check_fails(
     tmp_path: Path,
 ) -> None:
@@ -112,6 +126,39 @@ def test_first_trial_launcher_start_docker_backend_runs_compose_before_delegatio
             "--user-key default --ops-readiness-lookback-hours 24"
         ),
         "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_start_docker_backend_smoke_only_runs_compose_before_smoke(
+    tmp_path: Path,
+) -> None:
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-SmokeOnly",
+            "-ServerUrl",
+            server_url,
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
     ]
 
 
@@ -209,6 +256,45 @@ def test_launcher_smoke_check_passes_server_user_json_compact_and_strict_args(
             f"{json_output} --compact-json-output {compact_output} --fail-on-warning"
         ),
         "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_launcher_smoke_only_implies_smoke_check_and_skips_gui(tmp_path: Path) -> None:
+    result, calls = _run_launcher(
+        tmp_path,
+        "-ServerUrl",
+        "http://127.0.0.1:8000",
+        "-UserKey",
+        "default",
+        "-SmokeOnly",
+    )
+
+    assert result.returncode == 0
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+    ]
+
+
+def test_launcher_smoke_only_failure_exits_nonzero_without_gui(tmp_path: Path) -> None:
+    result, calls = _run_launcher(
+        tmp_path,
+        "-ServerUrl",
+        "http://127.0.0.1:8000",
+        "-UserKey",
+        "default",
+        "-SmokeOnly",
+        smoke_exit=7,
+    )
+
+    assert result.returncode == 7
+    assert calls == [
+        (
+            "-m clients.windows.smoke_check --server-url http://127.0.0.1:8000 "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
     ]
 
 

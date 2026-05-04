@@ -178,6 +178,18 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck
 ```
 
+如果 API 已经在运行，只想执行同一套首用 smoke check 并退出、不打开 GUI：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeOnly
+```
+
+如果要先启动本机 Docker 后端、等待健康检查，然后只跑 smoke check 并退出：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend -SmokeOnly
+```
+
 严格门禁和首次试运行 evidence 推荐使用 compact JSON；详细 JSON 仍保留给深度排障：
 
 ```powershell

@@ -6,6 +6,7 @@ param(
     [string]$SmokeJsonOutput,
     [string]$SmokeCompactJsonOutput,
     [switch]$SmokeStrict,
+    [switch]$SmokeOnly,
     [switch]$StartDockerBackend,
     [ValidateRange(1, 3600)]
     [int]$BackendHealthTimeoutSeconds = 120,
@@ -100,6 +101,10 @@ if (-not [string]::IsNullOrWhiteSpace($SmokeCompactJsonOutput)) {
 
 if ($SmokeStrict) {
     $RunParams.SmokeStrict = $true
+}
+
+if ($SmokeOnly) {
+    $RunParams.SmokeOnly = $true
 }
 
 & $RunClientPath @RunParams
