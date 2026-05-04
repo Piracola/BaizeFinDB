@@ -128,7 +128,7 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 ## Windows 客户端 MVP
 
-Windows 客户端位于 [clients/windows/](clients/windows/)，当前是源码运行版，不是 exe 或安装包。
+Windows 客户端位于 [clients/windows/](clients/windows/)，默认是源码运行版。仓库提供可选 PyInstaller onedir 打包脚手架，用于开发者在 Windows 目标机验证 exe 形态；它不是签名安装器或生产分发包。
 
 首次使用前先跑只读 smoke check：
 
@@ -165,6 +165,15 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
+
+可选 onedir 打包脚手架：
+
+```powershell
+uv pip install pyinstaller
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
+```
+
+脚本入口仍是 `clients.windows.baizefindb_client`，默认输出 `clients/windows/dist/BaizeFinDB-Windows-Client/`，中间文件在 `clients/windows/build/`；生成物和 `*.spec` 已加入 `.gitignore`，不要提交 exe 或构建目录。该脚手架不做 onefile、MSI、代码签名、SmartScreen 信誉或自动更新。
 
 smoke check 会验证 Tkinter 可导入、核心健康和 readiness GET，可选写出脱敏有界 JSON；空雷达、空信号和空绑定是 warning，不是 blocker。`run-client.ps1 -SmokeCheck` 会在启动 GUI 前执行同一套检查并传入相同 ServerUrl/UserKey；`-SmokeLookbackHours` 会把 1 到 168 小时的 OPS readiness 窗口传给 smoke check，默认 24；`-SmokeStrict` 会让 warning 阻断启动，默认 warning 仍不阻断。GUI 的 `OPS Lookback (hours)` 同样默认 24，范围 1 到 168，并传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`；非法输入会在 API 请求前阻断。客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态、审查状态或评分；Tushare 状态/自检按钮只读取 `/providers/tushare/status` 和 `/providers/tushare/readiness`，不触发真实抓取；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、Tushare token 原文、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 

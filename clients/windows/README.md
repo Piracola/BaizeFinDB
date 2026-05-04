@@ -2,7 +2,7 @@
 
 这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史和就绪自检共用。
 
-它不是安装包，也不会打包成 exe。后续如果需要桌面分发，可以在这个目录基础上再做打包、签名和自动更新。
+默认仍是源码运行版，不是安装包。当前目录提供可选 PyInstaller onedir 打包脚手架，方便后续在 Windows 目标机上验证 exe 形态；它不是签名安装器，也不包含自动更新或生产分发承诺。
 
 ## 前置条件
 
@@ -64,6 +64,24 @@ $env:BAIZEFINDB_SERVER_URL = "https://<your-domain>"
 $env:BAIZEFINDB_USER_KEY = "default"
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 ```
+
+## 可选打包脚手架
+
+源码运行仍是默认路径。需要验证桌面 exe 形态时，先只为打包环境安装 PyInstaller：
+
+```powershell
+uv pip install pyinstaller
+```
+
+再在仓库根目录执行 onedir 打包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
+```
+
+脚本会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
+
+打包前仍建议先运行 smoke check；打包后的 GUI 只连接后端 API，不会自动采集、扫描、评分、生成报告、修改 Telegram 或执行任何交易相关动作。
 
 ## 功能边界
 

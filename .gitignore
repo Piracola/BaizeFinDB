@@ -7,6 +7,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+clients/windows/build/
+clients/windows/dist/
+*.spec
+
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

@@ -1,6 +1,6 @@
 # Windows 客户端 MVP Runbook
 
-这份 runbook 用于在 Windows 上运行 BaizeFinDB 客户端 MVP。客户端使用 Python 标准库和 Tkinter，不引入新依赖，不打包 exe，也不是完整安装包。
+这份 runbook 用于在 Windows 上运行 BaizeFinDB 客户端 MVP。客户端默认使用 Python 标准库和 Tkinter 源码运行，不引入运行时依赖；仓库另提供可选 PyInstaller onedir 打包脚手架，但它不是签名安装器或生产分发包。
 
 ## 1. 功能边界
 
@@ -102,7 +102,30 @@ $env:BAIZEFINDB_USER_KEY = "default"
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 ```
 
-## 5. 客户端按钮
+## 5. 可选 PyInstaller onedir 打包
+
+打包只用于开发者验证 Windows 桌面 exe 形态，源码运行仍是默认和推荐路径。PyInstaller 只需要安装在打包环境，不是客户端运行依赖：
+
+```powershell
+uv pip install pyinstaller
+```
+
+在仓库根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
+```
+
+脚本会生成临时 launcher，入口模块仍是 `clients.windows.baizefindb_client`，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出：
+
+- `clients/windows/dist/BaizeFinDB-Windows-Client/`
+- `clients/windows/build/`
+
+这些目录和生成的 `*.spec` 已加入 `.gitignore`。不要提交 exe、spec、中间构建目录、签名证书、token、smoke evidence 或个人数据。脚手架不做 onefile、MSI、代码签名、SmartScreen 信誉、自动更新或生产发布。
+
+打包前建议先运行第 3 节的 smoke check。打包后的 GUI 与源码版边界一致：只消费后端 API，不自动采集、扫描、评分、生成报告、修改 Telegram，也不提供交易相关能力。
+
+## 6. 客户端按钮
 
 | 按钮 | 行为 |
 | --- | --- |
@@ -129,7 +152,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1
 
 首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeJsonOutput <path>` 会写出同一份脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。
 
-## 6. 常见问题
+## 7. 常见问题
 
 ### PowerShell 阻止脚本执行
 
