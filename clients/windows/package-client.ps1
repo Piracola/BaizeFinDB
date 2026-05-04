@@ -2,7 +2,8 @@ param(
     [string]$Name = "BaizeFinDB-Windows-Client",
     [string]$DistPath,
     [string]$WorkPath,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,27 +23,6 @@ $SpecPath = Join-Path $WorkPath "spec"
 $LauncherPath = Join-Path $WorkPath "baizefindb_client_launcher.py"
 
 Set-Location $RepoRoot
-
-$PyInstallerCheck = @(
-    "-c",
-    "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('PyInstaller') else 1)"
-)
-& python @PyInstallerCheck
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "PyInstaller is not installed. Install it only for packaging, for example: uv pip install pyinstaller"
-    exit $LASTEXITCODE
-}
-
-New-Item -ItemType Directory -Force -Path $WorkPath, $DistPath, $SpecPath | Out-Null
-
-$LauncherSource = @'
-import runpy
-
-runpy.run_module("clients.windows.baizefindb_client", run_name="__main__")
-'@
-
-$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($LauncherPath, $LauncherSource, $Utf8NoBom)
 
 $PyInstallerArgs = @(
     "-m",
@@ -66,6 +46,43 @@ $PyInstallerArgs = @(
 if ($Clean) {
     $PyInstallerArgs = @("-m", "PyInstaller", "--clean") + $PyInstallerArgs[2..($PyInstallerArgs.Count - 1)]
 }
+
+function Format-CommandArgument {
+    param([string]$Argument)
+
+    if ($Argument -match '^[A-Za-z0-9_./:=\\-]+$') {
+        return $Argument
+    }
+
+    return "'" + ($Argument -replace "'", "''") + "'"
+}
+
+if ($DryRun) {
+    $Command = "python " + (($PyInstallerArgs | ForEach-Object { Format-CommandArgument $_ }) -join " ")
+    Write-Output $Command
+    exit 0
+}
+
+$PyInstallerCheck = @(
+    "-c",
+    "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('PyInstaller') else 1)"
+)
+& python @PyInstallerCheck
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "PyInstaller is not installed. Install it only for packaging, for example: uv pip install pyinstaller"
+    exit $LASTEXITCODE
+}
+
+New-Item -ItemType Directory -Force -Path $WorkPath, $DistPath, $SpecPath | Out-Null
+
+$LauncherSource = @'
+import runpy
+
+runpy.run_module("clients.windows.baizefindb_client", run_name="__main__")
+'@
+
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($LauncherPath, $LauncherSource, $Utf8NoBom)
 
 & python @PyInstallerArgs
 if ($LASTEXITCODE -ne 0) {

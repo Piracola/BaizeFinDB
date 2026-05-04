@@ -79,6 +79,13 @@ uv pip install pyinstaller
 powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1
 ```
 
+如果只想检查即将执行的 PyInstaller 命令，不安装 PyInstaller 且不生成 `build/`、`dist/`、`spec/` 或 launcher，可以先 dry run：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun -Name CustomClient -DistPath C:\tmp\baize-dist -WorkPath C:\tmp\baize-build -Clean
+```
+
 脚本会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
 
 打包前仍建议先运行 smoke check；打包后的 GUI 只连接后端 API，不会自动采集、扫描、评分、生成报告、修改 Telegram 或执行任何交易相关动作。
