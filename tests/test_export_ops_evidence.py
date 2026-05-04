@@ -155,6 +155,30 @@ def test_endpoint_read_failure_exits_nonzero_and_is_sanitized() -> None:
     assert "api.example.test" not in encoded
 
 
+def test_endpoint_read_failure_takes_precedence_over_blocked_readiness() -> None:
+    reads = _reads(readiness_status="blocked")
+    reads[0] = export_ops_evidence.EndpointRead(
+        name="health",
+        path="/health",
+        status="fail",
+        http_status=503,
+        error="health unavailable",
+    )
+
+    report = export_ops_evidence.build_evidence_report(
+        reads,
+        base_url="http://api.test",
+        lookback_hours=24,
+        history_limit=20,
+    )
+
+    assert report["status"] == "error"
+    assert report["summary"]["readiness_status"] == "blocked"
+    assert report["summary"]["blocked"] is True
+    assert report["summary"]["endpoint_failures_count"] == 1
+    assert export_ops_evidence.exit_code_for_report(report) == 1
+
+
 def test_redaction_and_bounds_are_recursive() -> None:
     long_value = "safe " * 200
     payload = {

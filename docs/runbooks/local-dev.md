@@ -543,7 +543,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 uv run python infra/scripts/export_ops_evidence.py --json-output evidence/ops-evidence.json
 ```
 
-该命令默认连接 `http://127.0.0.1:8000`，只读取 `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不触发采集、扫描、推送、模型、备份、清理或数据库调用。输出 JSON 会递归脱敏 token/secret/url/domain/source-like 字段并裁剪长文本和长列表；接口读取失败或 readiness `blocked` 才返回非零，普通 `warning` 非阻塞。
+该命令默认连接 `http://127.0.0.1:8000`，只读取 `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不触发采集、扫描、推送、模型、备份、清理或数据库调用。输出 JSON 会递归脱敏 token/secret/authorization/url/domain/source/webhook/credential/host-like 字段并裁剪长文本和长列表；接口读取失败或 readiness `blocked` 才返回非零，普通 `warning` 非阻塞。若接口读取失败与 readiness `blocked` 同时出现，报告状态优先标为 `error` 以便定位读取失败。
 
 ### AKShare 采集失败
 

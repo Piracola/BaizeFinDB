@@ -192,7 +192,7 @@ def build_evidence_report(
     ]
     readiness_status = _readiness_status(readiness)
     blocked = readiness_status == "blocked"
-    status = "blocked" if blocked else "error" if endpoint_failures else "ok"
+    status = "error" if endpoint_failures else "blocked" if blocked else "ok"
 
     recent_events = _list_of_dicts(history.get("recent_events") if history else None)
     bounded_events = recent_events[:MAX_RECENT_EVENTS]

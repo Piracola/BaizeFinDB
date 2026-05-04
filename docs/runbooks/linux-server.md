@@ -92,7 +92,7 @@ uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-secon
 uv run python infra/scripts/export_ops_evidence.py --json-output evidence/ops-evidence.json
 ```
 
-报告会递归脱敏 token/secret/authorization/url/domain/source-like 字段和字符串，并裁剪超长文本、列表和最近事件；重点查看 `summary.readiness_status`、`alerts`、`readiness_checks`、`failure_summary`、`recent_events_count` 和有限条 `recent_events`。
+报告会递归脱敏 token/secret/authorization/url/domain/source/webhook/credential/host-like 字段和字符串，并裁剪超长文本、列表和最近事件；重点查看 `summary.readiness_status`、`alerts`、`readiness_checks`、`failure_summary`、`recent_events_count` 和有限条 `recent_events`。若接口读取失败与 readiness `blocked` 同时出现，报告状态优先标为 `error` 以便定位读取失败。
 
 如果 runtime check 只有 `radar_stale` warning，说明服务可读但最近雷达扫描过期。可手动跑一次只依赖既有快照的扫描，再复查 readiness：
 
