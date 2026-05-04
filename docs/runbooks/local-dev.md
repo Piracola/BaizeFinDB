@@ -537,6 +537,14 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 
 这些接口只聚合已有记录和 API 进程运行信息，不会触发采集、扫描、推送或模型调用。磁盘空间检查默认读取当前工作目录，可通过 `OPS_DISK_CHECK_PATH` 和 `OPS_DISK_FREE_PERCENT_ALERT_THRESHOLD` 调整；CPU/内存压力阈值可通过 `OPS_CPU_USAGE_PERCENT_ALERT_THRESHOLD` 和 `OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD` 调整；运维历史重点看 `recent_events` 和 `failure_summary`，就绪自检重点看 `status` 和 `checks`。
 
+如果 readiness 是 `warning`，并且需要判断它是历史 Provider / 数据质量问题还是部署阻塞，可导出只读脱敏 evidence：
+
+```powershell
+uv run python infra/scripts/export_ops_evidence.py --json-output evidence/ops-evidence.json
+```
+
+该命令默认连接 `http://127.0.0.1:8000`，只读取 `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不触发采集、扫描、推送、模型、备份、清理或数据库调用。输出 JSON 会递归脱敏 token/secret/url/domain/source-like 字段并裁剪长文本和长列表；接口读取失败或 readiness `blocked` 才返回非零，普通 `warning` 非阻塞。
+
 ### AKShare 采集失败
 
 AKShare 接口可能受网络、节假日、字段变更影响。先跑不写库验证：
