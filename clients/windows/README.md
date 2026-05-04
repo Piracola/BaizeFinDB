@@ -21,6 +21,18 @@ powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
 该命令默认连接 `http://127.0.0.1:8000`、使用 `user_key=default`，先复用
 `run-client.ps1 -SmokeCheck` 执行只读 smoke check，通过后才打开 Tkinter GUI。
 
+如果要把本地 Docker 后端也纳入首次试运行，必须显式 opt-in：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend
+```
+
+该模式使用仓库已有 `docker-compose.yml` 和 `docker-compose.server.yml`，顺序启动
+`postgres` / `redis`，通过 `api` 容器执行 `alembic upgrade head`，再启动
+`api` / `worker` / `beat`，并等待 `<ServerUrl>/health` 后才委托
+`run-client.ps1 -SmokeCheck`。Docker 启动不会对远端 URL 隐式发生；需要调整等待时可传
+`-BackendHealthTimeoutSeconds <n>` 和 `-BackendHealthPollIntervalSeconds <n>`。
+
 也可以单独运行同一套 smoke check：
 
 ```powershell
@@ -130,9 +142,11 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 ## 功能边界
 
 - 首次使用前可运行 `python -m clients.windows.smoke_check --server-url <api-url> --user-key <key>`，也可用 `run-client.ps1 -SmokeCheck` 在启动 GUI 前自动执行。该命令只做 Tkinter import 检查和 API GET 自检，不打开 GUI，不调用采集、扫描、评分生成、报告生成、Telegram 修改或任何交易相关动作。
-- 推荐首次 Windows 试运行使用 `clients/windows/first-trial.ps1`。它只委托
+- 推荐首次 Windows 试运行使用 `clients/windows/first-trial.ps1`。默认模式只委托
   `run-client.ps1 -SmokeCheck`，不复制 smoke check 或 GUI 逻辑，默认
   `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`。
+  只有显式加 `-StartDockerBackend` 时，才会先通过 Docker compose server overlay
+  启动本地后端、执行迁移、等待 `/health`，然后进入同一套 smoke/GUI 委托。
 - `--ops-readiness-lookback-hours <n>` 会调整 smoke check 中 `/ops/readiness` 和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
 - `--compact-json-output <path>` 是首次试运行推荐 evidence：只写总体状态、服务端 URL 元数据、脱敏 `user_key`、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要；不写 endpoint payload、原始后端响应、环境变量、token、secret、API key、authorization、原始 provider URL、个人持仓、二进制或构建输出。
 - `--json-output <path>` 仍可写出有界脱敏详细 JSON，用于深度排障；它会隐藏 `user_key`、token、secret 和 credential-like 字段。

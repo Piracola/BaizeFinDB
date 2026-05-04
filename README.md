@@ -142,6 +142,18 @@ powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
 `SmokeLookbackHours=24`。该脚本只委托 `run-client.ps1 -SmokeCheck`，不复制
 smoke check 或 GUI 逻辑。
 
+如果本机还没有启动后端，且确认要用 Docker Desktop 跑本地服务，可以显式加
+`-StartDockerBackend`。该模式会使用 `docker-compose.yml` 和
+`docker-compose.server.yml` 先启动 `postgres` / `redis`，通过 `api` 容器执行
+`alembic upgrade head`，再启动 `api` / `worker` / `beat`，等待
+`<ServerUrl>/health` 可访问后才委托同一套 smoke check 和 GUI 启动。Docker 启动不会
+对远端 URL 隐式发生，必须显式 opt-in；可用 `-BackendHealthTimeoutSeconds` 和
+`-BackendHealthPollIntervalSeconds` 调整有界等待：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend
+```
+
 也可以单独跑只读 smoke check：
 
 ```powershell

@@ -59,6 +59,25 @@ uv run uvicorn app.main:app --reload
 powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
 ```
 
+如果本机后端还没启动，并且你明确希望首次试用脚本一起启动 Docker 后端，可以加
+`-StartDockerBackend`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend
+```
+
+这个 opt-in 路径会使用 `docker-compose.yml` 和 `docker-compose.server.yml`，顺序执行：
+`docker compose ... up -d postgres redis`、`docker compose ... run --rm api alembic upgrade head`、
+`docker compose ... up -d api worker beat`，然后等待
+`http://127.0.0.1:8000/health` 成功响应，再委托 `run-client.ps1 -SmokeCheck`。Docker
+启动和迁移失败、或 health 等待超时，都会在打开 GUI 前失败退出。等待参数有上界，可按本机性能调整：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend -BackendHealthTimeoutSeconds 180 -BackendHealthPollIntervalSeconds 3
+```
+
+连接远端 HTTPS API 时不要加 `-StartDockerBackend`；脚本不会因为 URL 是 localhost 或远端而隐式启动 Docker，必须显式 opt-in。
+
 也可以单独运行首次使用 smoke check。该命令只检查 Tkinter import 和只读 API GET，不打开 GUI，不触发采集、扫描、评分生成、报告生成或 Telegram 修改：
 
 ```powershell
@@ -200,7 +219,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 
 如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。`OPS 趋势` 和 `告警钻取` 都是只读排障视图，不触发 Provider 采集、雷达扫描、评分、报告生成、Telegram 修改、模型调用、后端 mutation、evidence 写入或交易相关动作。
 
-首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号、空 Telegram 绑定和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 读取失败也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；它不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 和可选 OPS trends 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeCompactJsonOutput <path>` 会写出首次试运行推荐 compact evidence，不含 endpoint payload/raw response；`-SmokeJsonOutput <path>` 会写出详细脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。GUI 的 `首用诊断` 按钮使用同一套 smoke check 规则和摘要格式，但默认不写 evidence 文件，适合已打开窗口后的再次诊断。
+首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号、空 Telegram 绑定和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 读取失败也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；默认不启动 Docker、不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。只有显式加 `-StartDockerBackend` 时，脚本才使用 compose server overlay 启动 `postgres` / `redis`、通过 `api` 容器执行迁移、启动 `api` / `worker` / `beat` 并等待 `/health`，然后再进入同一套 smoke/GUI 委托；Docker 命令失败或 health 超时会在 GUI 前阻断。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 和可选 OPS trends 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeCompactJsonOutput <path>` 会写出首次试运行推荐 compact evidence，不含 endpoint payload/raw response；`-SmokeJsonOutput <path>` 会写出详细脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。GUI 的 `首用诊断` 按钮使用同一套 smoke check 规则和摘要格式，但默认不写 evidence 文件，适合已打开窗口后的再次诊断。
 
 ## 7. 常见问题
 

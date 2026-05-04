@@ -1,6 +1,10 @@
 import os
 import shutil
 import subprocess
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -76,6 +80,90 @@ def test_first_trial_launcher_is_thin_run_client_delegator() -> None:
     assert "SmokeCheck" in content
     assert "clients.windows.smoke_check" not in content
     assert "clients.windows.baizefindb_client" not in content
+
+
+def test_first_trial_launcher_start_docker_backend_runs_compose_before_delegation(
+    tmp_path: Path,
+) -> None:
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_start_docker_backend_blocks_gui_on_docker_failure(
+    tmp_path: Path,
+) -> None:
+    result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+        tmp_path,
+        "-StartDockerBackend",
+        "-BackendHealthTimeoutSeconds",
+        "1",
+        "-BackendHealthPollIntervalSeconds",
+        "1",
+        docker_fail_match="run --rm api alembic upgrade head",
+        docker_exit=23,
+    )
+
+    assert result.returncode == 23
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+    ]
+    assert python_calls == []
+
+
+def test_first_trial_launcher_start_docker_backend_blocks_gui_on_health_timeout(
+    tmp_path: Path,
+) -> None:
+    result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+        tmp_path,
+        "-StartDockerBackend",
+        "-ServerUrl",
+        "http://127.0.0.1:9",
+        "-BackendHealthTimeoutSeconds",
+        "1",
+        "-BackendHealthPollIntervalSeconds",
+        "1",
+    )
+
+    assert result.returncode == 1
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == []
 
 
 def test_launcher_default_runs_gui_without_smoke_check(tmp_path: Path) -> None:
@@ -170,6 +258,62 @@ def _run_first_trial_launcher(
     )
 
 
+def _run_first_trial_launcher_with_docker(
+    tmp_path: Path,
+    *args: str,
+    smoke_exit: int = 0,
+    docker_fail_match: str = "",
+    docker_exit: int = 11,
+) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if powershell is None:
+        pytest.skip("PowerShell is required for launcher script checks.")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    python_calls_file = tmp_path / "python-calls.txt"
+    docker_calls_file = tmp_path / "docker-calls.txt"
+    _write_fake_python(fake_bin / "python.cmd")
+    _write_fake_docker(fake_bin / "docker.cmd")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["BAIZEFINDB_PYTHON_CALLS"] = str(python_calls_file)
+    env["BAIZEFINDB_DOCKER_CALLS"] = str(docker_calls_file)
+    env["BAIZEFINDB_FAKE_SMOKE_EXIT"] = str(smoke_exit)
+    env["BAIZEFINDB_FAKE_GUI_EXIT"] = "0"
+    env["BAIZEFINDB_FAKE_DOCKER_FAIL_MATCH"] = docker_fail_match
+    env["BAIZEFINDB_FAKE_DOCKER_EXIT"] = str(docker_exit)
+
+    result = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(FIRST_TRIAL_LAUNCHER),
+            *args,
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    python_calls = (
+        python_calls_file.read_text(encoding="utf-8").splitlines()
+        if python_calls_file.exists()
+        else []
+    )
+    docker_calls = (
+        docker_calls_file.read_text(encoding="utf-8").splitlines()
+        if docker_calls_file.exists()
+        else []
+    )
+    return result, python_calls, docker_calls
+
+
 def _run_powershell_launcher(
     launcher: Path,
     tmp_path: Path,
@@ -226,3 +370,47 @@ def _write_fake_python(path: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _write_fake_docker(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "@echo off",
+                "echo %*>> \"%BAIZEFINDB_DOCKER_CALLS%\"",
+                "if not \"%BAIZEFINDB_FAKE_DOCKER_FAIL_MATCH%\"==\"\" (",
+                "  echo %* | findstr /C:\"%BAIZEFINDB_FAKE_DOCKER_FAIL_MATCH%\" >nul",
+                "  if not errorlevel 1 exit /b %BAIZEFINDB_FAKE_DOCKER_EXIT%",
+                ")",
+                "exit /b 0",
+            ],
+        ),
+        encoding="utf-8",
+    )
+
+
+@contextmanager
+def _health_server() -> Iterator[str]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path != "/health":
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
