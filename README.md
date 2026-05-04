@@ -142,13 +142,25 @@ python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000
 ```
 
+用 launcher 一次完成 preflight 和 GUI 启动：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck
+```
+
+严格门禁和脱敏 JSON evidence：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl http://127.0.0.1:8000 -UserKey default -SmokeCheck -SmokeJsonOutput evidence/windows-client-smoke.json -SmokeStrict
+```
+
 连接服务器：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerUrl https://<your-domain>
 ```
 
-smoke check 会验证 Tkinter 可导入、核心健康和 readiness GET，可选写出脱敏有界 JSON；空雷达、空信号和空绑定是 warning，不是 blocker。客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、数据源状态、审查状态或评分；Tushare 状态/自检按钮只读取 `/providers/tushare/status` 和 `/providers/tushare/readiness`，不触发真实抓取；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、Tushare token 原文、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
+smoke check 会验证 Tkinter 可导入、核心健康和 readiness GET，可选写出脱敏有界 JSON；空雷达、空信号和空绑定是 warning，不是 blocker。`run-client.ps1 -SmokeCheck` 会在启动 GUI 前执行同一套检查并传入相同 ServerUrl/UserKey；`-SmokeStrict` 会让 warning 阻断启动，默认 warning 仍不阻断。客户端只消费后端 API，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、数据源状态、审查状态或评分；Tushare 状态/自检按钮只读取 `/providers/tushare/status` 和 `/providers/tushare/readiness`，不触发真实抓取；持仓/自选/报告/日报/周报按 User Key 读取，只作为个人上下文；Telegram 绑定管理只调用后端白名单 API；不保存 token、secret、Tushare token 原文、持仓截图、报告导出或个人数据；不提供买卖建议、不接自动交易、不承诺收益。详细说明见 [docs/runbooks/windows-client.md](docs/runbooks/windows-client.md)。
 
 ## Telegram Bot MVP
 

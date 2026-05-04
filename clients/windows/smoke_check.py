@@ -63,8 +63,12 @@ class SmokeReport:
         self.blockers.append(f"{name}: {message}")
         self.checks.append(CheckItem(name=name, status="blocked", message=message, payload=payload))
 
-    def exit_code(self) -> int:
-        return 1 if self.blockers else 0
+    def exit_code(self, *, fail_on_warning: bool = False) -> int:
+        if self.blockers:
+            return 1
+        if fail_on_warning and self.warnings:
+            return 1
+        return 0
 
 
 def run_smoke_check(
@@ -171,6 +175,11 @@ def main(argv: list[str] | None = None) -> int:
         "--json-output",
         help="Optional path for a bounded sanitized JSON report.",
     )
+    parser.add_argument(
+        "--fail-on-warning",
+        action="store_true",
+        help="Return a nonzero exit code when the smoke check reports warnings.",
+    )
     args = parser.parse_args(argv)
 
     report = run_smoke_check(server_url=args.server_url, user_key=args.user_key)
@@ -178,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         write_json_report(report, args.json_output)
 
     print(format_summary(report))
-    return report.exit_code()
+    return report.exit_code(fail_on_warning=args.fail_on_warning)
 
 
 def _check_tkinter(report: SmokeReport, importer: Callable[[str], Any]) -> None:

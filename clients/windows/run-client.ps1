@@ -1,6 +1,9 @@
 param(
     [string]$ServerUrl = $env:BAIZEFINDB_SERVER_URL,
-    [string]$UserKey = $env:BAIZEFINDB_USER_KEY
+    [string]$UserKey = $env:BAIZEFINDB_USER_KEY,
+    [switch]$SmokeCheck,
+    [string]$SmokeJsonOutput,
+    [switch]$SmokeStrict
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,5 +22,29 @@ if ([string]::IsNullOrWhiteSpace($UserKey)) {
 
 $env:BAIZEFINDB_USER_KEY = $UserKey
 Set-Location $RepoRoot
+
+if ($SmokeCheck) {
+    $SmokeArgs = @(
+        "-m",
+        "clients.windows.smoke_check",
+        "--server-url",
+        $ServerUrl,
+        "--user-key",
+        $UserKey
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($SmokeJsonOutput)) {
+        $SmokeArgs += @("--json-output", $SmokeJsonOutput)
+    }
+
+    if ($SmokeStrict) {
+        $SmokeArgs += "--fail-on-warning"
+    }
+
+    & python @SmokeArgs
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
 
 python -m clients.windows.baizefindb_client

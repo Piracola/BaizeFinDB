@@ -3,6 +3,8 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlsplit
 
+import pytest
+
 from clients.windows import smoke_check
 
 
@@ -81,6 +83,21 @@ def test_smoke_check_warning_only_empty_first_use_data_exits_zero() -> None:
     assert any("radar_overview" in warning for warning in report.warnings)
     assert any("signals" in warning for warning in report.warnings)
     assert any("user_scoped_reads" in warning for warning in report.warnings)
+
+
+def test_smoke_check_strict_warning_exit_code_is_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
+    report = smoke_check.run_smoke_check(
+        server_url="http://localhost:8000",
+        user_key="default",
+        importer=lambda name: object(),
+        opener=_opener(_ready_payloads()),
+    )
+
+    assert report.exit_code() == 0
+    assert report.exit_code(fail_on_warning=True) == 1
+
+    monkeypatch.setattr(smoke_check, "run_smoke_check", lambda **kwargs: report)
+    assert smoke_check.main(["--fail-on-warning"]) == 1
 
 
 def test_smoke_check_blocks_invalid_url_before_endpoint_reads() -> None:

@@ -26,7 +26,7 @@
 - `/ops/overview`、`/ops/history` 和 `/ops/readiness` 是当前只读运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检和告警摘要入口，可用于本地排障、服务器 smoke check、`server_runtime_check.py` 运行采样和后续监控接入。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取、失败记录、日志、快照查询和 `/providers/tushare/readiness` 只读准入自检；`anns_d` 重大风险公告可被雷达扫描映射为 risk P0。`anns_d` Beat 调度默认关闭，启用前必须再做真实 token 验证、字段漂移、积分消耗和误差样例。
 - Web、Windows 客户端、Telegram `/tushare` 和 `/tushare_ready` 只读展示 Tushare 配置状态和准入自检，不触发真实抓取，不泄露 token 原文。
-- Windows 客户端目前只是 MVP 源码运行版，不是安装包；只消费后端 API，不重新计算雷达等级、市场情绪、运行状态、数据源状态或评分。
+- Windows 客户端目前只是 MVP 源码运行版，不是安装包；只消费后端 API，不重新计算雷达等级、市场情绪、运行状态、数据源状态或评分。首次使用可用 `run-client.ps1 -SmokeCheck` 在打开 GUI 前执行只读 preflight，必要时加 `-SmokeJsonOutput` 保存脱敏 JSON 或加 `-SmokeStrict` 让 warning 阻断启动。
 - 不接自动交易，不输出强买卖指令，不保存券商交易密码。
 - 新表必须有 Alembic 迁移，新规则必须有测试或 golden case。
 - 后续 AI 协作默认策略：模块设计或开发阶段完成后，AI 自动做 git commit，不再每次向用户确认；不自动 push。
