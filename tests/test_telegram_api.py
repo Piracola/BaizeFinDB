@@ -15,6 +15,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.telegram.formatter import (
     format_holdings,
+    format_ops_trends,
     format_ops_warning_drilldown,
     format_radar_overview,
     format_reports,
@@ -109,6 +110,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "/id" in data["preview"]
     assert "/ops" in data["preview"]
     assert "/ops_history" in data["preview"]
+    assert "/ops_trends" in data["preview"]
     assert "/ops_ready" in data["preview"]
     assert "/ops_warn" in data["preview"]
     assert "/tushare" in data["preview"]
@@ -366,6 +368,129 @@ async def test_telegram_ops_history_command_reports_recent_events(
     assert "最近事件：" in preview
     assert "雷达 #" in preview
     assert "异常" in preview
+    assert "不构成投资建议" in preview
+
+
+@pytest.mark.asyncio
+async def test_telegram_ops_trends_command_routes_backend_bucket_counts_only(
+    monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient,
+) -> None:
+    calls: list[tuple[int, int]] = []
+    now = datetime(2026, 5, 4, 12, 0, tzinfo=UTC)
+
+    async def fake_trends(
+        session: AsyncSession,
+        *,
+        lookback_hours: int,
+        bucket_count: int,
+    ) -> SimpleNamespace:
+        calls.append((lookback_hours, bucket_count))
+        return SimpleNamespace(
+            lookback_hours=lookback_hours,
+            bucket_count=bucket_count,
+            bucket_seconds=7200,
+            buckets=[
+                SimpleNamespace(
+                    bucket_index=index,
+                    bucket_started_at=now - timedelta(hours=12 - (index * 2)),
+                    bucket_finished_at=now - timedelta(hours=10 - (index * 2)),
+                    radar_scan_count=index,
+                    radar_failure_count=1 if index == 5 else 0,
+                    provider_fetch_total_count=index + 1,
+                    provider_fetch_unhealthy_count=index % 2,
+                    data_quality_total_count=index + 2,
+                    data_quality_unhealthy_count=1 if index == 4 else 0,
+                    telegram_push_total_count=index + 3,
+                    telegram_push_unhealthy_count=1 if index == 5 else 0,
+                    model_call_total_count=index + 4,
+                    model_call_unhealthy_count=2 if index == 5 else 0,
+                )
+                for index in range(6)
+            ],
+        )
+
+    async def forbidden_async(*args: object, **kwargs: object) -> object:
+        raise AssertionError("forbidden Telegram /ops_trends side effect")
+
+    def forbidden_sync(*args: object, **kwargs: object) -> object:
+        raise AssertionError("forbidden Telegram /ops_trends side effect")
+
+    monkeypatch.setattr("app.telegram.service.get_ops_trends", fake_trends)
+    for name in (
+        "get_ops_readiness",
+        "get_ops_overview",
+        "get_ops_history",
+        "get_latest_radar_scan",
+        "get_radar_overview",
+        "get_radar_signal_detail",
+        "list_radar_signals",
+        "list_holdings",
+        "list_watchlist_items",
+        "get_tushare_readiness",
+        "list_reports",
+        "generate_periodic_report",
+        "generate_signal_scores",
+    ):
+        monkeypatch.setattr(f"app.telegram.service.{name}", forbidden_async)
+    monkeypatch.setattr("app.telegram.service.get_tushare_provider_status", forbidden_sync)
+
+    response = await client.post("/telegram/webhook", json=_telegram_update("/ops_trends"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["command"] == "/ops_trends"
+    assert data["delivery"] == "preview"
+    assert calls == [(24, 12)]
+    assert "OPS 趋势摘要" in data["preview"]
+    assert "统计窗口：最近 24 小时" in data["preview"]
+    assert "时间桶：6/12 个" in data["preview"]
+    assert "最新桶：扫描 5 / 失败 1" in data["preview"]
+    assert "最新 unhealthy：Provider 1 / 数据质量 0 / 推送 1 / 模型 2" in data["preview"]
+    assert "已折叠 1 个更早时间桶" in data["preview"]
+    assert "不重算 readiness 或运行状态" in data["preview"]
+    assert "不触发采集、扫描、评分、报告、推送、模型调用" in data["preview"]
+
+
+def test_telegram_ops_trends_formatter_uses_bounded_backend_bucket_counts_only() -> None:
+    now = datetime(2026, 5, 4, 12, 0, tzinfo=UTC)
+    trends = SimpleNamespace(
+        lookback_hours=24,
+        bucket_count=12,
+        bucket_seconds=7200,
+        buckets=[
+            SimpleNamespace(
+                bucket_index=index,
+                bucket_started_at=now - timedelta(hours=12 - (index * 2)),
+                bucket_finished_at=now - timedelta(hours=10 - (index * 2)),
+                radar_scan_count=index,
+                radar_failure_count=index % 3,
+                provider_fetch_total_count=10 + index,
+                provider_fetch_unhealthy_count=index,
+                data_quality_total_count=20 + index,
+                data_quality_unhealthy_count=index + 1,
+                telegram_push_total_count=30 + index,
+                telegram_push_unhealthy_count=index + 2,
+                model_call_total_count=40 + index,
+                model_call_unhealthy_count=index + 3,
+            )
+            for index in range(7)
+        ],
+    )
+
+    preview = format_ops_trends(trends)
+
+    assert "OPS 趋势摘要" in preview
+    assert "最新桶：扫描 6 / 失败 0" in preview
+    assert "最新 unhealthy：Provider 6 / 数据质量 7 / 推送 8 / 模型 9" in preview
+    assert "#2" in preview
+    assert "#6" in preview
+    assert "#1" not in preview
+    assert "已折叠 2 个更早时间桶" in preview
+    assert "readiness" in preview
+    assert "状态：阻断" not in preview
+    assert "告警：" not in preview
+    assert "服务端：" not in preview
     assert "不构成投资建议" in preview
 
 

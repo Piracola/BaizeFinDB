@@ -8,7 +8,7 @@
 
 项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
-Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态或评分。
+Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态或评分。
 
 M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻不能单独触发主线 P0、风险事件 P0、生命周期、Review Agent 审查范围、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告预留约束、模型降级审计、Web 核心页面顺序和公开分享脱敏。
 
@@ -139,7 +139,7 @@ Telegram：
 - `PATCH /telegram/bindings/{chat_id}`
 - `POST /telegram/push/latest`
 - `GET /telegram/push/logs`
-- Telegram 命令：`/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/ops_ready`、`/ops_warn`、`/tushare`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_ready` 展示运行就绪自检，`/ops_warn` 展示只读 OPS 告警钻取，`/tushare` 展示 Tushare 只读配置状态，`/score` 展示后端 v2 评分档位和组件明细
+- Telegram 命令：`/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/ops_trends`、`/ops_ready`、`/ops_warn`、`/tushare`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 展示只读 OPS 趋势桶摘要，`/ops_ready` 展示运行就绪自检，`/ops_warn` 展示只读 OPS 告警钻取，`/tushare` 展示 Tushare 只读配置状态，`/score` 展示后端 v2 评分档位和组件明细
 
 Windows 客户端：
 
@@ -247,6 +247,6 @@ uv run uvicorn app.main:app --reload
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移、只读 M5 smoke check 和短窗口 runtime check。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；三条 live verify 脚本均支持脱敏 JSON evidence 输出；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0；`anns_d` Beat 调度默认关闭，后续在 checklist、`verify_tushare_anns_d_preflight.py` 离线预调度校验、真实 token live evidence、字段和误报样例稳定后再显式启用。
-- 增加运行可观测性：`/ops/overview` 已汇总服务端进程运行时长、磁盘/CPU/内存资源、扫描耗时、失败率、推送结果、模型降级、数据质量状态和只读告警摘要，`/ops/history` 已返回最近扫描、Provider 异常、数据质量异常、推送异常和模型降级/失败历史，`/ops/readiness` 已基于这些信息输出运行就绪自检；Web 状态面板、Windows 客户端和 Telegram `/ops`、`/ops_history`、`/ops_ready` 已展示这些摘要，Web、Windows 客户端和 Telegram `/ops_warn` 已有只读告警钻取视图聚合三组 OPS 响应；后续再接趋势图和真实监控告警。
+- 增加运行可观测性：`/ops/overview` 已汇总服务端进程运行时长、磁盘/CPU/内存资源、扫描耗时、失败率、推送结果、模型降级、数据质量状态和只读告警摘要，`/ops/history` 已返回最近扫描、Provider 异常、数据质量异常、推送异常和模型降级/失败历史，`/ops/trends` 已按固定时间桶汇总扫描、失败和 unhealthy 计数，`/ops/readiness` 已基于这些信息输出运行就绪自检；Web 状态面板、Windows 客户端和 Telegram `/ops`、`/ops_history`、`/ops_trends`、`/ops_ready` 已展示这些摘要，Web、Windows 客户端和 Telegram `/ops_warn` 已有只读告警钻取视图聚合三组 OPS 响应；后续再接趋势图和真实监控告警。
 - 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

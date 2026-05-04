@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.ops.schemas import OpsHistoryRead, OpsOverviewRead, OpsReadinessRead
+from app.ops.schemas import OpsHistoryRead, OpsOverviewRead, OpsReadinessRead, OpsTrendRead
 from app.portfolio.schemas import HoldingRead, WatchlistItemRead
 from app.providers.schemas import TushareProviderStatusResponse, TushareReadinessResponse
 from app.radar.schemas import (
@@ -22,6 +22,7 @@ REPORT_PREVIEW_LIMIT = 5
 EVIDENCE_PREVIEW_LIMIT = 3
 PUSH_PREVIEW_LIMIT_PER_PRIORITY = 5
 STOCK_BACKTRACE_PREVIEW_LIMIT = 3
+OPS_TRENDS_BUCKET_PREVIEW_LIMIT = 5
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 
 LIFECYCLE_LABELS = {
@@ -107,6 +108,7 @@ def format_help() -> str:
                 "/health - 查看 API、数据库、Redis 和最近扫描状态",
                 "/ops - 查看最近运行状态、失败率和降级摘要",
                 "/ops_history - 查看最近运维异常历史",
+                "/ops_trends - 查看 OPS 趋势桶摘要",
                 "/ops_ready - 查看部署/运行就绪自检",
                 "/ops_warn - 查看 OPS 告警钻取",
                 "/tushare - 查看 Tushare 数据源配置状态",
@@ -224,6 +226,68 @@ def format_ops_history(history: OpsHistoryRead) -> str:
         lines.append("最近事件：暂无")
 
     lines.extend(["该视图只读取已有运行记录，不触发采集、扫描、推送或模型调用。", "", DISCLAIMER])
+    return _trim_message("\n".join(lines))
+
+
+def format_ops_trends(trends: OpsTrendRead) -> str:
+    lines = [
+        "OPS 趋势摘要",
+        f"统计窗口：最近 {trends.lookback_hours} 小时",
+        (
+            f"时间桶：{len(trends.buckets)}/{trends.bucket_count} 个，"
+            f"约 {_duration_label(trends.bucket_seconds)} / 桶"
+        ),
+    ]
+
+    latest_bucket = trends.buckets[-1] if trends.buckets else None
+    if latest_bucket is None:
+        lines.append("最新桶：暂无")
+        lines.append("最近桶：暂无")
+    else:
+        lines.extend(
+            [
+                (
+                    "最新桶："
+                    f"扫描 {latest_bucket.radar_scan_count} / "
+                    f"失败 {latest_bucket.radar_failure_count}"
+                ),
+                (
+                    "最新 unhealthy："
+                    f"Provider {latest_bucket.provider_fetch_unhealthy_count} / "
+                    f"数据质量 {latest_bucket.data_quality_unhealthy_count} / "
+                    f"推送 {latest_bucket.telegram_push_unhealthy_count} / "
+                    f"模型 {latest_bucket.model_call_unhealthy_count}"
+                ),
+                "最近桶：",
+            ],
+        )
+        recent_buckets = trends.buckets[-OPS_TRENDS_BUCKET_PREVIEW_LIMIT:]
+        for bucket in recent_buckets:
+            lines.append(
+                (
+                    f"- #{bucket.bucket_index} {_format_time(bucket.bucket_started_at)}："
+                    f"扫描 {bucket.radar_scan_count} / 失败 {bucket.radar_failure_count}；"
+                    f"unhealthy P{bucket.provider_fetch_unhealthy_count} "
+                    f"DQ{bucket.data_quality_unhealthy_count} "
+                    f"TG{bucket.telegram_push_unhealthy_count} "
+                    f"M{bucket.model_call_unhealthy_count}"
+                ),
+            )
+        folded_count = len(trends.buckets) - len(recent_buckets)
+        if folded_count > 0:
+            lines.append(f"已折叠 {folded_count} 个更早时间桶。")
+
+    lines.extend(
+        [
+            (
+                "该视图只读展示后端 OPS 趋势桶计数，不重算 readiness 或运行状态，"
+                "不触发采集、扫描、评分、报告、推送、模型调用、evidence 写入、"
+                "后端修改或交易相关动作。"
+            ),
+            "",
+            DISCLAIMER,
+        ],
+    )
     return _trim_message("\n".join(lines))
 
 

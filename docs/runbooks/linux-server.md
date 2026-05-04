@@ -199,6 +199,14 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/history?lookback_hours=24&limit=20"
 
 重点看 `recent_events` 和 `failure_summary`。该接口同样只读，不触发采集、扫描、推送或模型调用。
 
+查看 OPS 趋势桶：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/ops/trends?lookback_hours=24&bucket_count=12"
+```
+
+Telegram `/ops_trends` 使用同一个 24 小时 / 12 桶只读契约，只展示后端返回的扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态，也不触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或后端修改。
+
 查看运行就绪自检：
 
 ```powershell
