@@ -158,6 +158,7 @@ def test_cli_reports_default_preflight_success(capsys) -> None:
     assert exit_code == 0
     assert payload["status"] == "ok"
     assert payload["mode"] == "offline_no_token"
+    assert "\\u7acb\\u6848\\u8c03\\u67e5" in captured.out
 
 
 def test_cli_returns_nonzero_for_invalid_case_file(tmp_path: Path, capsys) -> None:

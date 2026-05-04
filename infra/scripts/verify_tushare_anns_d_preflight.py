@@ -58,10 +58,10 @@ def main(argv: list[str] | None = None) -> int:
             "mode": "offline_no_token",
             "error": f"{exc.__class__.__name__}: {str(exc)[:800]}",
         }
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        print(json.dumps(output, indent=2))
         return 1
 
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+    print(json.dumps(output, indent=2))
     return 0 if report.ok else 1
 
 
