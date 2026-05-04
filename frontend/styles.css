@@ -357,6 +357,7 @@ h3 {
 .evidence-list,
 .portfolio-list,
 .ops-history-list,
+.ops-trends-list,
 .ops-readiness-list,
 .ops-warning-drilldown,
 .ops-drilldown-section,
@@ -370,6 +371,31 @@ h3 {
   color: var(--muted);
   font-size: 13px;
   text-transform: uppercase;
+}
+
+.ops-trend-table {
+  display: grid;
+  gap: 6px;
+}
+
+.ops-trend-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.4fr) repeat(6, minmax(64px, 1fr));
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #d8cdb5;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-dark);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.ops-trend-head {
+  border-color: var(--line-strong);
+  background: #303826;
+  color: var(--text);
+  font-weight: 800;
 }
 
 .subject-card,
@@ -684,6 +710,7 @@ pre {
 
   .status-grid,
   .ops-grid,
+  .ops-trend-row,
   .priority-grid,
   .lifecycle-grid,
   .sentiment-grid,

@@ -40,6 +40,7 @@ const elements = {
   readyStatus: document.querySelector("#ready-status"),
   opsOverview: document.querySelector("#ops-overview"),
   opsHistory: document.querySelector("#ops-history"),
+  opsTrends: document.querySelector("#ops-trends"),
   opsReadiness: document.querySelector("#ops-readiness"),
   opsWarningDrilldown: document.querySelector("#ops-warning-drilldown"),
   tushareStatus: document.querySelector("#tushare-status"),
@@ -100,6 +101,7 @@ async function refreshAll() {
     await Promise.all([
       loadOpsOverview(),
       loadOpsHistory(),
+      loadOpsTrends(),
       loadOpsReadiness(),
       loadOpsWarningDrilldown({ silent: true }),
       loadTushareStatus(),
@@ -130,6 +132,7 @@ async function loadReadyStatus() {
     elements.readyStatus.innerHTML = emptyState(`无法连接 API：${formatError(error)}`);
     renderOpsUnavailable("无法连接 API。");
     renderOpsHistoryUnavailable("无法连接 API。");
+    renderOpsTrendsUnavailable("无法连接 API。");
     renderOpsReadinessUnavailable("无法连接 API。");
     renderOpsWarningDrilldownUnavailable("无法连接 API。");
     return false;
@@ -151,6 +154,15 @@ async function loadOpsHistory() {
     renderOpsHistory(history);
   } catch (error) {
     renderOpsHistoryUnavailable(`运维历史暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadOpsTrends() {
+  try {
+    const trends = await fetchJson("/ops/trends?lookback_hours=24&bucket_count=12");
+    renderOpsTrends(trends);
+  } catch (error) {
+    renderOpsTrendsUnavailable(`OPS 趋势暂不可用：${formatError(error)}`);
   }
 }
 
@@ -282,6 +294,7 @@ async function loadPeriodicReport(period, options = {}) {
 function renderRadarUnavailable(reason) {
   renderOpsUnavailable("依赖服务恢复后再读取运行状态。");
   renderOpsHistoryUnavailable("依赖服务恢复后再读取运维历史。");
+  renderOpsTrendsUnavailable("依赖服务恢复后再读取 OPS 趋势。");
   renderOpsReadinessUnavailable("依赖服务恢复后再读取就绪自检。");
   renderOpsWarningDrilldownUnavailable("依赖服务恢复后再读取 OPS 告警钻取。");
   renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
@@ -502,7 +515,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -533,6 +546,14 @@ function executeCommand() {
     opshistory: () => {
       scrollToPanel("status-panel");
       loadOpsHistory();
+    },
+    trend: () => {
+      scrollToPanel("ops-trends");
+      loadOpsTrends();
+    },
+    trends: () => {
+      scrollToPanel("ops-trends");
+      loadOpsTrends();
     },
     ready: () => {
       scrollToPanel("status-panel");
@@ -573,7 +594,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -776,6 +797,69 @@ function renderOpsHistory(history) {
 
 function renderOpsHistoryUnavailable(reason) {
   elements.opsHistory.innerHTML = emptyState(reason);
+}
+
+function renderOpsTrends(trends) {
+  const buckets = Array.isArray(trends?.buckets) ? trends.buckets : [];
+  if (buckets.length === 0) {
+    elements.opsTrends.innerHTML = emptyState("后端 /ops/trends 未返回趋势桶。");
+    return;
+  }
+
+  const latest = buckets[buckets.length - 1];
+  const recentBuckets = buckets.slice(-6).reverse();
+  elements.opsTrends.innerHTML = `
+    <article class="detail-card">
+      <div class="meta-row">
+        <span class="badge">最近 ${escapeHtml(trends?.lookback_hours ?? 24)} 小时</span>
+        <span class="badge">${escapeHtml(trends?.bucket_count ?? buckets.length)} 桶</span>
+        <span class="badge">后端趋势计数</span>
+      </div>
+      <h3>最新桶</h3>
+      <p class="summary">
+        扫描 ${escapeHtml(latest.radar_scan_count ?? 0)} / 失败 ${escapeHtml(latest.radar_failure_count ?? 0)}
+        · Provider ${escapeHtml(latest.provider_fetch_unhealthy_count ?? 0)}
+        · 数据质量 ${escapeHtml(latest.data_quality_unhealthy_count ?? 0)}
+        · 推送 ${escapeHtml(latest.telegram_push_unhealthy_count ?? 0)}
+        · 模型 ${escapeHtml(latest.model_call_unhealthy_count ?? 0)}
+      </p>
+      <div class="muted">${escapeHtml(formatBucketRange(latest))}</div>
+    </article>
+    <div class="ops-trend-table" role="table" aria-label="最近 OPS 趋势桶">
+      <div class="ops-trend-row ops-trend-head" role="row">
+        <span role="columnheader">时间桶</span>
+        <span role="columnheader">扫描</span>
+        <span role="columnheader">失败</span>
+        <span role="columnheader">Provider</span>
+        <span role="columnheader">数据质量</span>
+        <span role="columnheader">推送</span>
+        <span role="columnheader">模型</span>
+      </div>
+      ${recentBuckets.map(renderOpsTrendBucket).join("")}
+    </div>
+  `;
+}
+
+function renderOpsTrendBucket(bucket) {
+  return `
+    <div class="ops-trend-row" role="row">
+      <span role="cell">${escapeHtml(formatBucketRange(bucket))}</span>
+      <span role="cell">${escapeHtml(bucket.radar_scan_count ?? 0)}</span>
+      <span role="cell">${escapeHtml(bucket.radar_failure_count ?? 0)}</span>
+      <span role="cell">${escapeHtml(bucket.provider_fetch_unhealthy_count ?? 0)}</span>
+      <span role="cell">${escapeHtml(bucket.data_quality_unhealthy_count ?? 0)}</span>
+      <span role="cell">${escapeHtml(bucket.telegram_push_unhealthy_count ?? 0)}</span>
+      <span role="cell">${escapeHtml(bucket.model_call_unhealthy_count ?? 0)}</span>
+    </div>
+  `;
+}
+
+function formatBucketRange(bucket) {
+  return `${formatDate(bucket?.bucket_started_at)} - ${formatDate(bucket?.bucket_finished_at)}`;
+}
+
+function renderOpsTrendsUnavailable(reason) {
+  elements.opsTrends.innerHTML = emptyState(reason);
 }
 
 function renderOpsReadiness(readiness) {

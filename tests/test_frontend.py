@@ -18,10 +18,12 @@ def test_frontend_index_returns_static_page() -> None:
     assert "报告列表" in response.text
     assert "周期汇总 / 综合评分" in response.text
     assert "Telegram 绑定 / 白名单" in response.text
-    assert "ops / warn / ready" in response.text
+    assert "ops / trend / warn" in response.text
     assert "tushare / radar" in response.text
     assert "ops-overview" in response.text
     assert "ops-history" in response.text
+    assert "ops-trends" in response.text
+    assert "OPS 趋势" in response.text
     assert "ops-readiness" in response.text
     assert "OPS 告警钻取" in response.text
     assert "ops-warning-drilldown" in response.text
@@ -48,15 +50,21 @@ def test_frontend_assets_are_served() -> None:
     assert "refreshAll" in js_response.text
     assert "loadOpsOverview" in js_response.text
     assert "loadOpsHistory" in js_response.text
+    assert "loadOpsTrends" in js_response.text
     assert "loadOpsReadiness" in js_response.text
     assert "loadOpsWarningDrilldown" in js_response.text
     assert "renderOpsWarningDrilldown" in js_response.text
     assert "/ops/overview" in js_response.text
     assert "/ops/history" in js_response.text
+    assert "/ops/trends" in js_response.text
     assert "/ops/readiness" in js_response.text
     assert "/ops/overview?lookback_hours=24" in js_response.text
     assert "/ops/history?lookback_hours=24&limit=8" in js_response.text
+    assert "/ops/trends?lookback_hours=24&bucket_count=12" in js_response.text
     assert "/ops/readiness?lookback_hours=24" in js_response.text
+    assert 'trend: () => {' in js_response.text
+    assert 'trends: () => {' in js_response.text
+    assert 'scrollToPanel("ops-trends")' in js_response.text
     assert 'warn: () => {' in js_response.text
     assert 'warning: () => {' in js_response.text
     assert 'scrollToPanel("ops-warning-drilldown")' in js_response.text
@@ -92,6 +100,8 @@ def test_frontend_assets_are_served() -> None:
     assert "terminal-shell" in css_response.text
     assert "status-panel" in css_response.text
     assert "ops-grid" in css_response.text
+    assert "ops-trends-list" in css_response.text
+    assert "ops-trend-table" in css_response.text
     assert "ops-warning-drilldown" in css_response.text
     assert "ops-drilldown-section" in css_response.text
     assert "tushare-grid" in css_response.text
@@ -129,3 +139,26 @@ def test_frontend_ops_warning_drilldown_keeps_backend_owned_status_boundary() ->
     assert "recent_scan_failure_count" not in drilldown_block
     assert "is_cpu_pressure_high" not in drilldown_block
     assert "is_memory_pressure_high" not in drilldown_block
+
+
+def test_frontend_ops_trends_uses_backend_bucket_counts_only() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    trends_start = js_text.index("function renderOpsTrends")
+    trends_end = js_text.index("function renderOpsReadiness")
+    trends_block = js_text[trends_start:trends_end]
+
+    assert "radar_scan_count" in trends_block
+    assert "radar_failure_count" in trends_block
+    assert "provider_fetch_unhealthy_count" in trends_block
+    assert "data_quality_unhealthy_count" in trends_block
+    assert "telegram_push_unhealthy_count" in trends_block
+    assert "model_call_unhealthy_count" in trends_block
+    assert "readinessStatusLabel" not in trends_block
+    assert "statusCardClass" not in trends_block
+    assert "alerts.length" not in trends_block
+    assert "recent_scan_failure_rate" not in trends_block
