@@ -60,6 +60,14 @@ docker build -t baizefindb-api:dev .
 uv run python infra/scripts/server_deploy_check.py
 ```
 
+需要给脚本、CI 或 Windows 首次试运行流程保留结构化结果时，加
+`--json-output <path>`。终端 `[OK]` / `[WARN]` / `[FAIL]` 输出保持不变，JSON
+报告会写入 `generated_at`、总体 `status`、`summary` 和逐项 `checks`：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --json-output evidence/server-deploy-check.json
+```
+
 预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
 
 ```powershell

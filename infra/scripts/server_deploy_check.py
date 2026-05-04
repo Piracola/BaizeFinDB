@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -293,6 +294,45 @@ def check_tushare_anns_d_beat_enablement() -> CheckResult:
     )
 
 
+def build_report(checks: list[CheckResult]) -> dict[str, object]:
+    counts = {
+        "ok": sum(1 for check in checks if check.status == "ok"),
+        "warn": sum(1 for check in checks if check.status == "warn"),
+        "fail": sum(1 for check in checks if check.status == "fail"),
+    }
+    if counts["fail"]:
+        status = "fail"
+    elif counts["warn"]:
+        status = "warn"
+    else:
+        status = "ok"
+
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "status": status,
+        "summary": {
+            "total": len(checks),
+            **counts,
+        },
+        "checks": [
+            {
+                "name": check.name,
+                "status": check.status,
+                "detail": _truncate(check.detail),
+            }
+            for check in checks
+        ],
+    }
+
+
+def write_report(path: Path, report: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check BaizeFinDB Linux server deployment prerequisites.",
@@ -358,6 +398,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="HTTP timeout in seconds for --check-api.",
+    )
+    parser.add_argument(
+        "--json-output",
+        type=Path,
+        default=None,
+        help="Optional path to write a structured JSON preflight report.",
     )
     return parser
 
@@ -438,6 +484,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{label}] {check.name}")
         if check.detail:
             print(check.detail)
+
+    report = build_report(checks)
+    if args.json_output:
+        write_report(args.json_output, report)
 
     return 0 if all(check.ok for check in checks) else 1
 

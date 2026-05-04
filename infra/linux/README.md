@@ -89,10 +89,13 @@ Or run the bundled preflight:
 
 ```bash
 python infra/scripts/server_deploy_check.py --strict-env
+python infra/scripts/server_deploy_check.py --strict-env --json-output evidence/server-deploy-check.json
 ```
 
 The preflight uses `docker compose config --quiet` so real environment values
-from `.env` are validated without being printed to deployment logs.
+from `.env` are validated without being printed to deployment logs. `--json-output`
+writes a structured report with generated time, overall status, summary counts,
+and each check result while preserving the terminal output.
 
 Build the API image:
 

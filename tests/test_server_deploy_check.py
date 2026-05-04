@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -155,6 +156,45 @@ def test_check_env_passes_when_env_exists(tmp_path: Path) -> None:
 
     assert result.status == "ok"
     assert result.ok
+
+
+def test_build_report_summarizes_ok_warn_and_fail() -> None:
+    report = server_deploy_check.build_report(
+        [
+            server_deploy_check.CheckResult("a", "ok", "ready"),
+            server_deploy_check.CheckResult("b", "warn", "slow"),
+            server_deploy_check.CheckResult("c", "fail", "bad"),
+        ],
+    )
+
+    assert report["status"] == "fail"
+    assert report["summary"] == {"total": 3, "ok": 1, "warn": 1, "fail": 1}
+    assert report["checks"] == [
+        {"name": "a", "status": "ok", "detail": "ready"},
+        {"name": "b", "status": "warn", "detail": "slow"},
+        {"name": "c", "status": "fail", "detail": "bad"},
+    ]
+    assert isinstance(report["generated_at"], str)
+
+
+def test_build_report_warns_without_failure() -> None:
+    report = server_deploy_check.build_report(
+        [
+            server_deploy_check.CheckResult("a", "ok"),
+            server_deploy_check.CheckResult("b", "warn"),
+        ],
+    )
+
+    assert report["status"] == "warn"
+    assert report["summary"] == {"total": 2, "ok": 1, "warn": 1, "fail": 0}
+
+
+def test_write_report_creates_parent_directory(tmp_path: Path) -> None:
+    output = tmp_path / "nested" / "deploy-check.json"
+
+    server_deploy_check.write_report(output, {"status": "ok"})
+
+    assert json.loads(output.read_text(encoding="utf-8")) == {"status": "ok"}
 
 
 def test_run_command_handles_utf8_output_and_missing_streams(monkeypatch, tmp_path: Path) -> None:
@@ -314,6 +354,78 @@ def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
 
     assert exit_code == 0
     assert calls == []
+
+
+def test_main_json_output_writes_report_and_keeps_console_output(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "evidence" / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok", "done"),
+    )
+
+    exit_code = server_deploy_check.main(["--json-output", str(output)])
+
+    captured = capsys.readouterr()
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert "[OK] docker compose config" in captured.out
+    assert report["status"] == "ok"
+    assert report["summary"] == {"fail": 0, "ok": 3, "total": 3, "warn": 0}
+    assert report["checks"][0]["name"] == ".env"
+    assert report["checks"][0]["status"] == "ok"
+
+
+def test_main_json_output_records_warning_with_zero_exit(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+
+    exit_code = server_deploy_check.main(["--json-output", str(output)])
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["status"] == "warn"
+    assert report["summary"] == {"fail": 0, "ok": 2, "total": 3, "warn": 1}
+    assert report["checks"][0]["name"] == ".env"
+    assert report["checks"][0]["status"] == "warn"
+
+
+def test_main_json_output_records_failure_with_nonzero_exit(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "fail", "bad"),
+    )
+
+    exit_code = server_deploy_check.main(["--json-output", str(output)])
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 1
+    assert report["status"] == "fail"
+    assert report["summary"] == {"fail": 2, "ok": 1, "total": 3, "warn": 0}
 
 
 def test_main_check_backup_with_evidence_uses_check_only_not_direct_command(
