@@ -86,7 +86,13 @@ powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -Dry
 powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun -Name CustomClient -DistPath C:\tmp\baize-dist -WorkPath C:\tmp\baize-build -Clean
 ```
 
-脚本会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
+非 dry-run 打包会先运行轻量 Python preflight：确认当前 Python 是 3.12、`tkinter` 可导入、并且能从仓库路径解析 `clients.windows.baizefindb_client`。该 preflight 不会创建 `tk.Tk()`、打开 GUI、调用后端 API、运行 smoke check 或生成构建产物；只有本地排查特殊问题时才加 `-SkipPreflight` 明确跳过：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -SkipPreflight
+```
+
+脚本随后会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
 
 打包前仍建议先运行 smoke check；打包后的 GUI 只连接后端 API，不会自动采集、扫描、评分、生成报告、修改 Telegram 或执行任何交易相关动作。
 

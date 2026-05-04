@@ -123,7 +123,13 @@ powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -Dry
 powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -DryRun -Name CustomClient -DistPath C:\tmp\baize-dist -WorkPath C:\tmp\baize-build -Clean
 ```
 
-脚本会生成临时 launcher，入口模块仍是 `clients.windows.baizefindb_client`，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出：
+非 dry-run 打包会在调用 PyInstaller 前先运行轻量 Python preflight，确认 Python 3.12、`tkinter` 可导入、并且能从仓库路径解析 `clients.windows.baizefindb_client`。这个检查不会创建 `tk.Tk()`、打开 GUI、访问后端 API、运行 smoke check 或生成构建产物。只有本地排查特殊问题时才显式跳过：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -SkipPreflight
+```
+
+脚本随后会生成临时 launcher，入口模块仍是 `clients.windows.baizefindb_client`，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出：
 
 - `clients/windows/dist/BaizeFinDB-Windows-Client/`
 - `clients/windows/build/`

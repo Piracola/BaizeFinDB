@@ -3,7 +3,8 @@ param(
     [string]$DistPath,
     [string]$WorkPath,
     [switch]$Clean,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$SkipPreflight
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,6 +62,28 @@ if ($DryRun) {
     $Command = "python " + (($PyInstallerArgs | ForEach-Object { Format-CommandArgument $_ }) -join " ")
     Write-Output $Command
     exit 0
+}
+
+if (-not $SkipPreflight) {
+    $PreflightCode = @'
+import importlib
+import importlib.util
+import pathlib
+import sys
+
+repo_root = pathlib.Path(sys.argv[1]).resolve()
+if sys.version_info[:2] != (3, 12):
+    raise SystemExit(f"Python 3.12 is required for packaging; found {sys.version.split()[0]}")
+
+importlib.import_module("tkinter")
+sys.path.insert(0, str(repo_root))
+if importlib.util.find_spec("clients.windows.baizefindb_client") is None:
+    raise SystemExit("Cannot resolve clients.windows.baizefindb_client from repo path")
+'@
+    & python -c $PreflightCode $RepoRoot
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 }
 
 $PyInstallerCheck = @(
