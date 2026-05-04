@@ -139,6 +139,15 @@ Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/R
 
 Tushare `anns_d` 公告采集有独立的可选 Beat 开关，默认关闭，不影响上述 5 分钟 AKShare+雷达闭环。只有在服务器 `.env` 中显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`；间隔由 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 控制，默认 `3600` 秒。启用前先确认 `TUSHARE_TOKEN` 权限、积分消耗、字段稳定性和 `/providers/tushare/readiness`。
 
+不改 `.env` 的情况下，可以用一次性容器验证 Beat schedule 形态：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.server.yml exec -T api python -c "from app.tasks.celery_app import celery_app; print(celery_app.conf.beat_schedule)"
+docker compose -f docker-compose.yml -f docker-compose.server.yml run --rm --no-deps -e TUSHARE_ANNS_D_BEAT_ENABLED=true -e TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS=1800 api python -c "from app.tasks.celery_app import celery_app; print(celery_app.conf.beat_schedule)"
+```
+
+第一条默认只应看到 `baizefindb.radar.collect_and_scan`；第二条应保留主雷达任务，并只额外加入 `baizefindb.providers.collect_tushare_announcements`。
+
 ## 运维状态接口
 
 服务器启动后可用以下命令快速查看最近 24 小时运行状态：
