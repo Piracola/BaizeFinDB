@@ -65,7 +65,7 @@ powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1
 python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default
 ```
 
-默认 OPS readiness 统计窗口是最近 24 小时。排查时如果要区分最近健康状态和更早的 Provider / 数据质量 warning，可以缩短窗口；允许范围与后端 `/ops/readiness` 一致，为 1 到 168 小时：
+默认 OPS readiness 和可选 OPS 趋势统计窗口是最近 24 小时。排查时如果要区分最近健康状态和更早的 Provider / 数据质量 warning，可以缩短窗口；允许范围与后端 `/ops/readiness` 和 `/ops/trends` 一致，为 1 到 168 小时：
 
 ```powershell
 python -m clients.windows.smoke_check --server-url http://127.0.0.1:8000 --user-key default --ops-readiness-lookback-hours 6
@@ -200,7 +200,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 
 如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。`OPS 趋势` 和 `告警钻取` 都是只读排障视图，不触发 Provider 采集、雷达扫描、评分、报告生成、Telegram 修改、模型调用、后端 mutation、evidence 写入或交易相关动作。
 
-首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号和空 Telegram 绑定也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；它不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeCompactJsonOutput <path>` 会写出首次试运行推荐 compact evidence，不含 endpoint payload/raw response；`-SmokeJsonOutput <path>` 会写出详细脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。GUI 的 `首用诊断` 按钮使用同一套 smoke check 规则和摘要格式，但默认不写 evidence 文件，适合已打开窗口后的再次诊断。
+首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号、空 Telegram 绑定和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 读取失败也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；它不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`-SmokeLookbackHours <n>` 会把 OPS readiness 和可选 OPS trends 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeCompactJsonOutput <path>` 会写出首次试运行推荐 compact evidence，不含 endpoint payload/raw response；`-SmokeJsonOutput <path>` 会写出详细脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。GUI 的 `首用诊断` 按钮使用同一套 smoke check 规则和摘要格式，但默认不写 evidence 文件，适合已打开窗口后的再次诊断。
 
 ## 7. 常见问题
 

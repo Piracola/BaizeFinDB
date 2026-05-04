@@ -111,7 +111,7 @@ def run_smoke_check(
     if report.blockers:
         return report
 
-    _check_optional_endpoints(report, normalized_server_url, opener)
+    _check_optional_endpoints(report, normalized_server_url, normalized_lookback_hours, opener)
     _record_user_scoped_skips(report, normalized_user_key)
     return report
 
@@ -358,8 +358,20 @@ def _check_core_endpoints(
 def _check_optional_endpoints(
     report: SmokeReport,
     server_url: str,
+    ops_readiness_lookback_hours: int,
     opener: client_api.UrlOpener | None,
 ) -> None:
+    _call_endpoint(
+        report,
+        "ops_trends",
+        lambda: client_api.fetch_ops_trends(
+            server_url,
+            lookback_hours=ops_readiness_lookback_hours,
+            bucket_count=client_api.OPS_TREND_BUCKET_COUNT,
+            opener=opener,
+        ),
+        required=False,
+    )
     _call_endpoint(
         report,
         "ops_overview",

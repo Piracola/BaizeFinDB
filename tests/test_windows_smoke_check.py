@@ -47,6 +47,7 @@ def test_smoke_check_ready_path_uses_get_only() -> None:
     assert "tkinter" in _check_names(report)
     assert "health_ready" in _check_names(report)
     assert "ops_readiness" in _check_names(report)
+    assert "ops_trends" in _check_names(report)
     assert report.warnings == [
         (
             "user_scoped_reads: Skipped portfolio/watchlist/report/periodic endpoints for user_key "
@@ -59,6 +60,7 @@ def test_smoke_check_ready_path_uses_get_only() -> None:
         "/health",
         "/health/ready",
         "/ops/readiness",
+        "/ops/trends",
         "/ops/overview",
         "/ops/history",
         "/providers/tushare/status",
@@ -68,6 +70,7 @@ def test_smoke_check_ready_path_uses_get_only() -> None:
         "/telegram/bindings",
     }
     assert "http://localhost:8000/ops/readiness?lookback_hours=24" in urls
+    assert "http://localhost:8000/ops/trends?lookback_hours=24&bucket_count=12" in urls
     assert not set(paths).intersection(smoke_check.SKIPPED_USER_SCOPED_ENDPOINTS)
 
 
@@ -84,6 +87,30 @@ def test_smoke_check_passes_custom_ops_readiness_lookback() -> None:
 
     assert report.exit_code() == 0
     assert "http://localhost:8000/ops/readiness?lookback_hours=6" in urls
+    assert "http://localhost:8000/ops/trends?lookback_hours=6&bucket_count=12" in urls
+
+
+def test_smoke_check_ops_trends_failure_is_warning_only() -> None:
+    payloads = _ready_payloads()
+    del payloads["/ops/trends"]
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        path = urlsplit(request.full_url).path
+        if path == "/ops/trends":
+            return FakeResponse([])
+        return FakeResponse(payloads[path])
+
+    report = smoke_check.run_smoke_check(
+        server_url="http://localhost:8000",
+        user_key="default",
+        importer=lambda name: object(),
+        opener=opener,
+    )
+
+    assert report.exit_code() == 0
+    assert report.status == "warning"
+    assert report.blockers == []
+    assert any("ops_trends" in warning for warning in report.warnings)
 
 
 @pytest.mark.parametrize("lookback_hours", [0, 169])
@@ -474,6 +501,7 @@ def _ready_payloads() -> dict[str, object]:
         "/health": {"status": "ok", "service": "BaizeFinDB"},
         "/health/ready": {"status": "ready", "service": "BaizeFinDB", "checks": {}},
         "/ops/readiness": {"status": "ready", "lookback_hours": 24, "checks": []},
+        "/ops/trends": {"lookback_hours": 24, "bucket_count": 12, "buckets": []},
         "/ops/overview": {"lookback_hours": 24, "radar": {}, "alerts": []},
         "/ops/history": {"lookback_hours": 24, "limit": 10, "recent_events": []},
         "/providers/tushare/status": {"provider": "tushare", "status": "not_configured"},

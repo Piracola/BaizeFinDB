@@ -133,7 +133,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - 推荐首次 Windows 试运行使用 `clients/windows/first-trial.ps1`。它只委托
   `run-client.ps1 -SmokeCheck`，不复制 smoke check 或 GUI 逻辑，默认
   `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`。
-- `--ops-readiness-lookback-hours <n>` 只调整 `/ops/readiness` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
+- `--ops-readiness-lookback-hours <n>` 会调整 smoke check 中 `/ops/readiness` 和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 的统计窗口，默认 24，范围 1 到 168；`run-client.ps1 -SmokeLookbackHours <n>` 会把同一数值传给 smoke check。
 - `--compact-json-output <path>` 是首次试运行推荐 evidence：只写总体状态、服务端 URL 元数据、脱敏 `user_key`、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要；不写 endpoint payload、原始后端响应、环境变量、token、secret、API key、authorization、原始 provider URL、个人持仓、二进制或构建输出。
 - `--json-output <path>` 仍可写出有界脱敏详细 JSON，用于深度排障；它会隐藏 `user_key`、token、secret 和 credential-like 字段。
 - `run-client.ps1 -SmokeCompactJsonOutput <path>` 和 `first-trial.ps1 -SmokeCompactJsonOutput <path>` 会把 compact evidence 路径传给 smoke check；`-SmokeJsonOutput <path>` 继续转发详细 JSON 路径；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
@@ -141,7 +141,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - GUI 的 `OPS Lookback (hours)` 会传给 `/ops/overview`、`/ops/history` 和 `/ops/readiness`，默认 24，范围 1 到 168；非法输入会在发起 API 请求前弹出校验错误。
 - GUI 的 `告警钻取` 按钮复用这三个只读 OPS API，并把同一个 `OPS Lookback (hours)` 传给每次调用；输出优先展示后端 readiness 状态和非 OK 检查、overview alerts、history failure_summary（Provider / 数据质量优先）和有界最近事件，不本地重算状态，不写 evidence。
 - GUI 的 `首用诊断` 按钮复用同一个 `clients.windows.smoke_check.run_smoke_check` 和 `format_summary`，传入当前 Server URL、User Key 和 `OPS Lookback (hours)`，只在窗口内显示摘要；默认不写 evidence 文件，也不会打开第二个 GUI 窗口。
-- smoke check 默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
+- smoke check 会额外用同一窗口可选读取 `/ops/trends?lookback_hours=<selected>&bucket_count=12`，该端点失败只作为 warning，不阻断首用；默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
 - Telegram 绑定管理调用 `/telegram/bindings`；服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
 - P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、OPS readiness、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。
