@@ -29,6 +29,7 @@ import export_ops_evidence  # noqa: E402
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_LOOKBACK_HOURS = 24
 DEFAULT_TREND_BUCKET_COUNT = 12
+MAX_TREND_BUCKET_COUNT = 48
 RUNTIME_ENDPOINTS = (
     ("health", "/health", ()),
     ("health_ready", "/health/ready", ()),
@@ -397,7 +398,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--trend-bucket-count",
         type=int,
         default=DEFAULT_TREND_BUCKET_COUNT,
-        help=f"OPS trend bucket count, default: {DEFAULT_TREND_BUCKET_COUNT}.",
+        help=(
+            f"OPS trend bucket count, 1-{MAX_TREND_BUCKET_COUNT}, "
+            f"default: {DEFAULT_TREND_BUCKET_COUNT}."
+        ),
     )
     parser.add_argument(
         "--timeout",
@@ -437,8 +441,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.history_limit < 1:
         print("[FAIL] --history-limit must be >= 1")
         return 2
-    if args.trend_bucket_count < 1:
-        print("[FAIL] --trend-bucket-count must be >= 1")
+    if args.trend_bucket_count < 1 or args.trend_bucket_count > MAX_TREND_BUCKET_COUNT:
+        print(f"[FAIL] --trend-bucket-count must be between 1 and {MAX_TREND_BUCKET_COUNT}")
         return 2
     if args.timeout < 1:
         print("[FAIL] --timeout must be >= 1")

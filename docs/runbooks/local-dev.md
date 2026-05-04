@@ -553,7 +553,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 uv run python infra/scripts/server_runtime_check.py --samples 1 --interval-seconds 0 --ops-evidence-output evidence/ops-evidence.json
 ```
 
-这条命令会在 runtime check 原有只读采样之外，复用 `export_ops_evidence.py` 的脱敏报告逻辑写入 evidence；ready、warning、blocked 都会写入，warning/blocked 排障时优先用这种单命令流程。默认 evidence endpoint 列表不包含 `/ops/trends`；同一条命令显式加 `--include-ops-trends --trend-bucket-count <n>` 时，evidence 也会额外写入脱敏后的 `snapshots.ops_trends`。也可以单独运行 exporter：
+这条命令会在 runtime check 原有只读采样之外，复用 `export_ops_evidence.py` 的脱敏报告逻辑写入 evidence；ready、warning、blocked 都会写入，warning/blocked 排障时优先用这种单命令流程。默认 evidence endpoint 列表不包含 `/ops/trends`；同一条命令显式加 `--include-ops-trends --trend-bucket-count <n>` 时，evidence 也会额外写入脱敏后的 `snapshots.ops_trends`，其中 `n` 必须在 1 到 48 之间。也可以单独运行 exporter：
 
 ```powershell
 uv run python infra/scripts/export_ops_evidence.py --json-output evidence/ops-evidence.json

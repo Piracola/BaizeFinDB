@@ -185,8 +185,7 @@ python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 -
 
 If the same command also includes `--include-ops-trends --trend-bucket-count <n>`,
 the evidence report additionally reads `/ops/trends` and writes sanitized
-`snapshots.ops_trends`. This remains read-only and bounded by the requested
-bucket count.
+`snapshots.ops_trends`. This remains read-only, and `n` must be between 1 and 48.
 
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:

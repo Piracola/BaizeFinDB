@@ -322,6 +322,15 @@ def test_main_writes_json_output_for_blocked_state(monkeypatch, tmp_path, capsys
     assert payload["status"] == "blocked"
 
 
+def test_main_rejects_trend_bucket_count_above_api_bound(capsys) -> None:
+    exit_code = export_ops_evidence.main(["--trend-bucket-count", "49"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "--trend-bucket-count must be between 1 and 48" in captured.err
+    assert captured.out == ""
+
+
 def _reads(
     *,
     readiness_status: str,

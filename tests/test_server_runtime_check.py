@@ -398,6 +398,15 @@ def test_main_writes_ops_evidence_for_ready_runtime(monkeypatch, tmp_path, capsy
     assert "ops_evidence_status=ok" in captured.out
 
 
+def test_main_rejects_trend_bucket_count_above_api_bound(capsys) -> None:
+    exit_code = server_runtime_check.main(["--trend-bucket-count", "49"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "--trend-bucket-count must be between 1 and 48" in captured.out
+    assert captured.err == ""
+
+
 def test_main_passes_ops_trends_into_ops_evidence(monkeypatch, tmp_path, capsys) -> None:
     evidence_calls = []
 
