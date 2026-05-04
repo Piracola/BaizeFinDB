@@ -155,6 +155,8 @@ Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endp
 
 三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，不写数据库，只把 live verify 的脱敏 JSON 证据保存到本地；报告包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去掉 URL/source/token/secret-like 字段的少量归一化样例，样例值会递归脱敏并截断超长文本。失败时也会写入脱敏 failure report，便于留存权限、积分或字段漂移问题，但不保存 token、原始 URL/域名或付费原始数据。
 
+`evidence/`、`runtime-check*.json` 和 `ops-evidence*.json` 是本地运行证据产物，默认已加入 `.gitignore`。真实 token 环境下生成的 evidence 只用于本机或服务器排障留存，不要提交到 git。
+
 如果 token 未配置、权限不足或 Tushare 接口异常，抓取接口会记录 `failure` 和 `failed` 数据质量记录，不会抛出未记录异常。启用 `anns_d` Beat 前，至少要先通过 `check_tushare_anns_d_beat_enablement.py` 的 checklist 和 `verify_tushare_anns_d_preflight.py` 的本地字段漂移、风险映射样例校验，再保存真实 token live evidence，补充积分消耗评估、实时接口字段校验和端到端误报样例。
 
 ### 4.4 基于最新快照运行雷达扫描

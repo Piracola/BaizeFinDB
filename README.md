@@ -246,6 +246,8 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 
 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存 announcements live evidence；`stock_basic` 和 `stock_company` evidence 用于同步留存 token 权限、积分和字段稳定性。
 
+`evidence/`、`runtime-check*.json` 和 `ops-evidence*.json` 是本地运行证据产物，默认已加入 `.gitignore`，不要提交真实 token 环境下生成的报告。
+
 PostgreSQL 迁移完成后，手动采集并写入数据库：
 
 ```powershell

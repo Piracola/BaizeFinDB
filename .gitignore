@@ -15,5 +15,8 @@ htmlcov/
 
 *.log
 backups/
+evidence/
+runtime-check*.json
+ops-evidence*.json
 .DS_Store
 Thumbs.db

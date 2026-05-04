@@ -119,6 +119,8 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --js
 
 三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 的 `--json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本；失败时也会写入脱敏 failure report。announcements evidence 步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
 
+`evidence/`、`runtime-check*.json` 和 `ops-evidence*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。不要把真实 token 环境下生成的 evidence、runtime check 或 ops evidence 报告提交到 git。
+
 手动写入 Tushare 股票基础信息或公告快照：
 
 ```powershell
