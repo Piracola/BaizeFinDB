@@ -190,11 +190,19 @@ uv run python infra/scripts/server_monitor_check.py --include-ops-trends --fail-
 ```
 
 如果需要先生成后续 Telegram/email/webhook adapter 可消费的告警 payload，但还不发送任何
-通知，可以把 compact monitor summary 转成有界 JSON。`blocked` 会生成
-`severity=critical` 且默认非零退出；`warning` 默认生成 `severity=warning` 和
-`should_notify=true`，但仍零退出，除非加 `--fail-on-notify`。该脚本只读已有 JSON
-文件，不调用 API、Docker、数据库、Telegram、SMTP、webhook、采集、扫描、模型、报告、
-备份或清理：
+通知，monitor 命令可以在同一次运行里额外写出 no-send alert payload。该 payload
+从同一份内存里的 monitor summary 生成，不二次读取运行端点；`blocked` 会生成
+`severity=critical`，`warning` 默认生成 `severity=warning` 和 `should_notify=true`，
+但 monitor 命令的退出码仍由 monitor 状态和 `--fail-on-warning` 控制：
+
+```powershell
+uv run python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json --alert-json-output evidence/server-alert-payload.json
+uv run python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json --alert-json-output evidence/server-alert-payload.json --suppress-warning-alert-notify
+```
+
+也可以单独把已有 compact monitor summary 转成有界 JSON。单独运行时，`blocked`
+会非零退出；`warning` 默认零退出，除非加 `--fail-on-notify`。两种路径都不发送通知，
+不调用 API、Docker、数据库、Telegram、SMTP、webhook、采集、扫描、模型、报告、备份或清理：
 
 ```powershell
 uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json

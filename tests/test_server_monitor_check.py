@@ -164,6 +164,128 @@ def test_main_writes_compact_and_runtime_reports(monkeypatch, tmp_path: Path, ca
     assert "json_output=" in captured.out
 
 
+def test_main_writes_no_send_alert_payload(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_monitor_check.server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(
+            status="ok",
+            warnings=[
+                {
+                    "sample": 1,
+                    "kind": "ops_alert",
+                    "code": "server_cpu_pressure_high",
+                    "message": "CPU warning",
+                }
+            ],
+        ),
+    )
+    compact_output = tmp_path / "monitor.json"
+    alert_output = tmp_path / "alert.json"
+
+    exit_code = server_monitor_check.main(
+        [
+            "--json-output",
+            str(compact_output),
+            "--alert-json-output",
+            str(alert_output),
+        ]
+    )
+    payload = json.loads(alert_output.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert payload["report_type"] == "server_alert_payload"
+    assert payload["status"] == "warning"
+    assert payload["severity"] == "warning"
+    assert payload["should_notify"] is True
+    assert payload["source_monitor_summary"]["path"] == str(compact_output)
+    assert payload["items"][0]["code"] == "server_cpu_pressure_high"
+
+
+def test_main_alert_payload_can_suppress_warning_notify(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_monitor_check.server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(
+            status="ok",
+            warnings=[
+                {"sample": index, "kind": "ops_alert", "code": f"warning_{index}"}
+                for index in range(3)
+            ],
+        ),
+    )
+    alert_output = tmp_path / "alert.json"
+
+    exit_code = server_monitor_check.main(
+        [
+            "--alert-json-output",
+            str(alert_output),
+            "--alert-max-items",
+            "1",
+            "--suppress-warning-alert-notify",
+        ]
+    )
+    payload = json.loads(alert_output.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert payload["should_notify"] is False
+    assert len(payload["items"]) == 1
+    assert payload["items_truncated"] is True
+
+
+def test_main_alert_payload_can_include_ok_notify(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_monitor_check.server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(status="ok"),
+    )
+    alert_output = tmp_path / "alert.json"
+
+    exit_code = server_monitor_check.main(
+        ["--alert-json-output", str(alert_output), "--include-ok-alert"]
+    )
+    payload = json.loads(alert_output.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert payload["status"] == "ok"
+    assert payload["severity"] == "info"
+    assert payload["should_notify"] is True
+
+
+def test_main_rejects_invalid_alert_max_items_before_runtime(monkeypatch, tmp_path: Path) -> None:
+    calls = []
+    monkeypatch.setattr(
+        server_monitor_check.server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    alert_output = tmp_path / "alert.json"
+
+    exit_code = server_monitor_check.main(
+        ["--alert-json-output", str(alert_output), "--alert-max-items", "51"]
+    )
+
+    assert exit_code == 2
+    assert calls == []
+    assert not alert_output.exists()
+
+
+def test_main_reports_alert_payload_write_failure(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_monitor_check.server_runtime_check,
+        "run_runtime_check",
+        lambda **kwargs: _runtime_report(status="ok"),
+    )
+    blocked_parent = tmp_path / "not-a-dir"
+    blocked_parent.write_text("x", encoding="utf-8")
+    alert_output = blocked_parent / "alert.json"
+
+    exit_code = server_monitor_check.main(["--alert-json-output", str(alert_output)])
+
+    assert exit_code == 2
+    assert not alert_output.exists()
+
+
 def test_main_returns_nonzero_for_strict_warning(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         server_monitor_check.server_runtime_check,

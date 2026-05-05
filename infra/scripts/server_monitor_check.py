@@ -18,6 +18,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import server_alert_payload  # noqa: E402
 import server_runtime_check  # noqa: E402
 
 DEFAULT_TOP_FAILURES = 5
@@ -168,6 +169,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional path to write the full underlying runtime check JSON report.",
     )
+    parser.add_argument(
+        "--alert-json-output",
+        type=Path,
+        help="Optional path to write a no-send alert payload from the monitor summary.",
+    )
+    parser.add_argument(
+        "--alert-max-items",
+        type=int,
+        default=server_alert_payload.DEFAULT_MAX_ITEMS,
+        help=(
+            "Maximum alert payload items to include, "
+            f"0-{server_alert_payload.MAX_ITEMS}, "
+            f"default: {server_alert_payload.DEFAULT_MAX_ITEMS}."
+        ),
+    )
+    parser.add_argument(
+        "--suppress-warning-alert-notify",
+        action="store_true",
+        help="When writing alert payloads, set should_notify=false for warning status.",
+    )
+    parser.add_argument(
+        "--include-ok-alert",
+        action="store_true",
+        help="When writing alert payloads, set should_notify=true for ok status.",
+    )
     return parser
 
 
@@ -195,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:
         write_json_report(args.runtime_json_output, runtime_report)
     if args.json_output:
         write_json_report(args.json_output, monitor_report)
+    if args.alert_json_output:
+        alert_error = write_alert_payload(args, monitor_report)
+        if alert_error:
+            print(f"[FAIL] {alert_error}")
+            return 2
 
     print(_format_summary(monitor_report, args.json_output))
     return exit_code_for_monitor_report(
@@ -220,6 +251,26 @@ def _validate_args(args: argparse.Namespace) -> str:
         )
     if args.timeout < 1:
         return "--timeout must be >= 1"
+    if args.alert_max_items < 0 or args.alert_max_items > server_alert_payload.MAX_ITEMS:
+        return f"--alert-max-items must be between 0 and {server_alert_payload.MAX_ITEMS}"
+    return ""
+
+
+def write_alert_payload(
+    args: argparse.Namespace,
+    monitor_report: dict[str, Any],
+) -> str:
+    try:
+        alert_payload = server_alert_payload.build_alert_payload(
+            monitor_report,
+            source_path=args.json_output,
+            max_items=args.alert_max_items,
+            suppress_warning_notify=args.suppress_warning_alert_notify,
+            include_ok=args.include_ok_alert,
+        )
+        server_alert_payload.write_json_report(args.alert_json_output, alert_payload)
+    except (OSError, server_alert_payload.AlertPayloadInputError) as exc:
+        return f"could not write alert payload: {exc}"
     return ""
 
 

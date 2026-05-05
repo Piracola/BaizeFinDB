@@ -63,7 +63,7 @@ def build_alert_payload(
         "report_type": "server_alert_payload",
         "generated_at": _now_iso(),
         "source_monitor_summary": {
-            "path": _safe_text(str(source_path)) if source_path else "",
+            "path": _safe_path_text(str(source_path)) if source_path else "",
             "report_type": _safe_text(str(monitor_summary.get("report_type") or "")),
             "generated_at": _safe_text(str(monitor_summary.get("generated_at") or "")),
             "status": status,
@@ -380,6 +380,10 @@ def _as_int(value: object) -> int:
 
 def _safe_text(value: str) -> str:
     return export_ops_evidence.bound_text(export_ops_evidence.redact_text(value))
+
+
+def _safe_path_text(value: str) -> str:
+    return export_ops_evidence.bound_text(value)
 
 
 def _now_iso() -> str:
