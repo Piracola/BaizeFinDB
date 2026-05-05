@@ -1,3 +1,4 @@
+import json
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -6,7 +7,16 @@ from sqlalchemy import desc, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.ai.analysis_output import ModelAnalysisDraft, parse_model_analysis_draft
+from app.ai.model_client import (
+    ModelClient,
+    ModelCompletionRequest,
+    ModelMessage,
+    ModelProviderResponseError,
+    generate_model_completion_with_audit,
+)
+from app.audit.model_audit import record_model_degradation
+from app.core.config import Settings, get_settings
 from app.db.provider_models import DataQualityCheck, MarketSnapshot
 from app.db.radar_models import RadarScanBatch, RadarSignal, RadarSignalReview, SignalEvidence
 from app.governance.sanitization import redact_source_locators, truncate_text
@@ -29,6 +39,7 @@ from app.radar.schemas import (
     RadarSignalDetail,
     RadarSignalEvidenceSummaryRead,
     RadarSignalMetricHighlightRead,
+    RadarSignalModelAnalysisDraftRead,
     RadarSignalRead,
     RadarSignalReviewSummaryRead,
     RadarStockBacktraceEvidenceRead,
@@ -69,6 +80,13 @@ MAX_ANALYSIS_RISK_FLAGS = 8
 MAX_ANALYSIS_EVIDENCE_SUMMARIES = 3
 MAX_ANALYSIS_AGENT_ASSESSMENTS = 5
 MAX_ANALYSIS_AGENT_FINDINGS = 5
+MODEL_ANALYSIS_DRAFT_CALL_SITE = "radar.signal_model_analysis_draft"
+MODEL_ANALYSIS_DRAFT_OUTPUT_CALL_SITE = "radar.signal_model_analysis_draft.output"
+MODEL_ANALYSIS_DRAFT_BOUNDARY = (
+    "Manual opt-in model draft; uses sanitized deterministic radar analysis as context; "
+    "does not change priority, lifecycle, review status, reports, Telegram, Providers, "
+    "or deterministic analysis output"
+)
 MAJOR_RISK_ANNOUNCEMENT_KEYWORDS = (
     "立案调查",
     "行政处罚事先告知",
@@ -333,6 +351,70 @@ async def get_radar_signal_analysis(
     return _build_signal_analysis(signal, evidences, latest_review)
 
 
+async def get_radar_signal_model_analysis_draft(
+    session: AsyncSession,
+    signal_id: int,
+    *,
+    settings: Settings | None = None,
+    client: ModelClient | None = None,
+) -> RadarSignalModelAnalysisDraftRead | None:
+    analysis = await get_radar_signal_analysis(session, signal_id)
+    if analysis is None:
+        return None
+
+    request = _model_analysis_draft_request(analysis)
+    generation = await generate_model_completion_with_audit(
+        session,
+        request,
+        settings=settings,
+        client=client,
+    )
+    if generation.status == "disabled" or not generation.content:
+        return _model_analysis_draft_read(
+            analysis,
+            model_status=generation.status,
+            draft=ModelAnalysisDraft(status="degraded", error_type="model_output_unavailable"),
+            provider=generation.provider,
+            model=generation.model,
+            fallback_model=generation.fallback_model,
+            audit_log_id=generation.audit_log_id,
+            draft_status="not_available",
+        )
+
+    draft = parse_model_analysis_draft(generation.content)
+    audit_log_id = generation.audit_log_id
+    if draft.status in {"blocked", "degraded"}:
+        output_log = await record_model_degradation(
+            session,
+            call_site=MODEL_ANALYSIS_DRAFT_OUTPUT_CALL_SITE,
+            primary_model=generation.model or "unknown",
+            prompt=_model_analysis_draft_audit_prompt(request),
+            error=ModelProviderResponseError(
+                f"model analysis draft output {draft.status}",
+            ),
+            details={
+                "outcome": "degraded",
+                "draft_status": draft.status,
+                "model_status": generation.status,
+                "provider": generation.provider,
+                "blocked_terms": draft.blocked_terms,
+                "previous_audit_log_id": generation.audit_log_id,
+            },
+            settings=settings,
+        )
+        audit_log_id = output_log.id
+
+    return _model_analysis_draft_read(
+        analysis,
+        model_status=generation.status,
+        draft=draft,
+        provider=generation.provider,
+        model=generation.model,
+        fallback_model=generation.fallback_model,
+        audit_log_id=audit_log_id,
+    )
+
+
 async def _latest_signal_review(
     session: AsyncSession,
     signal_id: int,
@@ -383,6 +465,98 @@ def _build_signal_analysis(
         ),
         next_actions=next_actions,
     )
+
+
+def _model_analysis_draft_request(
+    analysis: RadarSignalAnalysisRead,
+) -> ModelCompletionRequest:
+    context = {
+        "signal_id": analysis.signal_id,
+        "subject_type": analysis.subject_type,
+        "subject_code": analysis.subject_code,
+        "subject_name": analysis.subject_name,
+        "priority": analysis.priority.value,
+        "lifecycle_stage": analysis.lifecycle_stage.value,
+        "review_status": analysis.review_status.value,
+        "analysis_title": analysis.analysis_title,
+        "key_points": analysis.key_points,
+        "metric_highlights": [
+            highlight.model_dump(mode="json") for highlight in analysis.metric_highlights
+        ],
+        "risk_flags": analysis.risk_flags,
+        "evidence_summary": analysis.evidence_summary.model_dump(mode="json"),
+        "review_summary": analysis.review_summary.model_dump(mode="json"),
+        "agent_assessments": [
+            {
+                "agent_id": assessment.agent_id,
+                "label": assessment.label,
+                "status": assessment.status.value,
+                "summary": assessment.summary,
+                "findings": assessment.findings,
+                "next_actions": assessment.next_actions,
+            }
+            for assessment in analysis.agent_assessments
+        ],
+        "next_actions": analysis.next_actions,
+    }
+    return ModelCompletionRequest(
+        call_site=MODEL_ANALYSIS_DRAFT_CALL_SITE,
+        messages=[
+            ModelMessage(
+                role="system",
+                content=(
+                    "Return JSON only. Allowed fields: advisory_summary, observations, "
+                    "risk_notes, follow_up_questions, suggested_attention_label. "
+                    "Use only these labels when needed: 重点关注, 继续观察, 谨慎跟踪, "
+                    "暂不关注, 风险回避. Do not include URLs, source domains, raw source "
+                    "locators, precise confidence values, personal holdings, or trading "
+                    "instructions. Do not change backend priority, lifecycle, or review status."
+                ),
+            ),
+            ModelMessage(
+                role="user",
+                content=json.dumps(context, ensure_ascii=False, default=str),
+            ),
+        ],
+        response_format={"type": "json_object"},
+    )
+
+
+def _model_analysis_draft_read(
+    analysis: RadarSignalAnalysisRead,
+    *,
+    model_status: str,
+    draft: ModelAnalysisDraft,
+    provider: str | None,
+    model: str | None,
+    fallback_model: str | None,
+    audit_log_id: int | None,
+    draft_status: str | None = None,
+) -> RadarSignalModelAnalysisDraftRead:
+    return RadarSignalModelAnalysisDraftRead(
+        signal_id=analysis.signal_id,
+        model_status=model_status,
+        draft_status=draft_status or draft.status,
+        provider=provider,
+        model=model,
+        fallback_model=fallback_model,
+        audit_log_id=audit_log_id,
+        advisory_summary=draft.advisory_summary,
+        observations=draft.observations,
+        risk_notes=draft.risk_notes,
+        follow_up_questions=draft.follow_up_questions,
+        suggested_attention_label=(
+            draft.suggested_attention_label.value
+            if draft.suggested_attention_label is not None
+            else None
+        ),
+        blocked_terms=draft.blocked_terms,
+        boundary=MODEL_ANALYSIS_DRAFT_BOUNDARY,
+    )
+
+
+def _model_analysis_draft_audit_prompt(request: ModelCompletionRequest) -> str:
+    return "\n".join(f"{message.role}: {message.content}" for message in request.messages)
 
 
 def _analysis_title(signal: RadarSignal) -> str:

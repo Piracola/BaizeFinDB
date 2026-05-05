@@ -149,6 +149,23 @@ class RadarSignalAnalysisRead(BaseModel):
     next_actions: list[str] = Field(default_factory=list, max_length=5)
 
 
+class RadarSignalModelAnalysisDraftRead(BaseModel):
+    signal_id: int
+    model_status: str
+    draft_status: str
+    provider: str | None = None
+    model: str | None = None
+    fallback_model: str | None = None
+    audit_log_id: int | None = None
+    advisory_summary: str = ""
+    observations: list[str] = Field(default_factory=list, max_length=5)
+    risk_notes: list[str] = Field(default_factory=list, max_length=5)
+    follow_up_questions: list[str] = Field(default_factory=list, max_length=5)
+    suggested_attention_label: str | None = None
+    blocked_terms: list[str] = Field(default_factory=list, max_length=8)
+    boundary: str
+
+
 class RadarSignalReviewRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

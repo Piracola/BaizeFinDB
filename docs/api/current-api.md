@@ -29,6 +29,7 @@ GET  /radar/overview
 GET  /radar/signals
 GET  /radar/signals/{signal_id}
 GET  /radar/signals/{signal_id}/analysis
+POST /radar/signals/{signal_id}/model-analysis-draft
 GET  /portfolio/holdings
 POST /portfolio/holdings
 GET  /portfolio/watchlist
@@ -596,6 +597,49 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/analysis
 - 不返回精确 confidence，只返回 `high` / `medium` / `low` 桶。
 - 不返回个人持仓、成本价、仓位比例。
 - 不输出交易指令；所有 `next_actions` 只用于研究关注、审查和复盘流程。
+
+### `POST /radar/signals/{signal_id}/model-analysis-draft`
+
+用途：显式手动请求一份模型分析草稿。该接口是 opt-in 模型路径，不替代
+`GET /radar/signals/{signal_id}/analysis` 的确定性结果；默认
+`MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled` 时返回
+`model_status="disabled"` 和 `draft_status="not_available"`，不调用网络、不写
+`model_call_logs`。
+
+启用模型后，后端只把已经脱敏、限长的确定性 analysis 字段作为 prompt 上下文，
+通过 `app.ai.model_client.generate_model_completion_with_audit()` 调用
+OpenAI-compatible provider，再用 `app.ai.analysis_output.parse_model_analysis_draft()`
+解析模型 JSON。主模型成功不写审计；主模型失败但 fallback 成功会写一条
+`fallback` 审计；provider 降级、模型输出 unsafe 或 malformed 会写 `degraded`
+审计，默认不保存完整 raw prompt。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/signals/1/model-analysis-draft
+```
+
+重点字段：
+
+- `model_status`：`disabled`、`ok`、`fallback` 或 `degraded`。
+- `draft_status`：`not_available`、`ok`、`blocked` 或 `degraded`。
+- `provider`、`model`、`fallback_model`、`audit_log_id`：模型执行和审计元数据。
+- `advisory_summary`
+- `observations`
+- `risk_notes`
+- `follow_up_questions`
+- `suggested_attention_label`
+- `blocked_terms`
+- `boundary`
+
+安全边界：
+
+- `POST` 是有意选择：启用模型时可能调用外部 provider，也可能写模型审计日志。
+- 只使用确定性 analysis 的脱敏上下文，不读取 raw evidence URL、source domain、
+  `source_ref`、`raw_excerpt`、个人持仓成本或仓位比例。
+- 模型草稿不能修改 `priority`、`lifecycle_stage`、`review_status`、报告、
+  Telegram、Provider 数据或确定性 `/analysis` 输出。
+- 模型输出必须是 JSON 草稿；URL/domain 会脱源，直接交易语言会返回
+  `draft_status="blocked"`，malformed/non-object JSON 会返回 `draft_status="degraded"`。
+- 该接口当前没有 Web、Windows 或 Telegram UI 入口，属于后端手动验证路径。
 
 ## 5. Portfolio / 持仓自选 API
 
