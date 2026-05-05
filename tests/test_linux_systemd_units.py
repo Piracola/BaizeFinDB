@@ -21,11 +21,13 @@ def test_monitor_service_invokes_compact_monitor_check() -> None:
     assert "--include-ops-trends" in command
     assert "--json-output ${BAIZEFINDB_MONITOR_OUTPUT}" in command
     assert "--runtime-json-output ${BAIZEFINDB_RUNTIME_OUTPUT}" in command
+    assert "--alert-json-output ${BAIZEFINDB_ALERT_OUTPUT}" in command
     assert "--fail-on-warning" not in command
 
     environment = service["Service"]["Environment"]
     assert "BAIZEFINDB_MONITOR_OUTPUT=evidence/server-monitor-summary.json" in environment
     assert "BAIZEFINDB_RUNTIME_OUTPUT=evidence/server-runtime-monitor.json" in environment
+    assert "BAIZEFINDB_ALERT_OUTPUT=evidence/server-alert-payload.json" in environment
     assert ".env" not in environment
 
 

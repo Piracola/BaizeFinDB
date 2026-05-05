@@ -12,13 +12,13 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
-| `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture before alert delivery is implemented. |
+| `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture and no-send alert payload generation before delivery adapters are implemented. |
 | `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
-| `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor and full runtime JSON evidence. |
+| `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor, full runtime, and no-send alert payload JSON evidence. |
 | `baizefindb-monitor.timer` | Example systemd timer that runs the monitor unit every 5 minutes. |
 | `baizefindb-postgres-backup.service` | Example oneshot systemd unit that runs PostgreSQL backup check-only evidence before a timestamped `pg_dump`. |
 | `baizefindb-postgres-backup.timer` | Example systemd timer that runs the PostgreSQL backup unit daily with jitter. |
@@ -316,9 +316,9 @@ deployments before restarting the API.
 ## systemd Monitor Timer
 
 After the compose project is healthy, copy the monitor service and timer examples
-if this host should periodically write compact monitor evidence. Adjust `User`,
-`Group`, `WorkingDirectory`, and the `PATH` in `baizefindb-monitor.service` for
-the real server account before enabling:
+if this host should periodically write compact monitor and no-send alert payload
+evidence. Adjust `User`, `Group`, `WorkingDirectory`, and the `PATH` in
+`baizefindb-monitor.service` for the real server account before enabling:
 
 ```bash
 sudo cp infra/linux/baizefindb-monitor.service /etc/systemd/system/baizefindb-monitor.service
@@ -334,6 +334,9 @@ The timer runs every 5 minutes and writes:
 - `evidence/server-monitor-summary.json` compact `ok` / `warning` / `blocked`
   summary for cron/systemd and future alert senders.
 - `evidence/server-runtime-monitor.json` full runtime report for debugging.
+- `evidence/server-alert-payload.json` no-send alert payload with severity,
+  notification intent, dedupe key, and bounded details for a future delivery
+  adapter.
 
 The service does not send notifications. Add `--fail-on-warning` to
 `ExecStart=` only if warning-only summaries should make the systemd run fail.
