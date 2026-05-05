@@ -27,6 +27,7 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
     assert [stage.name for stage in stages] == [
         "deploy_preflight",
         "backup_check",
+        "backup_retention",
         "runtime_check",
     ]
     assert stages[0].command == [
@@ -51,6 +52,14 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
     ]
     assert stages[2].command == [
         "python",
+        "infra/scripts/postgres_backup_retention.py",
+        "--json-output",
+        str(tmp_path / "postgres-backup-retention.json"),
+    ]
+    assert "--delete" not in stages[2].command
+    assert stages[2].evidence_files == [tmp_path / "postgres-backup-retention.json"]
+    assert stages[3].command == [
+        "python",
         "infra/scripts/server_runtime_check.py",
         "--base-url",
         "http://127.0.0.1:8000",
@@ -62,7 +71,7 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
         "--json-output",
         str(tmp_path / "server-runtime-check.json"),
     ]
-    assert stages[2].evidence_files == [tmp_path / "server-runtime-check.json"]
+    assert stages[3].evidence_files == [tmp_path / "server-runtime-check.json"]
 
 
 def test_build_stage_specs_passes_custom_base_url_to_api_checks(tmp_path: Path) -> None:
@@ -73,8 +82,9 @@ def test_build_stage_specs_passes_custom_base_url_to_api_checks(tmp_path: Path) 
     assert "--base-url" in stages[0].command
     assert "https://api.example.test" in stages[0].command
     assert "--base-url" not in stages[1].command
-    assert "--base-url" in stages[2].command
-    assert "https://api.example.test" in stages[2].command
+    assert "--base-url" not in stages[2].command
+    assert "--base-url" in stages[3].command
+    assert "https://api.example.test" in stages[3].command
 
 
 def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path) -> None:
@@ -84,13 +94,14 @@ def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path
 
     assert "--fail-on-warning" not in stages[0].command
     assert "--fail-on-warning" not in stages[1].command
-    assert "--fail-on-warning" in stages[2].command
+    assert "--fail-on-warning" not in stages[2].command
+    assert "--fail-on-warning" in stages[3].command
 
 
 def test_build_stage_specs_includes_optional_ops_evidence(tmp_path: Path) -> None:
     args = _args(tmp_path, include_ops_evidence=True)
 
-    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[2]
+    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[3]
 
     assert "--ops-evidence-output" in runtime_stage.command
     assert str(tmp_path / "server-ops-evidence.json") in runtime_stage.command
@@ -103,7 +114,7 @@ def test_build_stage_specs_includes_optional_ops_evidence(tmp_path: Path) -> Non
 def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
     args = _args(tmp_path, runtime_samples=5, runtime_interval_seconds=7)
 
-    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[2]
+    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[3]
 
     assert "--samples" in runtime_stage.command
     assert "5" in runtime_stage.command
@@ -115,6 +126,7 @@ def test_build_stage_specs_marks_skipped_stages(tmp_path: Path) -> None:
     args = _args(
         tmp_path,
         skip_backup_check=True,
+        skip_backup_retention=True,
         skip_runtime_check=True,
         include_ops_evidence=True,
     )
@@ -123,9 +135,22 @@ def test_build_stage_specs_marks_skipped_stages(tmp_path: Path) -> None:
 
     assert stages[1].name == "backup_check"
     assert stages[1].command == []
-    assert stages[2].name == "runtime_check"
+    assert stages[2].name == "backup_retention"
+    assert stages[2].command == []
+    assert stages[3].name == "runtime_check"
+    assert stages[3].command == []
+    assert stages[3].evidence_files == []
+
+
+def test_build_stage_specs_can_skip_only_backup_retention(tmp_path: Path) -> None:
+    args = _args(tmp_path, skip_backup_retention=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert stages[2].name == "backup_retention"
     assert stages[2].command == []
     assert stages[2].evidence_files == []
+    assert stages[3].name == "runtime_check"
 
 
 def test_run_acceptance_runs_all_stages_by_default(monkeypatch, tmp_path: Path) -> None:
@@ -147,8 +172,13 @@ def test_run_acceptance_runs_all_stages_by_default(monkeypatch, tmp_path: Path) 
 
     results = server_delivery_acceptance.run_acceptance(args, repo_root=tmp_path)
 
-    assert calls == ["deploy_preflight", "backup_check", "runtime_check"]
-    assert [result.status for result in results] == ["fail", "ok", "ok"]
+    assert calls == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+    ]
+    assert [result.status for result in results] == ["fail", "ok", "ok", "ok"]
 
 
 def test_run_acceptance_fail_fast_stops_after_failure(monkeypatch, tmp_path: Path) -> None:

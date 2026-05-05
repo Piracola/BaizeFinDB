@@ -13,7 +13,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture before alert delivery is implemented. |
-| `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, and runtime sampling into one bounded evidence bundle. |
+| `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
@@ -230,8 +230,8 @@ python infra/scripts/postgres_backup.py --check-only --check-json-output evidenc
 ```
 
 For one delivery acceptance run after the API is up, use the orchestrator. It
-delegates to the existing deploy preflight, backup check-only evidence, and
-runtime sampler, then writes a bounded summary under
+delegates to the existing deploy preflight, backup check-only evidence, backup
+retention dry-run evidence, and runtime sampler, then writes a bounded summary under
 `evidence/server-delivery-acceptance/`:
 
 ```bash
@@ -253,8 +253,8 @@ unreadable, invalid, failing, `error`, or `blocked` evidence marks the stage as
 non-zero exit code on warning-only acceptance while preserving report
 `status="warn"`. Add `--include-ops-evidence` when the same evidence bundle should
 also contain sanitized OPS evidence from the runtime stage. Use `--evidence-dir`,
-`--runtime-samples`, `--runtime-interval-seconds`, and `--fail-fast` to adjust the
-evidence bundle or stop on the first failing stage.
+`--runtime-samples`, `--runtime-interval-seconds`, `--skip-backup-retention`, and
+`--fail-fast` to adjust the evidence bundle or stop on the first failing stage.
 
 Verify Tushare `stock_basic` without writing to the database:
 

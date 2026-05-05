@@ -81,7 +81,7 @@ uv run python infra/scripts/server_deploy_check.py --json-output evidence/server
 ```
 
 服务已经启动后，要做一次面向交付/首次真实使用的整体验收，可以用一条命令串联
-部署预检、备份工具链 check-only evidence 和运行时采样。默认 evidence 目录是
+部署预检、备份工具链 check-only evidence、备份保留期 dry-run evidence 和运行时采样。默认 evidence 目录是
 `evidence/server-delivery-acceptance/`，最终汇总报告是
 `server-delivery-acceptance.json`：
 
@@ -101,6 +101,7 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 
 - `server_deploy_check.py --check-containers --check-api --check-m5-smoke`
 - `server_deploy_check.py --check-backup --backup-check-json-output <path>`
+- `postgres_backup_retention.py --json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
 
 汇总报告会读取每个 helper 生成的 evidence JSON 顶层 `status`：任一 evidence
@@ -132,6 +133,9 @@ environment。需要调整证据目录、运行采样窗口，或在首个失败
 ```powershell
 uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --evidence-dir evidence/server-acceptance-prod --runtime-samples 5 --runtime-interval-seconds 60 --fail-fast
 ```
+
+默认 backup retention 阶段只做 dry-run，不传 `--delete`。如果某次验收不需要这份
+保留期 evidence，可加 `--skip-backup-retention`。
 
 预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
 

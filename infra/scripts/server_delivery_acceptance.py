@@ -1,8 +1,8 @@
 """One-command Linux server delivery acceptance for BaizeFinDB.
 
-This script is a thin orchestrator. It delegates deployment, backup, and runtime
-checks to the existing helper CLIs and writes one bounded acceptance report that
-points to the generated evidence files.
+This script is a thin orchestrator. It delegates deployment, backup, backup
+retention, and runtime checks to the existing helper CLIs and writes one bounded
+acceptance report that points to the generated evidence files.
 """
 
 from __future__ import annotations
@@ -90,6 +90,29 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
                     evidence_dir / "postgres-backup-check.json",
                     evidence_dir / "server-backup-preflight.json",
                 ],
+            )
+        )
+
+    if args.skip_backup_retention:
+        stages.append(
+            StageSpec(
+                name="backup_retention",
+                command=[],
+                evidence_files=[],
+            )
+        )
+    else:
+        retention_report = evidence_dir / "postgres-backup-retention.json"
+        stages.append(
+            StageSpec(
+                name="backup_retention",
+                command=[
+                    python_executable,
+                    "infra/scripts/postgres_backup_retention.py",
+                    "--json-output",
+                    str(retention_report),
+                ],
+                evidence_files=[retention_report],
             )
         )
 
@@ -281,6 +304,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-runtime-check",
         action="store_true",
         help="Skip server_runtime_check.py.",
+    )
+    parser.add_argument(
+        "--skip-backup-retention",
+        action="store_true",
+        help="Skip PostgreSQL backup retention dry-run evidence.",
     )
     parser.add_argument(
         "--runtime-samples",
