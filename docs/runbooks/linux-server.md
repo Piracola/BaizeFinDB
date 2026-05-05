@@ -108,6 +108,15 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 - `postgres_backup_retention.py --json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
 
+如果还想在同一个验收包里验证告警 payload 和 Telegram delivery preview，可加
+`--include-alert-telegram-preview`。该选项会额外运行一次 compact monitor summary，
+写出 no-send alert payload，再调用 `server_alert_telegram.py` 的 preview 模式；不会传
+`--send`、不会读取 Telegram token、不会更新 dedupe state：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-alert-telegram-preview
+```
+
 汇总报告会读取每个 helper 生成的 evidence JSON 顶层 `status`：任一 evidence
 为 `warn` / `warning` 时，阶段和总报告标为 `warn` 但仍零退出；任一 evidence
 为 `fail` / `error` / `blocked`，或预期 evidence 文件缺失、不可读、JSON 损坏时，

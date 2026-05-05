@@ -172,6 +172,42 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             )
         )
 
+    if args.include_alert_telegram_preview:
+        monitor_report = evidence_dir / "server-monitor-summary.json"
+        alert_payload = evidence_dir / "server-alert-payload.json"
+        stages.append(
+            StageSpec(
+                name="monitor_alert_payload",
+                command=[
+                    python_executable,
+                    "infra/scripts/server_monitor_check.py",
+                    "--base-url",
+                    args.base_url,
+                    "--include-ops-trends",
+                    "--json-output",
+                    str(monitor_report),
+                    "--alert-json-output",
+                    str(alert_payload),
+                ],
+                evidence_files=[monitor_report, alert_payload],
+            )
+        )
+
+        telegram_preview_report = evidence_dir / "server-alert-telegram-preview.json"
+        stages.append(
+            StageSpec(
+                name="telegram_alert_preview",
+                command=[
+                    python_executable,
+                    "infra/scripts/server_alert_telegram.py",
+                    str(alert_payload),
+                    "--json-output",
+                    str(telegram_preview_report),
+                ],
+                evidence_files=[telegram_preview_report],
+            )
+        )
+
     return stages
 
 
@@ -367,6 +403,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask server_runtime_check.py to write sanitized read-only OPS evidence "
             "inside the acceptance evidence directory."
+        ),
+    )
+    parser.add_argument(
+        "--include-alert-telegram-preview",
+        action="store_true",
+        help=(
+            "Run a no-send monitor alert payload stage and Telegram delivery preview "
+            "stage inside the acceptance evidence directory."
         ),
     )
     return parser

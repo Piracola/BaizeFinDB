@@ -247,6 +247,7 @@ uv run python infra/scripts/run_radar_scan.py
 uv run python infra/scripts/server_deploy_check.py --json-output evidence/server-deploy-check.json
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --ops-evidence-output evidence/ops-evidence.json
+uv run python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-preview
 uv run python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json --alert-json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json

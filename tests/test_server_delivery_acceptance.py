@@ -111,6 +111,70 @@ def test_build_stage_specs_includes_optional_ops_evidence(tmp_path: Path) -> Non
     ]
 
 
+def test_build_stage_specs_includes_optional_alert_telegram_preview(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_alert_telegram_preview=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+    ]
+    assert stages[4].command == [
+        "python",
+        "infra/scripts/server_monitor_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--include-ops-trends",
+        "--json-output",
+        str(tmp_path / "server-monitor-summary.json"),
+        "--alert-json-output",
+        str(tmp_path / "server-alert-payload.json"),
+    ]
+    assert stages[4].evidence_files == [
+        tmp_path / "server-monitor-summary.json",
+        tmp_path / "server-alert-payload.json",
+    ]
+    assert stages[5].command == [
+        "python",
+        "infra/scripts/server_alert_telegram.py",
+        str(tmp_path / "server-alert-payload.json"),
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-preview.json"),
+    ]
+    assert "--send" not in stages[5].command
+    assert "--dedupe-state" not in stages[5].command
+    assert "--ignore-dedupe" not in stages[5].command
+    assert stages[5].evidence_files == [
+        tmp_path / "server-alert-telegram-preview.json"
+    ]
+
+
+def test_build_stage_specs_passes_base_url_to_alert_preview_monitor(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        base_url="https://api.example.test",
+        include_alert_telegram_preview=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    monitor_stage = stages[-2]
+    telegram_stage = stages[-1]
+    assert "--base-url" in monitor_stage.command
+    assert "https://api.example.test" in monitor_stage.command
+    assert "--base-url" not in telegram_stage.command
+    assert "--send" not in telegram_stage.command
+
+
 def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
     args = _args(tmp_path, runtime_samples=5, runtime_interval_seconds=7)
 

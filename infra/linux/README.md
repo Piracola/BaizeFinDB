@@ -310,6 +310,10 @@ non-zero exit code on warning-only acceptance while preserving report
 also contain sanitized OPS evidence from the runtime stage. Use `--evidence-dir`,
 `--runtime-samples`, `--runtime-interval-seconds`, `--skip-backup-retention`, and
 `--fail-fast` to adjust the evidence bundle or stop on the first failing stage.
+Add `--include-alert-telegram-preview` when the same evidence bundle should also
+contain a compact monitor summary, no-send alert payload, and Telegram delivery
+preview evidence. This preview path does not pass `--send`, does not need a bot
+token, and does not update dedupe state.
 When a specific backup file should be checked for a restore drill without
 restoring data, add `--restore-check-input backups/<file>.sql`; the orchestrator
 will add `postgres_restore.py --check-only --check-json-output ...` and will not
