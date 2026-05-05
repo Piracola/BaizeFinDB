@@ -901,6 +901,11 @@ Invoke-RestMethod http://127.0.0.1:8000/telegram/status
 | `active_binding_count` | 当前允许的绑定数量 |
 | `require_binding` | `TELEGRAM_REQUIRE_BINDING` 是否开启；开启后无环境白名单且无 active 绑定的 chat 不再使用本地开放模式 |
 
+部署预检 `server_deploy_check.py --check-telegram-strict-binding` 会只读调用该接口：
+`require_binding=true` 为通过；`require_binding=false` 但存在环境白名单或 active 绑定也为通过；
+`require_binding=false` 且无环境白名单、无 active 绑定时记录 warning。该预检只消费上述汇总字段，
+不读取 `.env` 明文、不调用 `/telegram/bindings`，也不输出 token、secret 或 raw chat id。
+
 ### `POST /telegram/webhook`
 
 用途：接收 Telegram update JSON，处理 `message.text` 命令。

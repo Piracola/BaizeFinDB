@@ -10,7 +10,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
-| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
+| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, Telegram strict binding readiness, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture and no-send alert payload generation before delivery adapters are implemented. |
 | `../scripts/server_alert_payload.py` | Filesystem-only no-send alert payload builder from an existing compact monitor summary. |
@@ -103,6 +103,7 @@ Or run the bundled preflight:
 ```bash
 python infra/scripts/server_deploy_check.py --strict-env
 python infra/scripts/server_deploy_check.py --strict-env --json-output evidence/server-deploy-check.json
+python infra/scripts/server_deploy_check.py --check-telegram-strict-binding --json-output evidence/server-deploy-check-telegram.json
 python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
 ```
 
@@ -116,6 +117,15 @@ and each check result while preserving the terminal output.
 backup service/timer contracts before copying them to `/etc/systemd/system`; it
 does not call `systemctl`, inspect installed units, start services, or print
 secrets.
+
+`--check-telegram-strict-binding` reads only `/telegram/status` and checks the
+production-style Telegram whitelist posture. `TELEGRAM_REQUIRE_BINDING=true`
+passes. Strict binding disabled with an environment allow-list or active database
+binding also passes. Strict binding disabled with no allow-list and no active
+binding is warning-only, so local first-run remains possible while public
+handoff can still surface the risk. The check prints only mode and counts; it
+does not read `.env`, call `/telegram/bindings`, send Telegram messages, or print
+tokens, secrets, or raw chat ids.
 
 Build the API image:
 
@@ -372,6 +382,11 @@ Add `--include-systemd-unit-check` when the deploy preflight stage should also r
 the tracked `infra/linux/` service/timer static check. This only appends
 `--check-systemd-units` to `server_deploy_check.py`; it does not inspect installed
 units, start services, or call `systemctl`/`journalctl`.
+Add `--include-telegram-strict-binding-check` when the deploy preflight stage
+should also read `/telegram/status` and record whether strict binding or another
+whitelist path is ready. This only appends `--check-telegram-strict-binding` to
+`server_deploy_check.py`; warning-only output stays non-blocking unless the
+acceptance command also uses `--fail-on-warning`.
 Add `--include-alert-telegram-preview` when the same evidence bundle should also
 contain a compact monitor summary, no-send alert payload, and Telegram delivery
 preview evidence. This preview path does not pass `--send`, does not need a bot

@@ -138,7 +138,11 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 `server_deploy_check.py --check-systemd-units` 可选静态验证 `infra/linux/` 里的 systemd service/timer 模板是否仍符合当前 contract，包括 monitor/alert/backup timer 目标、周期、证据输出、env preflight、dedupe 和 no-secret 边界；该检查只读仓库文件，不调用 `systemctl` / `journalctl`，也不检查服务器已安装 unit。
 
+`server_deploy_check.py --check-telegram-strict-binding` 可选读取 `/telegram/status`，确认公网/生产式 Telegram 白名单入口是否已经关闭本地开放兜底：`TELEGRAM_REQUIRE_BINDING=true` 为通过；未开启严格绑定但存在环境白名单或 active 数据库绑定也为通过；未开启严格绑定且无白名单/active 绑定时为非阻塞 warning。该检查只读 API 状态，只输出计数和模式，不读取 `.env` 明文、不调用 `/telegram/bindings`、不发送 Telegram、不输出 token、secret 或 raw chat id。
+
 需要把这项静态 systemd 模板检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-systemd-unit-check`；该参数只会让 deploy preflight 阶段追加 `--check-systemd-units`，不新增独立 systemd 阶段、不启动服务、不读取凭据。
+
+需要把 Telegram 严格绑定 readiness 纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-telegram-strict-binding-check`；该参数只会让 deploy preflight 阶段追加 `--check-telegram-strict-binding`，warning 会进入 `server-deploy-check.json` 和最终验收汇总，生产切换前可再配合 `--fail-on-warning` 阻断 warning-only 交付。
 
 需要把 Tushare `anns_d` Beat enablement 离线/no-token checklist 纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-tushare-anns-d-beat-enablement`；该参数只会让 deploy preflight 阶段追加 `--check-tushare-anns-d-beat-enablement` 和 `--tushare-anns-d-beat-enablement-json-output <evidence-dir>/tushare-anns-d-beat-enablement.json`，不新增独立 Tushare 阶段、不访问 Tushare、不写数据库、不触发抓取或扫描。
 
@@ -278,6 +282,7 @@ OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD=90
 - `TELEGRAM_ALLOWED_CHAT_IDS` 可填逗号分隔的 chat id；配置后只有白名单 chat 会被处理。
 - `TELEGRAM_WEBHOOK_SECRET` 配置后，Webhook 必须携带 `X-Telegram-Bot-Api-Secret-Token`。
 - `TELEGRAM_REQUIRE_BINDING=true` 会关闭无白名单、无绑定时的本地开放模式；生产/公网部署建议开启，并先用 `/id` 获取 chat id 后写入 `/telegram/bindings`。
+- 生产/公网部署前可运行 `uv run python infra/scripts/server_deploy_check.py --check-telegram-strict-binding`，只读检查 `/telegram/status`；如果严格绑定未开启且没有环境白名单或 active 数据库绑定，会记录 warning，但不输出 token、secret 或 raw chat id。
 - `TELEGRAM_PUSH_ENABLED=true` 后，Celery 扫描任务会向白名单 chat 发送最新扫描的折叠推送；留空或 false 时只保留手动 API 调试。
 - P0 信号完成折叠推送后，会为对应 `user_key=telegram-<chat_id>` 自动生成一份 `standard` report；重复推送同一扫描不会重复生成。
 - `/telegram/bindings` 可把 chat id 绑定到指定 `user_key` 并控制是否允许；配置 `TELEGRAM_ALLOWED_CHAT_IDS` 时，环境白名单仍是硬过滤；未配置环境白名单且无绑定时默认仅本地开放，`TELEGRAM_REQUIRE_BINDING=true` 会要求必须有 active 绑定。

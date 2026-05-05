@@ -357,6 +357,172 @@ def test_check_http_json_fields_fails_for_missing_fields(monkeypatch) -> None:
     assert "service" in result.detail
 
 
+def test_telegram_strict_binding_readiness_passes_when_require_binding_enabled(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(
+            _telegram_status_payload(require_binding=True)
+        ),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "ok"
+    assert result.ok
+    assert "strict binding mode enabled" in result.detail
+    assert "token" not in result.detail.lower()
+
+
+def test_telegram_strict_binding_readiness_passes_with_env_allow_list(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(
+            _telegram_status_payload(
+                require_binding=False,
+                allowed_chat_count=2,
+                active_binding_count=0,
+            )
+        ),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "ok"
+    assert "environment allow-list present" in result.detail
+
+
+def test_telegram_strict_binding_readiness_passes_with_active_binding(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(
+            _telegram_status_payload(
+                require_binding=False,
+                allowed_chat_count=0,
+                binding_count=3,
+                active_binding_count=1,
+            )
+        ),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "ok"
+    assert "active database binding present" in result.detail
+
+
+def test_telegram_strict_binding_readiness_warns_for_open_local_mode(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(
+            _telegram_status_payload(
+                require_binding=False,
+                allowed_chat_count=0,
+                binding_count=0,
+                active_binding_count=0,
+            )
+        ),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "warn"
+    assert result.ok
+    assert "local open mode may accept unbound chats" in result.detail
+
+
+def test_telegram_strict_binding_readiness_warns_for_disabled_only_bindings(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(
+            _telegram_status_payload(
+                require_binding=False,
+                allowed_chat_count=0,
+                binding_count=2,
+                active_binding_count=0,
+            )
+        ),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "warn"
+    assert result.ok
+    assert "no active Telegram recipient path is ready" in result.detail
+    assert "open mode may accept" not in result.detail
+
+
+def test_telegram_strict_binding_readiness_fails_for_missing_fields(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse({"require_binding": False}),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "fail"
+    assert "allowed_chat_count" in result.detail
+    assert "active_binding_count" in result.detail
+
+
+def test_telegram_strict_binding_readiness_fails_for_invalid_types(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(
+            _telegram_status_payload(
+                require_binding=False,
+                allowed_chat_count=-1,
+            )
+        ),
+    )
+
+    result = server_deploy_check.check_telegram_strict_binding_readiness(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert result.status == "fail"
+    assert "allowed_chat_count" in result.detail
+
+
 def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
     calls = []
 
@@ -410,6 +576,10 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
     ops_readiness_call = calls[5]
     assert "status" in ops_readiness_call[2]
     assert "checks" in ops_readiness_call[2]
+    telegram_call = calls[10]
+    assert "require_binding" in telegram_call[2]
+    assert "allowed_chat_count" in telegram_call[2]
+    assert "active_binding_count" in telegram_call[2]
 
 
 def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) -> None:
@@ -610,6 +780,72 @@ def test_main_default_does_not_run_systemd_unit_check(
 
     assert exit_code == 0
     assert calls == []
+
+
+def test_main_default_does_not_run_telegram_strict_binding_check(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_telegram_strict_binding_readiness",
+        lambda *args, **kwargs: calls.append("telegram")
+        or server_deploy_check.CheckResult("telegram", "ok"),
+    )
+
+    exit_code = server_deploy_check.main([])
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_main_check_telegram_strict_binding_writes_warning_to_json(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "evidence" / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_telegram_strict_binding_readiness",
+        lambda base_url, *, timeout: server_deploy_check.CheckResult(
+            "Telegram strict binding readiness",
+            "warn",
+            "strict binding disabled with no environment allow-list or active binding",
+        ),
+    )
+
+    exit_code = server_deploy_check.main(
+        [
+            "--check-telegram-strict-binding",
+            "--json-output",
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert "[WARN] Telegram strict binding readiness" in captured.out
+    assert report["status"] == "warn"
+    assert report["summary"] == {"fail": 0, "ok": 3, "total": 4, "warn": 1}
 
 
 def test_main_check_systemd_units_writes_results_to_json(
@@ -1007,3 +1243,21 @@ def _check_result(
         if result.name == name:
             return result
     raise AssertionError(f"missing check result: {name}")
+
+
+def _telegram_status_payload(
+    *,
+    require_binding: bool,
+    allowed_chat_count: int = 0,
+    binding_count: int = 0,
+    active_binding_count: int = 0,
+) -> dict[str, object]:
+    return {
+        "bot_token_configured": True,
+        "allowed_chat_count": allowed_chat_count,
+        "binding_count": binding_count,
+        "active_binding_count": active_binding_count,
+        "require_binding": require_binding,
+        "webhook_secret_enabled": True,
+        "push_enabled": True,
+    }

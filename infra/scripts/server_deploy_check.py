@@ -53,6 +53,13 @@ RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS = (
     "agent_inputs",
     "next_actions",
 )
+TELEGRAM_STATUS_PATH = "/telegram/status"
+TELEGRAM_STRICT_BINDING_REQUIRED_FIELDS = (
+    "require_binding",
+    "allowed_chat_count",
+    "binding_count",
+    "active_binding_count",
+)
 M5_SMOKE_ENDPOINTS = (
     ("/health", ("status", "service")),
     ("/health/ready", ("status", "checks")),
@@ -122,8 +129,15 @@ M5_SMOKE_ENDPOINTS = (
     ),
     ("/radar/overview", ("priority_counts", "lifecycle_counts", "subject_count")),
     (
-        "/telegram/status",
-        ("bot_token_configured", "push_enabled", "binding_count"),
+        TELEGRAM_STATUS_PATH,
+        (
+            "bot_token_configured",
+            "push_enabled",
+            "allowed_chat_count",
+            "binding_count",
+            "active_binding_count",
+            "require_binding",
+        ),
     ),
 )
 
@@ -340,6 +354,105 @@ def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[Ch
     ]
 
 
+def check_telegram_strict_binding_readiness(
+    base_url: str,
+    *,
+    timeout: int,
+) -> CheckResult:
+    name = "Telegram strict binding readiness"
+    payload, error = _read_http_json(
+        base_url,
+        TELEGRAM_STATUS_PATH,
+        timeout=timeout,
+        result_name=name,
+    )
+    if error is not None:
+        return error
+
+    if not isinstance(payload, dict):
+        return CheckResult(name, "fail", "JSON response is not an object")
+
+    missing_fields = [
+        field for field in TELEGRAM_STRICT_BINDING_REQUIRED_FIELDS if field not in payload
+    ]
+    if missing_fields:
+        return CheckResult(
+            name,
+            "fail",
+            f"missing required fields: {', '.join(missing_fields)}",
+        )
+
+    require_binding = payload["require_binding"]
+    allowed_chat_count = payload["allowed_chat_count"]
+    binding_count = payload["binding_count"]
+    active_binding_count = payload["active_binding_count"]
+    if type(require_binding) is not bool:
+        return CheckResult(name, "fail", "require_binding must be a boolean")
+
+    count_values = {
+        "allowed_chat_count": allowed_chat_count,
+        "binding_count": binding_count,
+        "active_binding_count": active_binding_count,
+    }
+    invalid_counts = [
+        key for key, value in count_values.items() if type(value) is not int or value < 0
+    ]
+    if invalid_counts:
+        return CheckResult(
+            name,
+            "fail",
+            f"invalid non-negative count field(s): {', '.join(invalid_counts)}",
+        )
+
+    count_summary = (
+        f"require_binding={require_binding}; "
+        f"allowed_chat_count={allowed_chat_count}; "
+        f"binding_count={binding_count}; "
+        f"active_binding_count={active_binding_count}"
+    )
+    if require_binding:
+        return CheckResult(
+            name,
+            "ok",
+            f"strict binding mode enabled; {count_summary}",
+        )
+
+    if allowed_chat_count > 0:
+        return CheckResult(
+            name,
+            "ok",
+            f"environment allow-list present while strict binding is disabled; {count_summary}",
+        )
+
+    if active_binding_count > 0:
+        return CheckResult(
+            name,
+            "ok",
+            f"active database binding present while strict binding is disabled; {count_summary}",
+        )
+
+    if binding_count > 0:
+        return CheckResult(
+            name,
+            "warn",
+            (
+                "strict binding disabled with no environment allow-list or active binding; "
+                "existing disabled-only bindings prevent local open fallback, but no active "
+                f"Telegram recipient path is ready; {count_summary}"
+            ),
+        )
+
+    return CheckResult(
+        name,
+        "warn",
+        (
+            "strict binding disabled with no environment allow-list or active binding; "
+            "local open mode may accept unbound chats before public deployment; "
+            f"{count_summary}"
+        ),
+    )
+
+
 def check_tushare_anns_d_beat_enablement(
     *,
     json_output: Path | None = None,
@@ -522,6 +635,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Check read-only M5 API JSON contracts on the target API.",
     )
     parser.add_argument(
+        "--check-telegram-strict-binding",
+        action="store_true",
+        help=(
+            "Read /telegram/status and warn when production-style Telegram "
+            "whitelist/binding mode is not ready. Does not read secrets or send Telegram."
+        ),
+    )
+    parser.add_argument(
         "--check-tushare-anns-d-beat-enablement",
         action="store_true",
         help=(
@@ -672,6 +793,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check_m5_smoke:
         checks.extend(check_m5_smoke(args.base_url, timeout=args.timeout))
+
+    if args.check_telegram_strict_binding:
+        checks.append(
+            check_telegram_strict_binding_readiness(
+                args.base_url,
+                timeout=args.timeout,
+            )
+        )
 
     if args.check_tushare_anns_d_beat_enablement:
         checks.append(

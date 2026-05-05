@@ -78,6 +78,7 @@ docker build -t baizefindb-api:dev .
 ```powershell
 uv run python infra/scripts/server_deploy_check.py
 uv run python infra/scripts/server_deploy_check.py --check-systemd-units
+uv run python infra/scripts/server_deploy_check.py --check-telegram-strict-binding
 ```
 
 需要给脚本、CI 或 Windows 首次试运行流程保留结构化结果时，加
@@ -93,6 +94,12 @@ uv run python infra/scripts/server_deploy_check.py --check-systemd-units --json-
 service/timer contract，例如 monitor/alert/backup timer 目标、周期、evidence 输出、
 Telegram env preflight、dedupe 和 no-secret 边界。它不调用 `systemctl` 或
 `journalctl`，也不检查服务器上已经安装的 unit。
+
+`--check-telegram-strict-binding` 只读读取 `/telegram/status`，用于公网/生产部署前确认
+Telegram 白名单入口是否已经关闭本地开放兜底：`TELEGRAM_REQUIRE_BINDING=true` 为通过；
+未开启严格绑定但存在环境白名单或 active 数据库绑定也为通过；未开启严格绑定且无环境白名单、
+无 active 绑定时记录 warning。该检查不读取 `.env` 明文、不调用 `/telegram/bindings`、
+不发送 Telegram，只输出严格模式和汇总计数。
 
 服务已经启动后，要做一次面向交付/首次真实使用的整体验收，可以用一条命令串联
 部署预检、备份工具链 check-only evidence、备份保留期 dry-run evidence 和运行时采样。默认 evidence 目录是
@@ -117,6 +124,16 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 - `server_deploy_check.py --check-backup --backup-check-json-output <path>`
 - `postgres_backup_retention.py --json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
+
+如果要把 Telegram 严格绑定 readiness 纳入同一交付验收包，可加
+`--include-telegram-strict-binding-check`。该选项只会让 deploy preflight 阶段追加
+`--check-telegram-strict-binding`，仍写入 `server-deploy-check.json`；不会读取凭据文件、
+不会发送 Telegram，也不会展示 raw chat id。warning 默认不阻断交付，生产切换前可再加
+`--fail-on-warning`：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-telegram-strict-binding-check
+```
 
 如果还想把仓库内 systemd 模板静态检查纳入同一验收包，可加
 `--include-systemd-unit-check`。该选项只会让 deploy preflight 阶段追加

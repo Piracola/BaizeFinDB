@@ -68,6 +68,8 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
         "--check-api",
         "--check-m5-smoke",
     ]
+    if args.include_telegram_strict_binding_check:
+        deploy_preflight_command.append("--check-telegram-strict-binding")
     if args.include_systemd_unit_check:
         deploy_preflight_command.append("--check-systemd-units")
     if args.include_tushare_anns_d_beat_enablement:
@@ -483,6 +485,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask the deploy preflight stage to statically validate tracked "
             "infra/linux systemd service/timer templates."
+        ),
+    )
+    parser.add_argument(
+        "--include-telegram-strict-binding-check",
+        action="store_true",
+        help=(
+            "Ask the deploy preflight stage to read /telegram/status and warn "
+            "when production-style Telegram whitelist/binding mode is not ready."
         ),
     )
     parser.add_argument(
