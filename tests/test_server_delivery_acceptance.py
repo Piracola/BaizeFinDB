@@ -109,6 +109,47 @@ def test_build_stage_specs_includes_optional_telegram_strict_binding_check(
     assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
 
 
+def test_build_stage_specs_includes_optional_server_compose_contract_check(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_server_compose_contract_check=True)
+
+    deploy_stage = server_delivery_acceptance.build_stage_specs(args)[0]
+
+    assert deploy_stage.command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-server-compose-contract",
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
+
+
+def test_build_stage_specs_server_compose_contract_check_is_deploy_only(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_server_compose_contract_check=True,
+        include_alert_telegram_preview=True,
+        include_alert_telegram_env_check=True,
+        include_alert_telegram_service_verify=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert "--check-server-compose-contract" in stages[0].command
+    assert all(
+        "--check-server-compose-contract" not in stage.command for stage in stages[1:]
+    )
+
+
 def test_build_stage_specs_telegram_strict_binding_check_is_deploy_only(
     tmp_path: Path,
 ) -> None:

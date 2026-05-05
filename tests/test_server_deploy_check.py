@@ -65,6 +65,20 @@ def test_pg_dump_version_command_uses_postgres_service() -> None:
     ]
 
 
+def test_server_compose_config_json_command_uses_overlay_files() -> None:
+    assert server_deploy_check.server_compose_config_json_command() == [
+        "docker",
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.server.yml",
+        "config",
+        "--format",
+        "json",
+    ]
+
+
 def test_backup_check_json_output_requires_check_backup_before_checks(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: calls.append("root"))
@@ -186,6 +200,201 @@ def test_check_env_passes_when_env_exists(tmp_path: Path) -> None:
 
     assert result.status == "ok"
     assert result.ok
+
+
+def test_check_server_compose_contract_passes_for_expected_runtime_services(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(
+            returncode=0,
+            stdout=json.dumps(_server_compose_payload()),
+        ),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    assert all(result.ok for result in results)
+    assert {result.name for result in results} == {
+        "server compose services present",
+        "server compose runtime env",
+        "server compose runtime dependencies",
+        "server compose API contract",
+        "server compose worker command",
+        "server compose beat command",
+        "server compose restart policy",
+    }
+
+
+def test_check_server_compose_contract_fails_for_missing_service(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload = _server_compose_payload()
+    del payload["services"]["worker"]
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout=json.dumps(payload)),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    services_check = _check_result(results, "server compose services present")
+    assert services_check.status == "fail"
+    assert "worker" in services_check.detail
+
+
+def test_check_server_compose_contract_fails_for_runtime_env_drift(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload = _server_compose_payload()
+    payload["services"]["worker"]["environment"]["APP_ENV"] = "local"
+    payload["services"]["worker"]["environment"]["DATABASE_URL"] = "postgresql://secret"
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout=json.dumps(payload)),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    env_check = _check_result(results, "server compose runtime env")
+    assert env_check.status == "fail"
+    assert "worker:APP_ENV:not_server" in env_check.detail
+    assert "secret" not in env_check.detail
+
+
+def test_check_server_compose_contract_fails_for_dependency_drift(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload = _server_compose_payload()
+    payload["services"]["api"]["depends_on"]["redis"]["condition"] = "service_started"
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout=json.dumps(payload)),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    dependency_check = _check_result(results, "server compose runtime dependencies")
+    assert dependency_check.status == "fail"
+    assert "api:redis:not_service_healthy" in dependency_check.detail
+
+
+def test_check_server_compose_contract_fails_for_api_port_or_health_drift(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload = _server_compose_payload()
+    payload["services"]["api"]["ports"] = [{"target": 8001, "published": "8001"}]
+    payload["services"]["api"]["healthcheck"]["test"] = ["CMD", "true"]
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout=json.dumps(payload)),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    api_check = _check_result(results, "server compose API contract")
+    assert api_check.status == "fail"
+    assert "port_8000_missing" in api_check.detail
+    assert "healthcheck_missing_health_endpoint" in api_check.detail
+
+
+def test_check_server_compose_contract_fails_for_worker_command_drift(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload = _server_compose_payload()
+    payload["services"]["worker"]["command"] = [
+        "celery",
+        "-A",
+        "app.tasks.celery_app.celery_app",
+        "beat",
+    ]
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout=json.dumps(payload)),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    worker_check = _check_result(results, "server compose worker command")
+    assert worker_check.status == "fail"
+    assert "worker" in worker_check.detail
+    assert "unexpected_beat_token" in worker_check.detail
+
+
+def test_check_server_compose_contract_fails_for_beat_command_drift(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload = _server_compose_payload()
+    payload["services"]["beat"]["command"] = [
+        "celery",
+        "-A",
+        "app.tasks.celery_app.celery_app",
+        "beat",
+    ]
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout=json.dumps(payload)),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    beat_check = _check_result(results, "server compose beat command")
+    assert beat_check.status == "fail"
+    assert "schedule_file_missing" in beat_check.detail
+
+
+def test_check_server_compose_contract_fails_without_leaking_stdout_on_command_error(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(
+            returncode=1,
+            stdout='{"DATABASE_URL":"postgresql://secret-password"}',
+            stderr="compose failed",
+        ),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].status == "fail"
+    assert "compose failed" in results[0].detail
+    assert "secret-password" not in results[0].detail
+
+
+def test_check_server_compose_contract_fails_for_invalid_json(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout="{not-json"),
+    )
+
+    results = server_deploy_check.check_server_compose_contract(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].status == "fail"
+    assert "invalid JSON" in results[0].detail
 
 
 def test_check_systemd_units_passes_for_current_templates() -> None:
@@ -782,6 +991,63 @@ def test_main_default_does_not_run_systemd_unit_check(
     assert calls == []
 
 
+def test_main_default_does_not_run_server_compose_contract_check(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_server_compose_contract",
+        lambda root: calls.append(root) or [],
+    )
+
+    exit_code = server_deploy_check.main([])
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_main_check_server_compose_contract_writes_results_to_json(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "evidence" / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_server_compose_contract",
+        lambda root: [
+            server_deploy_check.CheckResult("server compose services present", "ok")
+        ],
+    )
+
+    exit_code = server_deploy_check.main(
+        ["--check-server-compose-contract", "--json-output", str(output)]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    names = {check["name"] for check in report["checks"]}
+    assert exit_code == 0
+    assert report["status"] == "ok"
+    assert "server compose services present" in names
+
+
 def test_main_default_does_not_run_telegram_strict_binding_check(
     monkeypatch,
     tmp_path: Path,
@@ -1245,6 +1511,19 @@ def _check_result(
     raise AssertionError(f"missing check result: {name}")
 
 
+class _Completed:
+    def __init__(
+        self,
+        *,
+        returncode: int,
+        stdout: str = "",
+        stderr: str = "",
+    ) -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 def _telegram_status_payload(
     *,
     require_binding: bool,
@@ -1260,4 +1539,61 @@ def _telegram_status_payload(
         "require_binding": require_binding,
         "webhook_secret_enabled": True,
         "push_enabled": True,
+    }
+
+
+def _server_compose_payload() -> dict[str, object]:
+    runtime_env = {
+        "APP_ENV": "server",
+        "DATABASE_URL": "postgresql+asyncpg://baizefindb:baizefindb@postgres:5432/baizefindb",
+        "REDIS_URL": "redis://redis:6379/0",
+        "CELERY_BROKER_URL": "redis://redis:6379/0",
+        "CELERY_RESULT_BACKEND": "redis://redis:6379/0",
+        "RADAR_SCAN_INTERVAL_SECONDS": "300",
+    }
+    depends_on = {
+        "postgres": {"condition": "service_healthy", "required": True},
+        "redis": {"condition": "service_healthy", "required": True},
+    }
+    base_runtime = {
+        "environment": dict(runtime_env),
+        "depends_on": dict(depends_on),
+        "restart": "unless-stopped",
+    }
+    return {
+        "services": {
+            "api": {
+                **base_runtime,
+                "command": None,
+                "ports": [{"target": 8000, "published": "8000", "protocol": "tcp"}],
+                "healthcheck": {"test": ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health"]},
+            },
+            "worker": {
+                **base_runtime,
+                "environment": dict(runtime_env),
+                "depends_on": dict(depends_on),
+                "command": [
+                    "celery",
+                    "-A",
+                    "app.tasks.celery_app.celery_app",
+                    "worker",
+                    "--loglevel=INFO",
+                ],
+            },
+            "beat": {
+                **base_runtime,
+                "environment": dict(runtime_env),
+                "depends_on": dict(depends_on),
+                "command": [
+                    "celery",
+                    "-A",
+                    "app.tasks.celery_app.celery_app",
+                    "beat",
+                    "--loglevel=INFO",
+                    "--schedule=/tmp/celerybeat-schedule",
+                ],
+            },
+            "postgres": {"image": "postgres:16-alpine"},
+            "redis": {"image": "redis:7-alpine"},
+        }
     }

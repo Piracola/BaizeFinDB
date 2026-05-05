@@ -68,6 +68,8 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
         "--check-api",
         "--check-m5-smoke",
     ]
+    if args.include_server_compose_contract_check:
+        deploy_preflight_command.append("--check-server-compose-contract")
     if args.include_telegram_strict_binding_check:
         deploy_preflight_command.append("--check-telegram-strict-binding")
     if args.include_systemd_unit_check:
@@ -485,6 +487,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask the deploy preflight stage to statically validate tracked "
             "infra/linux systemd service/timer templates."
+        ),
+    )
+    parser.add_argument(
+        "--include-server-compose-contract-check",
+        action="store_true",
+        help=(
+            "Ask the deploy preflight stage to validate the resolved server compose "
+            "api/worker/beat runtime contract from docker compose config JSON."
         ),
     )
     parser.add_argument(

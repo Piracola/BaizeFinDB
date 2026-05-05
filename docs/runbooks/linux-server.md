@@ -10,7 +10,7 @@
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
 | `infra/scripts/dev_environment_check.py` | 开发环境只读自检脚本，验证 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、Tkinter、PowerShell 可选项和 Git 工作区。 |
-| `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、Ops 趋势快照、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
+| `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选 server compose runtime contract、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、Ops 趋势快照、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
 | `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，可选读取 Ops 趋势快照，用退出码区分阻塞状态。 |
 | `infra/scripts/server_monitor_check.py` | cron/systemd 友好的 compact monitor summary 脚本，可在同一次只读采样里额外写 no-send alert payload。 |
 | `infra/scripts/server_alert_payload.py` | no-send 告警 payload 生成脚本，从已有 compact monitor summary 生成有界 JSON，不发送通知。 |
@@ -77,6 +77,7 @@ docker build -t baizefindb-api:dev .
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py
+uv run python infra/scripts/server_deploy_check.py --check-server-compose-contract
 uv run python infra/scripts/server_deploy_check.py --check-systemd-units
 uv run python infra/scripts/server_deploy_check.py --check-telegram-strict-binding
 ```
@@ -87,8 +88,17 @@ uv run python infra/scripts/server_deploy_check.py --check-telegram-strict-bindi
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --json-output evidence/server-deploy-check.json
+uv run python infra/scripts/server_deploy_check.py --check-server-compose-contract --json-output evidence/server-deploy-check-compose.json
 uv run python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
 ```
+
+`--check-server-compose-contract` 会读取
+`docker compose -f docker-compose.yml -f docker-compose.server.yml config --format json`
+解析后的结果，确认 `api`、`worker`、`beat`、`postgres`、`redis` 都存在，并锁定
+API/worker/beat 的 server 环境变量、PostgreSQL/Redis healthy 依赖、API 8000 端口和
+`/health` healthcheck、Celery worker/beat 命令、beat schedule 文件和
+`restart: unless-stopped`。该检查不启动容器；如果 compose JSON 命令失败，错误详情不包含
+stdout，避免把展开后的 `.env` 值写进日志。
 
 `--check-systemd-units` 只读验证仓库内 `infra/linux/` 模板是否仍符合当前
 service/timer contract，例如 monitor/alert/backup timer 目标、周期、evidence 输出、
@@ -124,6 +134,15 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 - `server_deploy_check.py --check-backup --backup-check-json-output <path>`
 - `postgres_backup_retention.py --json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
+
+如果要把 server compose runtime contract 纳入同一交付验收包，可加
+`--include-server-compose-contract-check`。该选项只会让 deploy preflight 阶段追加
+`--check-server-compose-contract`，仍写入 `server-deploy-check.json`；不会启动容器、
+不会输出展开后的 env 值，也不会把该检查传给 backup/runtime/Telegram 阶段：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-server-compose-contract-check
+```
 
 如果要把 Telegram 严格绑定 readiness 纳入同一交付验收包，可加
 `--include-telegram-strict-binding-check`。该选项只会让 deploy preflight 阶段追加
@@ -229,7 +248,7 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 uv run python infra/scripts/server_delivery_acceptance.py --restore-check-input backups/pre-upgrade.sql
 ```
 
-预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
+预检脚本默认用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。`--check-server-compose-contract` 只在显式开启时读取 compose JSON 并只输出合约摘要，不输出 env 值。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement --tushare-anns-d-beat-enablement-json-output evidence/tushare-anns-d-beat-enablement.json

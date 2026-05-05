@@ -10,7 +10,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
-| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, Telegram strict binding readiness, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
+| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional server compose runtime contract, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, Telegram strict binding readiness, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture and no-send alert payload generation before delivery adapters are implemented. |
 | `../scripts/server_alert_payload.py` | Filesystem-only no-send alert payload builder from an existing compact monitor summary. |
@@ -103,6 +103,7 @@ Or run the bundled preflight:
 ```bash
 python infra/scripts/server_deploy_check.py --strict-env
 python infra/scripts/server_deploy_check.py --strict-env --json-output evidence/server-deploy-check.json
+python infra/scripts/server_deploy_check.py --check-server-compose-contract --json-output evidence/server-deploy-check-compose.json
 python infra/scripts/server_deploy_check.py --check-telegram-strict-binding --json-output evidence/server-deploy-check-telegram.json
 python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
 ```
@@ -111,6 +112,17 @@ The preflight uses `docker compose config --quiet` so real environment values
 from `.env` are validated without being printed to deployment logs. `--json-output`
 writes a structured report with generated time, overall status, summary counts,
 and each check result while preserving the terminal output.
+
+`--check-server-compose-contract` parses the resolved output of
+`docker compose -f docker-compose.yml -f docker-compose.server.yml config --format json`
+and validates the tracked server runtime contract without starting containers:
+`api`, `worker`, `beat`, `postgres`, and `redis` services must exist; API,
+worker, and beat must have server runtime environment keys, healthy PostgreSQL
+and Redis dependencies, the expected Celery worker/beat commands, the beat
+schedule file, API port 8000 with a `/health` healthcheck, and
+`restart: unless-stopped`. If the compose JSON command fails, the preflight does
+not include stdout in the failure detail so expanded env values stay out of
+logs.
 
 `--check-systemd-units` is a static template check for tracked files under
 `infra/linux/`. It verifies the compose, monitor, alert Telegram, and PostgreSQL
@@ -378,6 +390,11 @@ non-zero exit code on warning-only acceptance while preserving report
 also contain sanitized OPS evidence from the runtime stage. Use `--evidence-dir`,
 `--runtime-samples`, `--runtime-interval-seconds`, `--skip-backup-retention`, and
 `--fail-fast` to adjust the evidence bundle or stop on the first failing stage.
+Add `--include-server-compose-contract-check` when the deploy preflight stage
+should also validate the resolved server compose runtime contract. This only
+appends `--check-server-compose-contract` to `server_deploy_check.py`; it does
+not start containers, print expanded env values, or pass the flag to backup,
+runtime, OPS, or Telegram helper stages.
 Add `--include-systemd-unit-check` when the deploy preflight stage should also run
 the tracked `infra/linux/` service/timer static check. This only appends
 `--check-systemd-units` to `server_deploy_check.py`; it does not inspect installed

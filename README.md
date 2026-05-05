@@ -80,7 +80,7 @@
 - Alembic 迁移框架
 - Celery Worker / Beat 调度入口
 - Docker Compose 的 PostgreSQL / Redis 配置
-- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、部署预检脚本、只读 M5 smoke check（含 `/ops/overview`、`/ops/history`、`/ops/trends`、`/ops/readiness`、Tushare 状态、`/radar/signals` 和有信号时的 `/radar/signals/{id}/analysis` 契约）、运行采样验证脚本、cron/systemd 友好的监控摘要脚本和 5 分钟 systemd timer 示例、PostgreSQL 备份/恢复脚本、默认 dry-run 的 PostgreSQL backup retention helper、每日 PostgreSQL backup systemd timer 示例、systemd 自启动示例和 nginx HTTPS 反代示例
+- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、部署预检脚本、server compose runtime contract 预检、只读 M5 smoke check（含 `/ops/overview`、`/ops/history`、`/ops/trends`、`/ops/readiness`、Tushare 状态、`/radar/signals` 和有信号时的 `/radar/signals/{id}/analysis` 契约）、运行采样验证脚本、cron/systemd 友好的监控摘要脚本和 5 分钟 systemd timer 示例、PostgreSQL 备份/恢复脚本、默认 dry-run 的 PostgreSQL backup retention helper、每日 PostgreSQL backup systemd timer 示例、systemd 自启动示例和 nginx HTTPS 反代示例
 - pytest 冒烟测试
 
 ## 当前进度
@@ -138,7 +138,11 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 `server_deploy_check.py --check-systemd-units` 可选静态验证 `infra/linux/` 里的 systemd service/timer 模板是否仍符合当前 contract，包括 monitor/alert/backup timer 目标、周期、证据输出、env preflight、dedupe 和 no-secret 边界；该检查只读仓库文件，不调用 `systemctl` / `journalctl`，也不检查服务器已安装 unit。
 
+`server_deploy_check.py --check-server-compose-contract` 可选解析 `docker compose -f docker-compose.yml -f docker-compose.server.yml config --format json` 的结果，验证 `api`、`worker`、`beat`、`postgres`、`redis` 服务存在，API/worker/beat 的 server 环境变量、healthy PostgreSQL/Redis 依赖、API 8000 端口和 `/health` healthcheck、Celery worker/beat 命令、beat schedule 文件和 `restart: unless-stopped` 不漂移。该检查不启动容器；compose JSON 命令失败时不输出 stdout，避免把展开后的 env 值写进日志。
+
 `server_deploy_check.py --check-telegram-strict-binding` 可选读取 `/telegram/status`，确认公网/生产式 Telegram 白名单入口是否已经关闭本地开放兜底：`TELEGRAM_REQUIRE_BINDING=true` 为通过；未开启严格绑定但存在环境白名单或 active 数据库绑定也为通过；未开启严格绑定且无白名单/active 绑定时为非阻塞 warning。该检查只读 API 状态，只输出计数和模式，不读取 `.env` 明文、不调用 `/telegram/bindings`、不发送 Telegram、不输出 token、secret 或 raw chat id。
+
+需要把 server compose runtime contract 检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-server-compose-contract-check`；该参数只会让 deploy preflight 阶段追加 `--check-server-compose-contract`，不新增独立阶段、不启动容器、不把该检查传给 backup/runtime/Telegram 阶段。
 
 需要把这项静态 systemd 模板检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-systemd-unit-check`；该参数只会让 deploy preflight 阶段追加 `--check-systemd-units`，不新增独立 systemd 阶段、不启动服务、不读取凭据。
 

@@ -16,6 +16,17 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 SERVER_COMPOSE_FILES = ("docker-compose.yml", "docker-compose.server.yml")
 DEFAULT_POSTGRES_SERVICE = "postgres"
+SERVER_COMPOSE_REQUIRED_SERVICES = ("api", "worker", "beat", "postgres", "redis")
+SERVER_COMPOSE_RUNTIME_SERVICES = ("api", "worker", "beat")
+SERVER_COMPOSE_RUNTIME_ENV_KEYS = (
+    "APP_ENV",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "CELERY_BROKER_URL",
+    "CELERY_RESULT_BACKEND",
+    "RADAR_SCAN_INTERVAL_SECONDS",
+)
+CELERY_APP_PATH = "app.tasks.celery_app.celery_app"
 LINUX_SYSTEMD_UNIT_FILES = (
     "baizefindb-compose.service",
     "baizefindb-monitor.service",
@@ -175,6 +186,10 @@ def server_compose_command(*args: str) -> list[str]:
 
 def pg_dump_version_command(service: str = DEFAULT_POSTGRES_SERVICE) -> list[str]:
     return server_compose_command("exec", "-T", service, "pg_dump", "--version")
+
+
+def server_compose_config_json_command() -> list[str]:
+    return server_compose_command("config", "--format", "json")
 
 
 def check_backup_evidence(
@@ -351,6 +366,41 @@ def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[Ch
             RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS,
             timeout=timeout,
         ),
+    ]
+
+
+def check_server_compose_contract(root: Path) -> list[CheckResult]:
+    payload, error = _read_server_compose_config_json(root)
+    if error is not None:
+        return [error]
+
+    if not isinstance(payload, dict):
+        return [
+            CheckResult(
+                "server compose config JSON",
+                "fail",
+                "JSON response is not an object",
+            )
+        ]
+
+    services = payload.get("services")
+    if not isinstance(services, dict):
+        return [
+            CheckResult(
+                "server compose services present",
+                "fail",
+                "services object missing from docker compose config JSON",
+            )
+        ]
+
+    return [
+        _check_server_compose_services_present(services),
+        _check_server_compose_runtime_env(services),
+        _check_server_compose_dependencies(services),
+        _check_server_compose_api_contract(services),
+        _check_server_compose_worker_contract(services),
+        _check_server_compose_beat_contract(services),
+        _check_server_compose_restart_policy(services),
     ]
 
 
@@ -665,6 +715,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run docker compose ps for the server overlay.",
     )
     parser.add_argument(
+        "--check-server-compose-contract",
+        action="store_true",
+        help=(
+            "Validate the resolved server compose api/worker/beat runtime contract "
+            "from docker compose config JSON without printing expanded environment values."
+        ),
+    )
+    parser.add_argument(
         "--check-systemd-units",
         action="store_true",
         help=(
@@ -761,6 +819,9 @@ def main(argv: list[str] | None = None) -> int:
                 root,
             ),
         )
+
+    if args.check_server_compose_contract:
+        checks.extend(check_server_compose_contract(root))
 
     if args.check_systemd_units:
         checks.extend(check_systemd_units(root))
@@ -1032,6 +1093,258 @@ def _check_required_absence(name: str, text: str, markers: tuple[str, ...]) -> C
             else "forbidden markers absent"
         ),
     )
+
+
+def _read_server_compose_config_json(
+    root: Path,
+) -> tuple[object | None, CheckResult | None]:
+    name = "server compose config JSON"
+    try:
+        completed = subprocess.run(  # noqa: S603
+            server_compose_config_json_command(),
+            cwd=root,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return None, CheckResult(name, "fail", f"command not found: {exc.filename}")
+
+    if completed.returncode != 0:
+        detail = f"docker compose config JSON returned exit code {completed.returncode}"
+        stderr = (completed.stderr or "").strip()
+        if stderr:
+            detail = f"{detail}: {_truncate(stderr)}"
+        return None, CheckResult(name, "fail", detail)
+
+    try:
+        return json.loads(completed.stdout or ""), None
+    except json.JSONDecodeError as exc:
+        return None, CheckResult(name, "fail", f"invalid JSON: {exc.msg}")
+
+
+def _check_server_compose_services_present(
+    services: dict[str, object],
+) -> CheckResult:
+    missing = [
+        service
+        for service in SERVER_COMPOSE_REQUIRED_SERVICES
+        if not isinstance(services.get(service), dict)
+    ]
+    return CheckResult(
+        "server compose services present",
+        "fail" if missing else "ok",
+        (
+            f"missing or invalid service(s): {', '.join(missing)}"
+            if missing
+            else f"services present: {', '.join(SERVER_COMPOSE_REQUIRED_SERVICES)}"
+        ),
+    )
+
+
+def _check_server_compose_runtime_env(
+    services: dict[str, object],
+) -> CheckResult:
+    mismatches: list[str] = []
+    for service_name in SERVER_COMPOSE_RUNTIME_SERVICES:
+        service = services.get(service_name)
+        if not isinstance(service, dict):
+            mismatches.append(f"{service_name}:missing")
+            continue
+        env = _compose_environment(service)
+        for key in SERVER_COMPOSE_RUNTIME_ENV_KEYS:
+            if key not in env:
+                mismatches.append(f"{service_name}:{key}:missing")
+        if env.get("APP_ENV") != "server":
+            mismatches.append(f"{service_name}:APP_ENV:not_server")
+        if "postgres" not in env.get("DATABASE_URL", ""):
+            mismatches.append(f"{service_name}:DATABASE_URL:no_postgres_service_ref")
+        for key in ("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND"):
+            if "redis" not in env.get(key, ""):
+                mismatches.append(f"{service_name}:{key}:no_redis_service_ref")
+
+    return CheckResult(
+        "server compose runtime env",
+        "fail" if mismatches else "ok",
+        (
+            f"contract mismatch(es): {', '.join(mismatches[:10])}"
+            if mismatches
+            else "api/worker/beat runtime env contract present"
+        ),
+    )
+
+
+def _check_server_compose_dependencies(
+    services: dict[str, object],
+) -> CheckResult:
+    mismatches: list[str] = []
+    for service_name in SERVER_COMPOSE_RUNTIME_SERVICES:
+        service = services.get(service_name)
+        if not isinstance(service, dict):
+            mismatches.append(f"{service_name}:missing")
+            continue
+        depends_on = service.get("depends_on")
+        if not isinstance(depends_on, dict):
+            mismatches.append(f"{service_name}:depends_on:missing")
+            continue
+        for dependency in ("postgres", "redis"):
+            dependency_config = depends_on.get(dependency)
+            if not isinstance(dependency_config, dict):
+                mismatches.append(f"{service_name}:{dependency}:missing")
+                continue
+            if dependency_config.get("condition") != "service_healthy":
+                mismatches.append(f"{service_name}:{dependency}:not_service_healthy")
+
+    return CheckResult(
+        "server compose runtime dependencies",
+        "fail" if mismatches else "ok",
+        (
+            f"contract mismatch(es): {', '.join(mismatches[:10])}"
+            if mismatches
+            else "api/worker/beat depend on healthy postgres and redis"
+        ),
+    )
+
+
+def _check_server_compose_api_contract(
+    services: dict[str, object],
+) -> CheckResult:
+    service = services.get("api")
+    if not isinstance(service, dict):
+        return CheckResult("server compose API contract", "fail", "api service missing")
+
+    ports = service.get("ports")
+    has_port = False
+    if isinstance(ports, list):
+        has_port = any(
+            isinstance(port, dict)
+            and port.get("target") == 8000
+            and str(port.get("published")) == "8000"
+            for port in ports
+        )
+
+    healthcheck = service.get("healthcheck")
+    health_test = ""
+    if isinstance(healthcheck, dict):
+        health_test = " ".join(_command_tokens(healthcheck.get("test")))
+
+    mismatches = []
+    if not has_port:
+        mismatches.append("port_8000_missing")
+    if "/health" not in health_test:
+        mismatches.append("healthcheck_missing_health_endpoint")
+
+    return CheckResult(
+        "server compose API contract",
+        "fail" if mismatches else "ok",
+        (
+            f"contract mismatch(es): {', '.join(mismatches)}"
+            if mismatches
+            else "api exposes 8000 and healthcheck reads /health"
+        ),
+    )
+
+
+def _check_server_compose_worker_contract(
+    services: dict[str, object],
+) -> CheckResult:
+    service = services.get("worker")
+    if not isinstance(service, dict):
+        return CheckResult("server compose worker command", "fail", "worker service missing")
+
+    tokens = _command_tokens(service.get("command"))
+    mismatches = []
+    for token in ("celery", "-A", CELERY_APP_PATH, "worker"):
+        if token not in tokens:
+            mismatches.append(token)
+    if "beat" in tokens:
+        mismatches.append("unexpected_beat_token")
+
+    return CheckResult(
+        "server compose worker command",
+        "fail" if mismatches else "ok",
+        (
+            f"command mismatch(es): {', '.join(mismatches)}"
+            if mismatches
+            else "worker runs celery worker with project app"
+        ),
+    )
+
+
+def _check_server_compose_beat_contract(
+    services: dict[str, object],
+) -> CheckResult:
+    service = services.get("beat")
+    if not isinstance(service, dict):
+        return CheckResult("server compose beat command", "fail", "beat service missing")
+
+    tokens = _command_tokens(service.get("command"))
+    mismatches = []
+    for token in ("celery", "-A", CELERY_APP_PATH, "beat"):
+        if token not in tokens:
+            mismatches.append(token)
+    if not any(token.startswith("--schedule") for token in tokens):
+        mismatches.append("schedule_file_missing")
+    if "worker" in tokens:
+        mismatches.append("unexpected_worker_token")
+
+    return CheckResult(
+        "server compose beat command",
+        "fail" if mismatches else "ok",
+        (
+            f"command mismatch(es): {', '.join(mismatches)}"
+            if mismatches
+            else "beat runs celery beat with project app and schedule file"
+        ),
+    )
+
+
+def _check_server_compose_restart_policy(
+    services: dict[str, object],
+) -> CheckResult:
+    mismatches = []
+    for service_name in SERVER_COMPOSE_RUNTIME_SERVICES:
+        service = services.get(service_name)
+        if not isinstance(service, dict):
+            mismatches.append(f"{service_name}:missing")
+            continue
+        if service.get("restart") != "unless-stopped":
+            mismatches.append(f"{service_name}:restart")
+
+    return CheckResult(
+        "server compose restart policy",
+        "fail" if mismatches else "ok",
+        (
+            f"contract mismatch(es): {', '.join(mismatches)}"
+            if mismatches
+            else "api/worker/beat restart unless-stopped"
+        ),
+    )
+
+
+def _compose_environment(service: dict[str, object]) -> dict[str, str]:
+    environment = service.get("environment")
+    if isinstance(environment, dict):
+        return {str(key): str(value) for key, value in environment.items()}
+    if isinstance(environment, list):
+        parsed: dict[str, str] = {}
+        for item in environment:
+            if not isinstance(item, str) or "=" not in item:
+                continue
+            key, value = item.split("=", 1)
+            parsed[key] = value
+        return parsed
+    return {}
+
+
+def _command_tokens(command: object) -> list[str]:
+    if isinstance(command, list):
+        return [str(token) for token in command]
+    if isinstance(command, str):
+        return command.split()
+    return []
 
 
 def _read_http_json(
