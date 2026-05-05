@@ -813,6 +813,9 @@ def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) 
                 "evidence_summary": {},
                 "review_summary": {},
                 "agent_inputs": {},
+                "agent_assessments": [
+                    {"agent_id": "data_quality_agent", "status": "ok"}
+                ],
                 "next_actions": [],
             }
         )
@@ -904,6 +907,7 @@ def test_radar_signal_analysis_smoke_fails_for_missing_analysis_field(
                 "evidence_summary": {},
                 "review_summary": {},
                 "agent_inputs": {},
+                "agent_assessments": [],
             }
         )
 

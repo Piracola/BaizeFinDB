@@ -215,6 +215,22 @@ async def test_radar_signal_analysis_service_builds_safe_research_brief(
     assert "Do not override backend rule priority" in " ".join(
         analysis.agent_inputs.guardrails
     )
+    assert [agent.agent_id for agent in analysis.agent_assessments] == [
+        "data_quality_agent",
+        "risk_agent",
+        "momentum_agent",
+        "evidence_agent",
+        "report_agent",
+    ]
+    agent_by_id = {agent.agent_id: agent for agent in analysis.agent_assessments}
+    assert agent_by_id["data_quality_agent"].status == "warning"
+    assert agent_by_id["risk_agent"].status == "warning"
+    assert agent_by_id["momentum_agent"].status == "warning"
+    assert agent_by_id["evidence_agent"].status == "warning"
+    assert agent_by_id["report_agent"].status == "warning"
+    assert all(agent.summary for agent in analysis.agent_assessments)
+    assert all(len(agent.findings) <= 5 for agent in analysis.agent_assessments)
+    assert all(len(agent.next_actions) <= 5 for agent in analysis.agent_assessments)
 
     serialized = analysis.model_dump_json()
     assert "https://example.com" not in serialized
@@ -261,6 +277,22 @@ async def test_radar_signal_analysis_api_reads_signal_and_returns_404(
     assert payload["subject_name"] == "AI Applications"
     assert payload["analysis_title"] == "P1 research brief: AI Applications"
     assert payload["review_summary"]["status"] == "needs_human_review"
+    assert [agent["agent_id"] for agent in payload["agent_assessments"]] == [
+        "data_quality_agent",
+        "risk_agent",
+        "momentum_agent",
+        "evidence_agent",
+        "report_agent",
+    ]
+    assert {agent["status"] for agent in payload["agent_assessments"]} <= {
+        "ok",
+        "warning",
+        "blocked",
+        "not_applicable",
+    }
+    assert all(agent["summary"] for agent in payload["agent_assessments"])
+    assert all(agent["findings"] for agent in payload["agent_assessments"])
+    assert all(agent["next_actions"] for agent in payload["agent_assessments"])
     assert "https://example.com" not in response.text
     assert "market.example.hk" not in response.text
     assert "raw_excerpt" not in response.text

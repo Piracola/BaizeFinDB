@@ -55,7 +55,7 @@
 - `/radar/overview` 查看最新雷达总览、优先级聚合、生命周期分布、个股回推证据、市场情绪摘要和去重当前视图
 - `/radar/signals` 查看候选信号列表
 - `/radar/signals/{signal_id}` 查看候选信号和证据
-- `/radar/signals/{signal_id}/analysis` 查看后端生成的只读研究摘要：基于已有信号、证据和审查数据，输出 bounded key points、metric highlights、risk flags、evidence/review summary、agent inputs 和 next actions；不调用 LLM，不改变规则定级，不输出原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令
+- `/radar/signals/{signal_id}/analysis` 查看后端生成的只读研究摘要：基于已有信号、证据和审查数据，输出 bounded key points、metric highlights、risk flags、evidence/review summary、agent inputs、确定性 `agent_assessments` 和 next actions；当前 agent assessments 是后端规则化多 agent scaffold，不调用 LLM、不做真实多模型编排，不改变规则定级，不输出原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令
 - `/radar/signals/{signal_id}/review` 对单个雷达信号执行轻量规则审查
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由

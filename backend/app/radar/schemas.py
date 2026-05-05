@@ -108,6 +108,22 @@ class RadarSignalAgentInputsRead(BaseModel):
     guardrails: list[str] = Field(default_factory=list, max_length=6)
 
 
+class RadarSignalAgentAssessmentStatus(StrEnum):
+    OK = "ok"
+    WARNING = "warning"
+    BLOCKED = "blocked"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class RadarSignalAgentAssessmentRead(BaseModel):
+    agent_id: str
+    label: str
+    status: RadarSignalAgentAssessmentStatus
+    summary: str
+    findings: list[str] = Field(default_factory=list, max_length=5)
+    next_actions: list[str] = Field(default_factory=list, max_length=5)
+
+
 class RadarSignalAnalysisRead(BaseModel):
     signal_id: int
     subject_type: str
@@ -126,6 +142,10 @@ class RadarSignalAnalysisRead(BaseModel):
     evidence_summary: RadarSignalEvidenceSummaryRead
     review_summary: RadarSignalReviewSummaryRead
     agent_inputs: RadarSignalAgentInputsRead
+    agent_assessments: list[RadarSignalAgentAssessmentRead] = Field(
+        default_factory=list,
+        max_length=5,
+    )
     next_actions: list[str] = Field(default_factory=list, max_length=5)
 
 

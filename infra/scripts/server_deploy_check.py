@@ -62,6 +62,7 @@ RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS = (
     "evidence_summary",
     "review_summary",
     "agent_inputs",
+    "agent_assessments",
     "next_actions",
 )
 TELEGRAM_STATUS_PATH = "/telegram/status"

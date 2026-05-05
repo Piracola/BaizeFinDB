@@ -22,6 +22,8 @@ from app.radar.schemas import (
     RadarReviewStatus,
     RadarScanRead,
     RadarScanStatus,
+    RadarSignalAgentAssessmentRead,
+    RadarSignalAgentAssessmentStatus,
     RadarSignalAgentInputsRead,
     RadarSignalAnalysisRead,
     RadarSignalDetail,
@@ -65,6 +67,8 @@ MAX_ANALYSIS_KEY_POINTS = 5
 MAX_ANALYSIS_METRIC_HIGHLIGHTS = 6
 MAX_ANALYSIS_RISK_FLAGS = 8
 MAX_ANALYSIS_EVIDENCE_SUMMARIES = 3
+MAX_ANALYSIS_AGENT_ASSESSMENTS = 5
+MAX_ANALYSIS_AGENT_FINDINGS = 5
 MAJOR_RISK_ANNOUNCEMENT_KEYWORDS = (
     "立案调查",
     "行政处罚事先告知",
@@ -350,6 +354,9 @@ def _build_signal_analysis(
     evidence_summary = _analysis_evidence_summary(evidences)
     review_summary = _analysis_review_summary(signal, latest_review)
     key_points = _analysis_key_points(signal, evidence_summary, review_summary)
+    metric_highlights = _analysis_metric_highlights(signal)
+    risk_flags = _analysis_risk_flags(signal, evidences, latest_review)
+    next_actions = _analysis_next_actions(signal, review_summary)
 
     return RadarSignalAnalysisRead(
         signal_id=signal.id,
@@ -361,12 +368,20 @@ def _build_signal_analysis(
         review_status=signal.review_status,
         analysis_title=_analysis_title(signal),
         key_points=key_points,
-        metric_highlights=_analysis_metric_highlights(signal),
-        risk_flags=_analysis_risk_flags(signal, evidences, latest_review),
+        metric_highlights=metric_highlights,
+        risk_flags=risk_flags,
         evidence_summary=evidence_summary,
         review_summary=review_summary,
         agent_inputs=_analysis_agent_inputs(signal, evidence_summary, key_points),
-        next_actions=_analysis_next_actions(signal, review_summary),
+        agent_assessments=_analysis_agent_assessments(
+            signal,
+            evidence_summary,
+            review_summary,
+            metric_highlights,
+            risk_flags,
+            next_actions,
+        ),
+        next_actions=next_actions,
     )
 
 
@@ -579,6 +594,213 @@ def _analysis_agent_inputs(
             "Do not request or reveal raw source locators.",
             "Treat key points as bounded context, not a full evidence archive.",
         ],
+    )
+
+
+def _analysis_agent_assessments(
+    signal: RadarSignal,
+    evidence_summary: RadarSignalEvidenceSummaryRead,
+    review_summary: RadarSignalReviewSummaryRead,
+    metric_highlights: list[RadarSignalMetricHighlightRead],
+    risk_flags: list[str],
+    next_actions: list[str],
+) -> list[RadarSignalAgentAssessmentRead]:
+    assessments = [
+        _data_quality_agent_assessment(evidence_summary, risk_flags),
+        _risk_agent_assessment(review_summary, risk_flags),
+        _momentum_agent_assessment(signal, metric_highlights),
+        _evidence_agent_assessment(evidence_summary),
+        _report_agent_assessment(review_summary, next_actions),
+    ]
+    return assessments[:MAX_ANALYSIS_AGENT_ASSESSMENTS]
+
+
+def _data_quality_agent_assessment(
+    evidence_summary: RadarSignalEvidenceSummaryRead,
+    risk_flags: list[str],
+) -> RadarSignalAgentAssessmentRead:
+    quality_flags = [
+        flag
+        for flag in risk_flags
+        if flag == "missing_evidence"
+        or flag == "stale_evidence"
+        or flag.startswith("provider_quality_")
+    ]
+    status = (
+        RadarSignalAgentAssessmentStatus.WARNING
+        if quality_flags or "low" in evidence_summary.confidence_labels
+        else RadarSignalAgentAssessmentStatus.OK
+    )
+    findings = [
+        f"Evidence items summarized: {evidence_summary.evidence_count}.",
+        *[f"Freshness bucket: {label}." for label in evidence_summary.freshness_labels],
+        *[f"Confidence bucket: {label}." for label in evidence_summary.confidence_labels],
+        *[f"Quality flag: {flag}." for flag in quality_flags],
+    ]
+    return _agent_assessment(
+        agent_id="data_quality_agent",
+        label="Data Quality Agent",
+        status=status,
+        summary=(
+            "Data quality needs review before downstream publication."
+            if status == RadarSignalAgentAssessmentStatus.WARNING
+            else "Data quality buckets do not show a current blocker."
+        ),
+        findings=findings,
+        next_actions=[
+            "Refresh provider snapshots if data quality flags remain.",
+            "Keep confidence as a bucketed review signal only.",
+        ],
+    )
+
+
+def _risk_agent_assessment(
+    review_summary: RadarSignalReviewSummaryRead,
+    risk_flags: list[str],
+) -> RadarSignalAgentAssessmentRead:
+    if review_summary.status == RadarReviewStatus.BLOCKED:
+        status = RadarSignalAgentAssessmentStatus.BLOCKED
+        summary = "Review blockers must be resolved before report or sharing workflow."
+    elif risk_flags or review_summary.human_review_required:
+        status = RadarSignalAgentAssessmentStatus.WARNING
+        summary = "Risk flags or review gates require manual attention."
+    else:
+        status = RadarSignalAgentAssessmentStatus.OK
+        summary = "No current review blocker is exposed by the analysis contract."
+
+    findings = [
+        f"Review status: {review_summary.status}.",
+        *[f"Risk flag: {flag}." for flag in risk_flags],
+    ]
+    if review_summary.human_review_required:
+        findings.append("Human review is required before report, push, or public sharing.")
+
+    return _agent_assessment(
+        agent_id="risk_agent",
+        label="Risk Agent",
+        status=status,
+        summary=summary,
+        findings=findings,
+        next_actions=[
+            "Resolve review blockers before report or sharing workflow.",
+            "Keep risk output framed as research review, not trading instruction.",
+        ],
+    )
+
+
+def _momentum_agent_assessment(
+    signal: RadarSignal,
+    metric_highlights: list[RadarSignalMetricHighlightRead],
+) -> RadarSignalAgentAssessmentRead:
+    continuity = signal.metrics.get("continuity")
+    has_continuity = (
+        isinstance(continuity, dict) and continuity.get("quick_report_candidate") is True
+    )
+    status = (
+        RadarSignalAgentAssessmentStatus.WARNING
+        if has_continuity
+        else RadarSignalAgentAssessmentStatus.OK
+    )
+    findings = [
+        f"Backend rule priority remains {signal.priority}.",
+        f"Lifecycle stage remains {signal.lifecycle_stage}.",
+        *[f"Metric context: {highlight.label}." for highlight in metric_highlights],
+    ]
+    if has_continuity:
+        findings.append("Continuity context marks the signal for follow-up review.")
+
+    return _agent_assessment(
+        agent_id="momentum_agent",
+        label="Momentum Agent",
+        status=status,
+        summary=(
+            "Continuity context needs follow-up against the next scan."
+            if has_continuity
+            else "Priority and lifecycle context are present for review."
+        ),
+        findings=findings,
+        next_actions=[
+            "Compare the next scan with the current continuity context.",
+            "Do not recalculate backend priority or lifecycle from this assessment.",
+        ],
+    )
+
+
+def _evidence_agent_assessment(
+    evidence_summary: RadarSignalEvidenceSummaryRead,
+) -> RadarSignalAgentAssessmentRead:
+    if evidence_summary.evidence_count == 0:
+        status = RadarSignalAgentAssessmentStatus.WARNING
+        summary = "No evidence summary is available for this signal."
+    elif "low" in evidence_summary.confidence_labels:
+        status = RadarSignalAgentAssessmentStatus.WARNING
+        summary = "Evidence exists, but confidence buckets need review."
+    else:
+        status = RadarSignalAgentAssessmentStatus.OK
+        summary = "Evidence summaries are available in the safe bounded contract."
+
+    findings = [
+        f"Evidence items summarized: {evidence_summary.evidence_count}.",
+        *[f"Evidence type: {label}." for label in evidence_summary.evidence_types],
+        *evidence_summary.summaries,
+    ]
+
+    return _agent_assessment(
+        agent_id="evidence_agent",
+        label="Evidence Agent",
+        status=status,
+        summary=summary,
+        findings=findings,
+        next_actions=[
+            "Review bounded evidence summaries before report generation.",
+            "Refresh source snapshots if evidence buckets become stale or missing.",
+        ],
+    )
+
+
+def _report_agent_assessment(
+    review_summary: RadarSignalReviewSummaryRead,
+    next_actions: list[str],
+) -> RadarSignalAgentAssessmentRead:
+    if review_summary.status == RadarReviewStatus.BLOCKED:
+        status = RadarSignalAgentAssessmentStatus.BLOCKED
+        summary = "Report workflow is blocked by the current review state."
+    elif review_summary.human_review_required:
+        status = RadarSignalAgentAssessmentStatus.WARNING
+        summary = "Report workflow needs human review before any outward-facing use."
+    else:
+        status = RadarSignalAgentAssessmentStatus.OK
+        summary = "Report workflow can follow the existing approved review gate."
+
+    return _agent_assessment(
+        agent_id="report_agent",
+        label="Report Agent",
+        status=status,
+        summary=summary,
+        findings=[
+            f"Review status: {review_summary.status}.",
+            "Analysis output remains a research brief, not a recommendation layer.",
+        ],
+        next_actions=next_actions,
+    )
+
+
+def _agent_assessment(
+    *,
+    agent_id: str,
+    label: str,
+    status: RadarSignalAgentAssessmentStatus,
+    summary: str,
+    findings: list[str],
+    next_actions: list[str],
+) -> RadarSignalAgentAssessmentRead:
+    return RadarSignalAgentAssessmentRead(
+        agent_id=_analysis_text(agent_id),
+        label=_analysis_text(label),
+        status=status,
+        summary=_analysis_text(summary),
+        findings=_bounded_unique(findings, MAX_ANALYSIS_AGENT_FINDINGS),
+        next_actions=_bounded_unique(next_actions, MAX_ANALYSIS_AGENT_FINDINGS),
     )
 
 

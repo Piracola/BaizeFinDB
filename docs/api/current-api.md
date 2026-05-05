@@ -551,6 +551,8 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1
 
 用途：查看后端生成的单信号只读研究摘要。该接口只使用已有
 signal/evidence/review 数据，不调用 LLM，不改变规则定级、生命周期或审查状态。
+当前返回确定性多 agent scaffold，用于提前稳定 Web、Windows、Telegram 和后续
+LLM agent 编排的消费契约；它不是实时 LLM 多 agent 分析。
 Web 信号详情、Windows 客户端 `查看分析` 按钮和 Telegram `/analysis <id>` 都只消费该后端摘要，不在入口层重新生成分析。
 部署预检 `server_deploy_check.py --check-m5-smoke` 在 `/radar/signals?limit=1` 返回
 信号时会抽样校验该接口的必需字段；如果没有任何信号，则只记录 warning。
@@ -568,7 +570,21 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/analysis
 - `evidence_summary`
 - `review_summary`
 - `agent_inputs`
+- `agent_assessments`
 - `next_actions`
+
+`agent_assessments` 固定返回 5 个角色，顺序为：
+
+- `data_quality_agent`
+- `risk_agent`
+- `momentum_agent`
+- `evidence_agent`
+- `report_agent`
+
+每个 assessment 包含 `agent_id`、`label`、`status`、`summary`、`findings`
+和 `next_actions`。`status` 只允许 `ok`、`warning`、`blocked` 或
+`not_applicable`，这些状态只解释当前分析上下文，不覆盖信号的
+`priority`、`lifecycle_stage`、`review_status` 或报告发布门禁。
 
 安全边界：
 
