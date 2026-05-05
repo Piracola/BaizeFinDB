@@ -487,6 +487,43 @@ async function createDeepReport() {
   }
 }
 
+async function createModelAnalysisDraft() {
+  if (!state.selectedSignalId) {
+    showMessage("error", "请先选择一个信号。");
+    return;
+  }
+
+  const draftContainer = elements.signalDetail.querySelector("#model-analysis-draft");
+  const draftButton = elements.signalDetail.querySelector("[data-model-draft]");
+  if (!draftContainer) {
+    showMessage("error", "模型草稿面板暂不可用。");
+    return;
+  }
+
+  setButtonsBusy(true);
+  if (draftButton) {
+    draftButton.disabled = true;
+  }
+  draftContainer.innerHTML = emptyState(`正在请求信号 #${state.selectedSignalId} 模型草稿。`);
+  showMessage("info", `正在请求信号 #${state.selectedSignalId} 模型草稿。`);
+
+  try {
+    const draft = await postJson(
+      `/radar/signals/${encodeURIComponent(state.selectedSignalId)}/model-analysis-draft`,
+    );
+    draftContainer.innerHTML = renderModelAnalysisDraft(draft);
+    showMessage("info", modelDraftStatusMessage(draft));
+  } catch (error) {
+    draftContainer.innerHTML = emptyState(`模型草稿暂不可用：${formatError(error)}`);
+    showMessage("error", `模型草稿请求失败：${formatError(error)}`);
+  } finally {
+    if (draftButton) {
+      draftButton.disabled = false;
+    }
+    setButtonsBusy(false);
+  }
+}
+
 async function scoreSelectedSignal() {
   if (!state.selectedSignalId) {
     showMessage("error", "请先选择一个信号。");
@@ -1438,6 +1475,7 @@ function renderSignalDetail(detail, analysis = null, analysisError = null) {
         <button type="button" data-report-type="quick">生成 Quick Report</button>
         <button type="button" data-report-type="standard">生成 Standard Report</button>
         <button type="button" data-deep-report="true">生成 Deep Report</button>
+        <button type="button" data-model-draft="true">生成模型草稿</button>
         <button type="button" data-score-signal="true">生成综合评分</button>
       </div>
     </article>
@@ -1454,6 +1492,12 @@ function renderSignalDetail(detail, analysis = null, analysisError = null) {
     <section>
       <h3>信号分析摘要</h3>
       ${renderSignalAnalysisBrief(analysis, analysisError)}
+    </section>
+    <section>
+      <h3>模型分析草稿</h3>
+      <div id="model-analysis-draft">
+        ${emptyState("手动生成后显示模型草稿状态。")}
+      </div>
     </section>
     <section>
       <h3>证据摘要</h3>
@@ -1485,6 +1529,9 @@ function renderSignalDetail(detail, analysis = null, analysisError = null) {
     button.addEventListener("click", () => createReport(button.dataset.reportType));
   });
   elements.signalDetail.querySelector("[data-deep-report]").addEventListener("click", createDeepReport);
+  elements.signalDetail
+    .querySelector("[data-model-draft]")
+    .addEventListener("click", createModelAnalysisDraft);
   elements.signalDetail.querySelector("[data-score-signal]").addEventListener("click", scoreSelectedSignal);
 }
 
@@ -1661,6 +1708,67 @@ function renderReviewSummary(summary) {
       ${renderAnalysisList("Review Reasons", reasons)}
     </section>
   `;
+}
+
+function renderModelAnalysisDraft(draft) {
+  const payload = draft && typeof draft === "object" ? draft : {};
+  const blockedCount = Array.isArray(payload.blocked_terms) ? payload.blocked_terms.length : 0;
+  const metadata = [
+    payload.provider ? `Provider ${payload.provider}` : null,
+    payload.model ? `Model ${payload.model}` : null,
+    payload.fallback_model ? `Fallback ${payload.fallback_model}` : null,
+    payload.audit_log_id ? `Audit #${payload.audit_log_id}` : null,
+  ].filter(Boolean);
+
+  return `
+    <article class="model-draft-card detail-card">
+      <div class="meta-row">
+        <span class="badge">${escapeHtml(label(payload.model_status || "unknown"))}</span>
+        <span class="badge">${escapeHtml(label(payload.draft_status || "unknown"))}</span>
+        ${metadata.map((item) => `<span class="badge">${escapeHtml(item)}</span>`).join("")}
+      </div>
+      <h3>模型分析草稿</h3>
+      ${
+        payload.advisory_summary
+          ? `<p class="summary">${escapeHtml(payload.advisory_summary)}</p>`
+          : emptyState(modelDraftEmptyText(payload))
+      }
+      ${renderAnalysisList("Observations", payload.observations)}
+      ${renderAnalysisList("Risk Notes", payload.risk_notes)}
+      ${renderAnalysisList("Follow-up Questions", payload.follow_up_questions)}
+      <div class="meta-row">
+        ${
+          payload.suggested_attention_label
+            ? `<span class="badge">${escapeHtml(payload.suggested_attention_label)}</span>`
+            : ""
+        }
+        ${blockedCount > 0 ? `<span class="badge">blocked terms ${escapeHtml(blockedCount)}</span>` : ""}
+      </div>
+      <p class="muted">${escapeHtml(payload.boundary || "Manual model draft boundary.")}</p>
+    </article>
+  `;
+}
+
+function modelDraftEmptyText(draft) {
+  if (draft?.model_status === "disabled" || draft?.draft_status === "not_available") {
+    return "模型分析未启用或 Provider 未配置，当前没有模型草稿。";
+  }
+
+  if (draft?.draft_status === "blocked") {
+    return "模型输出被安全规则阻断，未展示草稿正文。";
+  }
+
+  if (draft?.draft_status === "degraded" || draft?.model_status === "degraded") {
+    return "模型草稿不可用，保留后端降级状态。";
+  }
+
+  return "后端未返回草稿摘要。";
+}
+
+function modelDraftStatusMessage(draft) {
+  const modelStatus = label(draft?.model_status || "unknown");
+  const draftStatus = label(draft?.draft_status || "unknown");
+  return `模型草稿返回：模型 ${modelStatus} / 草稿 ${draftStatus}。`;
 }
 
 function renderHoldings(holdings) {
@@ -1989,6 +2097,8 @@ function label(value) {
     failed: "失败",
     degraded: "降级",
     fallback: "降级切换",
+    disabled: "未启用",
+    not_available: "不可用",
     sent: "已发送",
     preview: "预览",
     skipped: "跳过",

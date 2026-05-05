@@ -92,7 +92,13 @@ def test_frontend_assets_are_served() -> None:
     assert "renderScoreComponents" in js_response.text
     assert "score_band" in js_response.text
     assert "/radar/signals/${signalId}/analysis" in js_response.text
+    model_draft_endpoint = (
+        "/radar/signals/${encodeURIComponent(state.selectedSignalId)}/model-analysis-draft"
+    )
+    assert model_draft_endpoint in js_response.text
     assert "renderSignalAnalysisBrief" in js_response.text
+    assert "renderModelAnalysisDraft" in js_response.text
+    assert "createModelAnalysisDraft" in js_response.text
     assert "metric_highlights" in js_response.text
     assert "risk_flags" in js_response.text
     assert "evidence_summary" in js_response.text
@@ -140,6 +146,7 @@ def test_frontend_assets_are_served() -> None:
     assert "sentiment-grid" in css_response.text
     assert "backtrace-list" in css_response.text
     assert "analysis-brief" in css_response.text
+    assert "model-draft-card" in css_response.text
     assert "analysis-grid" in css_response.text
     assert "analysis-agent-grid" in css_response.text
     assert "analysis-agent-list" in css_response.text
@@ -245,6 +252,64 @@ def test_frontend_signal_analysis_uses_backend_brief_without_raw_fields() -> Non
     assert "sell" not in render_block.lower()
     assert "买入" not in render_block
     assert "卖出" not in render_block
+
+
+def test_frontend_model_analysis_draft_is_manual_and_sanitized() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    load_start = js_text.index("async function loadSignalDetail")
+    load_end = js_text.index("async function runRadarScan")
+    load_block = js_text[load_start:load_end]
+    action_start = js_text.index("async function createModelAnalysisDraft")
+    action_end = js_text.index("async function scoreSelectedSignal")
+    action_block = js_text[action_start:action_end]
+    detail_start = js_text.index("function renderSignalDetail")
+    detail_end = js_text.index("function renderSignalAnalysisBrief")
+    detail_block = js_text[detail_start:detail_end]
+    render_start = js_text.index("function renderModelAnalysisDraft")
+    render_end = js_text.index("function renderHoldings")
+    render_block = js_text[render_start:render_end]
+
+    assert "model-analysis-draft" not in load_block
+    assert "Promise.allSettled" in load_block
+    assert "fetchJson(`/radar/signals/${signalId}`)" in load_block
+    assert "fetchJson(`/radar/signals/${signalId}/analysis`)" in load_block
+    assert 'data-model-draft="true"' in detail_block
+    assert "生成模型草稿" in detail_block
+    assert "createModelAnalysisDraft" in detail_block
+    assert "postJson(" in action_block
+    model_draft_endpoint = (
+        "/radar/signals/${encodeURIComponent(state.selectedSignalId)}/model-analysis-draft"
+    )
+    assert model_draft_endpoint in action_block
+    assert "renderModelAnalysisDraft(draft)" in action_block
+    assert "model_status" in render_block
+    assert "draft_status" in render_block
+    assert "advisory_summary" in render_block
+    assert "observations" in render_block
+    assert "risk_notes" in render_block
+    assert "follow_up_questions" in render_block
+    assert "suggested_attention_label" in render_block
+    assert "blocked_terms.length" in render_block
+    assert "payload.blocked_terms" in render_block
+    assert "boundary" in render_block
+    assert "raw_prompt" not in render_block
+    assert "response_excerpt" not in render_block
+    assert "source_ref" not in render_block
+    assert "raw_excerpt" not in render_block
+    assert "source_url" not in render_block
+    assert "position_ratio" not in render_block
+    assert "cost_price" not in render_block
+    assert "api_key" not in render_block.lower()
+    assert "authorization" not in render_block.lower()
+    assert "买入" not in render_block
+    assert "卖出" not in render_block
+    assert "buy" not in render_block.lower()
+    assert "sell" not in render_block.lower()
 
 
 def test_frontend_ops_trends_uses_backend_bucket_counts_only() -> None:

@@ -639,7 +639,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/signals/1/model-analy
   Telegram、Provider 数据或确定性 `/analysis` 输出。
 - 模型输出必须是 JSON 草稿；URL/domain 会脱源，直接交易语言会返回
   `draft_status="blocked"`，malformed/non-object JSON 会返回 `draft_status="degraded"`。
-- 该接口当前没有 Web、Windows 或 Telegram UI 入口，属于后端手动验证路径。
+- Web 信号详情已有手动 `生成模型草稿` 按钮；Windows 和 Telegram 当前仍未接入。
 
 ## 5. Portfolio / 持仓自选 API
 
@@ -1130,6 +1130,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
 - 单信号解释摘要：用 `GET /radar/signals/{signal_id}/analysis`，展示后端 bounded key points、metric highlights、risk flags 和 review/evidence summary；Web 信号详情、Windows `查看分析` 和 Telegram `/analysis <id>` 已接入该接口。不要在前端、Windows 客户端或 Telegram 重新生成雷达定级、分析摘要或交易建议。
+- 模型草稿：只由明确用户动作调用 `POST /radar/signals/{signal_id}/model-analysis-draft`；Web 信号详情已有手动 `生成模型草稿` 按钮。不要在详情加载、刷新、扫描、报告、评分、Telegram 或 Windows 客户端路径自动调用，也不要在入口层展示 prompt、raw response、raw source、个人持仓成本/仓位或 blocked phrase text。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
 - 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；deep 报告只能由明确用户动作调用 `POST /reports/deep/from-signal?user_key=<key>` 并发送 `confirm_deep_report=true`；用 `GET /reports/periodic` 展示日报/周报。Web 和 Windows 客户端都必须先确认再调用 deep endpoint，不能在入口层生成报告正文、审查状态或建议标签。
 - 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回的评分档位和组件明细。

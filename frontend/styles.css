@@ -335,6 +335,11 @@ h3 {
   gap: 12px;
 }
 
+.model-draft-card {
+  display: grid;
+  gap: 12px;
+}
+
 .analysis-section {
   display: grid;
   gap: 8px;
