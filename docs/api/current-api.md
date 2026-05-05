@@ -845,7 +845,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 
 ## 9. Telegram Bot API
 
-Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、OPS 趋势桶、OPS 告警钻取、Tushare 数据源状态、Tushare 准入自检和雷达后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态或审查状态。
+Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、OPS 趋势桶、OPS 告警钻取、Tushare 数据源状态、Tushare 准入自检、雷达和单信号分析摘要等后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态、审查状态或分析摘要。
 
 ### `GET /telegram/status`
 
@@ -1037,7 +1037,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
-- 单信号解释摘要：用 `GET /radar/signals/{signal_id}/analysis`，展示后端 bounded key points、metric highlights、risk flags 和 review/evidence summary；Web 信号详情和 Windows `查看分析` 已接入该接口。不要在前端、Windows 客户端或 Telegram 重新生成雷达定级或交易建议。
+- 单信号解释摘要：用 `GET /radar/signals/{signal_id}/analysis`，展示后端 bounded key points、metric highlights、risk flags 和 review/evidence summary；Web 信号详情、Windows `查看分析` 和 Telegram `/analysis <id>` 已接入该接口。不要在前端、Windows 客户端或 Telegram 重新生成雷达定级、分析摘要或交易建议。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
 - 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；用 `GET /reports/periodic` 展示日报/周报。
 - 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回的评分档位和组件明细。

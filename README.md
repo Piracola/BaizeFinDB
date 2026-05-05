@@ -59,9 +59,9 @@
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由
 - `/radar/signals/{signal_id}/share-payload` 公开分享 payload：仅在审查通过且分享策略安全时返回公开字段
-- Telegram Bot MVP Webhook 模块：只消费健康检查、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、雷达、报告和评分后端结果，`/ops` 展示后端运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 固定读取 24 小时 / 12 桶后端趋势计数，展示扫描、失败和 unhealthy 桶摘要，不重算 OPS readiness 或状态，`/ops_ready` 展示运行就绪自检，`/ops_warn` 展示只读 OPS 告警钻取，`/tushare` 展示 Tushare 只读配置状态，`/tushare_ready` 展示 Tushare 抓取/调度准入自检，`/radar` 展示后端市场情绪摘要，不重新计算 P0/P1/P2、OPS 状态或评分
+- Telegram Bot MVP Webhook 模块：只消费健康检查、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、雷达、报告、单信号后端分析摘要和评分后端结果，`/ops` 展示后端运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 固定读取 24 小时 / 12 桶后端趋势计数，展示扫描、失败和 unhealthy 桶摘要，不重算 OPS readiness 或状态，`/ops_ready` 展示运行就绪自检，`/ops_warn` 展示只读 OPS 告警钻取，`/tushare` 展示 Tushare 只读配置状态，`/tushare_ready` 展示 Tushare 抓取/调度准入自检，`/radar` 展示后端市场情绪摘要，`/analysis <id>` 展示后端单信号研究摘要，不重新计算 P0/P1/P2、OPS 状态、分析摘要或评分
 - `/telegram/status` 查看 Telegram 配置状态，不泄露 token 或 secret
-- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/ops_trends`、`/ops_ready`、`/ops_warn`、`/tushare`、`/tushare_ready`、`/radar`、`/signals`、`/signal <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 用 Telegram 24 小时窗口和 12 个桶只读展示后端 OPS 趋势桶计数，不从桶计数推导 readiness 或运行状态，`/ops_ready` 展示运行就绪自检，`/ops_warn` 用 Telegram 24 小时窗口只读复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history`，优先展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events，`/tushare` 只读展示 Tushare token 配置和端点实现状态，`/tushare_ready` 展示 Tushare token、最新抓取和数据质量准入状态，`/score` 展示后端 v2 评分档位和组件明细
+- `/telegram/webhook` 接收 Telegram update，支持 `/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/ops_trends`、`/ops_ready`、`/ops_warn`、`/tushare`、`/tushare_ready`、`/radar`、`/signals`、`/signal <id>`、`/analysis <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 用 Telegram 24 小时窗口和 12 个桶只读展示后端 OPS 趋势桶计数，不从桶计数推导 readiness 或运行状态，`/ops_ready` 展示运行就绪自检，`/ops_warn` 用 Telegram 24 小时窗口只读复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history`，优先展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events，`/tushare` 只读展示 Tushare token 配置和端点实现状态，`/tushare_ready` 展示 Tushare token、最新抓取和数据质量准入状态，`/analysis` 展示后端单信号研究摘要，`/score` 展示后端 v2 评分档位和组件明细
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
@@ -267,6 +267,7 @@ OPS_MEMORY_USED_PERCENT_ALERT_THRESHOLD=90
 - `/ops_warn` 返回 OPS 告警钻取，固定使用 Telegram 24 小时窗口和有界历史条数，只读复用后端 readiness、overview 和 history 结果，不在 Telegram 层重算 OPS 状态，也不触发采集、扫描、评分、报告、推送、模型调用、evidence 写入、后端修改或交易相关动作。
 - `/tushare` 返回 Tushare token 配置、手动抓取启用状态和已实现端点数；不返回 token 原文，不触发真实抓取。
 - `/tushare_ready` 返回 Tushare token、端点、最新抓取、数据质量准入状态和 `anns_d` Beat 开关策略；不返回 token 原文，不触发真实抓取或调度。
+- `/analysis <id>` 读取 `/radar/signals/{signal_id}/analysis` 的后端单信号研究摘要，展示 key points、metric highlights、risk flags、evidence/review summary 和 next actions；Telegram 不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令。
 - `/holding` 和 `/watchlist` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的个人持仓/自选，只用于个人提醒和复盘上下文。
 - `/reports` 按聊天 id 读取 `user_key=telegram-<chat_id>` 的报告列表。
 - `/score <id>` 触发后端评分并展示 1d/3d/5d/10d 综合评分、评分档位和组件明细；Telegram 不做本地评分。

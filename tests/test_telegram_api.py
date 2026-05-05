@@ -19,6 +19,7 @@ from app.telegram.formatter import (
     format_ops_warning_drilldown,
     format_radar_overview,
     format_reports,
+    format_signal_analysis,
     format_signal_detail,
     format_signals,
     format_watchlist_items,
@@ -123,6 +124,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "/reports" in data["preview"]
     assert "/daily" in data["preview"]
     assert "/weekly" in data["preview"]
+    assert "/analysis <id>" in data["preview"]
     assert "/score <id>" in data["preview"]
     assert "不构成投资建议" in data["preview"]
     for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
@@ -826,6 +828,18 @@ async def test_telegram_signals_and_signal_detail_commands(
         "/telegram/webhook",
         json=_telegram_update(f"/signal {signal_id}"),
     )
+    analysis_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update(f"/analysis {signal_id}"),
+    )
+    invalid_analysis_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/analysis not-a-number"),
+    )
+    missing_analysis_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/analysis 999999"),
+    )
 
     assert signals_response.status_code == 200
     signals_preview = signals_response.json()["preview"]
@@ -840,6 +854,25 @@ async def test_telegram_signals_and_signal_detail_commands(
     assert "审查状态：候选待审" in signal_preview
     assert "证据数量：1 条" in signal_preview
     assert "证据 1：市场快照" in signal_preview
+
+    assert analysis_response.status_code == 200
+    analysis_preview = analysis_response.json()["preview"]
+    assert f"信号 #{signal_id} 分析摘要" in analysis_preview
+    assert "标题：P1 research brief: AI Applications" in analysis_preview
+    assert "指标摘要" in analysis_preview
+    assert "证据摘要" in analysis_preview
+    assert "审查摘要" in analysis_preview
+    assert "后续动作" in analysis_preview
+    assert "不在 Telegram 层计算雷达定级" in analysis_preview
+    assert "raw_excerpt" not in analysis_preview
+    assert "source_ref" not in analysis_preview
+    assert "internal raw excerpt" not in analysis_preview
+
+    assert invalid_analysis_response.status_code == 200
+    assert "请使用 /analysis <id>" in invalid_analysis_response.json()["preview"]
+
+    assert missing_analysis_response.status_code == 200
+    assert "未找到 #999999 信号" in missing_analysis_response.json()["preview"]
 
 
 @pytest.mark.asyncio
@@ -1026,6 +1059,51 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
 
     signals_preview = format_signals([signal])
     signal_preview = format_signal_detail(signal)
+    analysis_preview = format_signal_analysis(
+        SimpleNamespace(
+            signal_id=7,
+            subject_name="AI Applications",
+            priority="P1",
+            lifecycle_stage="developing",
+            review_status="needs_human_review",
+            analysis_title="P1 research brief: AI Applications",
+            key_points=[
+                "Backend priority is P1; lifecycle is developing.",
+                "Review status requires human review.",
+            ],
+            metric_highlights=[
+                SimpleNamespace(
+                    label="sector_pct_change",
+                    value="+3.4%",
+                    interpretation="Sector momentum is above the watch threshold.",
+                ),
+            ],
+            risk_flags=["provider_quality_degraded", "low_evidence_confidence"],
+            evidence_summary=SimpleNamespace(
+                evidence_count=1,
+                evidence_types=["market_snapshot"],
+                summaries=[
+                    "Provider snapshot summary from [source omitted] with sector movement."
+                ],
+                freshness_labels=["fresh"],
+                confidence_labels=["low", "0.123"],
+                source_ref="https://example.com/raw",
+                raw_excerpt="Raw source says buy now",
+            ),
+            review_summary=SimpleNamespace(
+                status="needs_human_review",
+                latest_review_id=4,
+                reasons=["low evidence confidence"],
+                human_review_required=True,
+                details={"cost_price": 10.25, "position_ratio": 0.2},
+            ),
+            agent_inputs=SimpleNamespace(
+                guardrails=["Do not override backend rule priority"],
+            ),
+            next_actions=["Schedule human review before publishing."],
+            raw_excerpt="sell immediately",
+        ),
+    )
     overview_preview = format_radar_overview(overview)
     holdings_preview = format_holdings([])
     watchlist_preview = format_watchlist_items([])
@@ -1035,6 +1113,23 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     assert "审查：候选待审" in signals_preview
     assert "生命周期：发展观察" in signal_preview
     assert "审查状态：候选待审" in signal_preview
+    assert "信号 #7 分析摘要" in analysis_preview
+    assert "优先级：P1" in analysis_preview
+    assert "生命周期：发展观察" in analysis_preview
+    assert "审查状态：需要人工复核" in analysis_preview
+    assert "sector_pct_change: +3.4%" in analysis_preview
+    assert "provider_quality_degraded" in analysis_preview
+    assert "信心分桶：low" in analysis_preview
+    assert "0.123" not in analysis_preview
+    assert "source_ref" not in analysis_preview
+    assert "raw_excerpt" not in analysis_preview
+    assert "https://example.com" not in analysis_preview
+    assert "cost_price" not in analysis_preview
+    assert "position_ratio" not in analysis_preview
+    assert "buy" not in analysis_preview.lower()
+    assert "sell" not in analysis_preview.lower()
+    assert "买入" not in analysis_preview
+    assert "卖出" not in analysis_preview
     assert "最新扫描：#3 完成" in overview_preview
     assert "生命周期：发展观察 1" in overview_preview
     assert "市场情绪：涨停 12 / 跌停 2 / 炸板 3 / 净压力 7 / 偏向：偏强" in overview_preview

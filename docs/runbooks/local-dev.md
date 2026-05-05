@@ -348,6 +348,16 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
   -Body '{"update_id":2,"message":{"message_id":2,"chat":{"id":1001},"text":"/radar"}}'
 ```
 
+本地 preview `/analysis <id>` 会读取后端单信号研究摘要，展示 key points、metric highlights、
+risk flags、evidence/review summary 和 next actions；Telegram 不本地生成分析、不展示 raw
+source、raw excerpt、精确信心值、个人持仓字段或交易指令：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/telegram/webhook `
+  -ContentType "application/json" `
+  -Body '{"update_id":19,"message":{"message_id":19,"chat":{"id":1001},"text":"/analysis 1"}}'
+```
+
 本地 preview 日报/评分：
 
 ```powershell

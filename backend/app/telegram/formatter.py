@@ -9,6 +9,7 @@ from app.radar.schemas import (
     RadarReviewStatus,
     RadarScanRead,
     RadarScanStatus,
+    RadarSignalAnalysisRead,
     RadarSignalDetail,
     RadarSignalRead,
 )
@@ -23,7 +24,23 @@ EVIDENCE_PREVIEW_LIMIT = 3
 PUSH_PREVIEW_LIMIT_PER_PRIORITY = 5
 STOCK_BACKTRACE_PREVIEW_LIMIT = 3
 OPS_TRENDS_BUCKET_PREVIEW_LIMIT = 5
+ANALYSIS_LIST_PREVIEW_LIMIT = 5
+ANALYSIS_METRIC_PREVIEW_LIMIT = 4
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
+ANALYSIS_FORBIDDEN_TEXT_MARKERS = (
+    "source_ref",
+    "raw_excerpt",
+    "source_url",
+    "source domain",
+    "http://",
+    "https://",
+    "cost_price",
+    "position_ratio",
+    "buy",
+    "sell",
+    "买入",
+    "卖出",
+)
 
 LIFECYCLE_LABELS = {
     RadarLifecycleStage.IGNITION: "启动观察",
@@ -116,6 +133,7 @@ def format_help() -> str:
                 "/radar - 查看雷达总览",
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
+                "/analysis <id> - 查看单个信号后端分析摘要",
                 "/holding - 查看当前聊天绑定的手动持仓",
                 "/watchlist - 查看当前聊天绑定的自选关注",
                 "/reports - 查看当前聊天绑定的报告列表",
@@ -530,6 +548,160 @@ def format_signal_detail(signal: RadarSignalDetail) -> str:
 
     lines.extend(["", DISCLAIMER])
     return _trim_message("\n".join(lines))
+
+
+def format_signal_analysis(analysis: RadarSignalAnalysisRead) -> str:
+    evidence_summary = _field(analysis, "evidence_summary", None)
+    review_summary = _field(analysis, "review_summary", None)
+    lines = [
+        f"信号 #{_field(analysis, 'signal_id', '-')} 分析摘要",
+        f"主题：{_analysis_text(_field(analysis, 'subject_name', '未命名主题'))}",
+        f"优先级：{_value(_field(analysis, 'priority', '-'))}（后端雷达判定）",
+        f"生命周期：{_lifecycle_label(_field(analysis, 'lifecycle_stage', '-'))}",
+        f"审查状态：{_review_label(_field(analysis, 'review_status', '-'))}",
+        f"标题：{_analysis_text(_field(analysis, 'analysis_title', '信号研究摘要'))}",
+        "",
+    ]
+
+    lines.extend(_analysis_list_lines("要点", _field(analysis, "key_points", [])))
+    lines.extend(_analysis_metric_lines(_field(analysis, "metric_highlights", [])))
+    lines.extend(_analysis_list_lines("风险标记", _field(analysis, "risk_flags", [])))
+    lines.extend(_analysis_evidence_summary_lines(evidence_summary))
+    lines.extend(_analysis_review_summary_lines(review_summary))
+    lines.extend(_analysis_list_lines("后续动作", _field(analysis, "next_actions", [])))
+    lines.extend(
+        [
+            (
+                "该视图只展示后端分析摘要，不在 Telegram 层计算雷达定级、"
+                "生命周期、审查状态、评分或操作建议。"
+            ),
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_message("\n".join(lines))
+
+
+def _analysis_list_lines(title: str, value: object) -> list[str]:
+    items = _analysis_values(value, ANALYSIS_LIST_PREVIEW_LIMIT)
+    lines = [f"{title}："]
+    if not items:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    lines.extend(f"- {item}" for item in items)
+    lines.append("")
+    return lines
+
+
+def _analysis_metric_lines(value: object) -> list[str]:
+    highlights = _analysis_sequence(value)
+    lines = ["指标摘要："]
+    if not highlights:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    for item in highlights[:ANALYSIS_METRIC_PREVIEW_LIMIT]:
+        label = _analysis_text(_field(item, "label", "-"))
+        metric_value = _analysis_text(_field(item, "value", "-"))
+        interpretation = _analysis_text(_field(item, "interpretation", "后端未返回说明。"))
+        lines.append(f"- {label}: {metric_value} | {interpretation}")
+    lines.append("")
+    return lines
+
+
+def _analysis_evidence_summary_lines(summary: object) -> list[str]:
+    evidence_types = _analysis_values(_field(summary, "evidence_types", []), 6)
+    freshness_labels = _analysis_values(_field(summary, "freshness_labels", []), 3)
+    confidence_labels = [
+        label
+        for label in (
+            _analysis_confidence_label(item)
+            for item in _analysis_sequence(_field(summary, "confidence_labels", []))
+        )
+        if label
+    ][:3]
+    lines = [
+        "证据摘要：",
+        f"- 证据数量：{_field(summary, 'evidence_count', 0)}",
+        f"- 类型：{_joined_or_empty(evidence_types)}",
+        f"- 新鲜度：{_joined_or_empty(freshness_labels)}",
+        f"- 信心分桶：{_joined_or_empty(confidence_labels)}",
+    ]
+    summaries = _analysis_values(_field(summary, "summaries", []), EVIDENCE_PREVIEW_LIMIT)
+    if summaries:
+        lines.append("- 摘要：")
+        lines.extend(f"  - {item}" for item in summaries)
+    else:
+        lines.append("- 摘要：后端未返回该项。")
+    lines.append("")
+    return lines
+
+
+def _analysis_review_summary_lines(summary: object) -> list[str]:
+    latest_review_id = _field(summary, "latest_review_id", None)
+    review_id_text = _value(latest_review_id) if latest_review_id is not None else "暂无"
+    lines = [
+        "审查摘要：",
+        f"- 状态：{_review_label(_field(summary, 'status', '-'))}",
+        f"- 最近审查：{review_id_text}",
+        (
+            "- 人工复核："
+            f"{'需要' if _field(summary, 'human_review_required', False) is True else '不需要'}"
+        ),
+    ]
+    reasons = _analysis_values(_field(summary, "reasons", []), ANALYSIS_LIST_PREVIEW_LIMIT)
+    if reasons:
+        lines.append("- 原因：")
+        lines.extend(f"  - {item}" for item in reasons)
+    else:
+        lines.append("- 原因：后端未返回该项。")
+    lines.append("")
+    return lines
+
+
+def _analysis_values(value: object, limit: int) -> list[str]:
+    return [
+        item
+        for item in (
+            _analysis_text(raw_item)
+            for raw_item in _analysis_sequence(value)[:limit]
+        )
+        if item
+    ]
+
+
+def _analysis_sequence(value: object) -> list[object]:
+    if isinstance(value, list | tuple):
+        return list(value)
+
+    return []
+
+
+def _analysis_text(value: object) -> str:
+    text = _value(value).strip()
+    if not text:
+        return ""
+
+    lowered = text.lower()
+    if any(marker in lowered for marker in ANALYSIS_FORBIDDEN_TEXT_MARKERS):
+        return "已省略不适合在 Telegram 展示的内容。"
+
+    return text
+
+
+def _analysis_confidence_label(value: object) -> str:
+    normalized = _analysis_text(value).lower()
+    labels = {
+        "high": "high",
+        "medium": "medium",
+        "low": "low",
+    }
+    return labels.get(normalized, "")
+
+
+def _joined_or_empty(values: list[str]) -> str:
+    return " / ".join(values) if values else "暂无"
 
 
 def format_holdings(holdings: list[HoldingRead]) -> str:
@@ -1026,6 +1198,10 @@ def format_chat_identity(chat_id: int) -> str:
 
 def format_invalid_signal_id() -> str:
     return "请使用 /signal <id> 查看单个信号复盘。"
+
+
+def format_invalid_analysis_signal_id() -> str:
+    return "请使用 /analysis <id> 查看单个信号后端分析摘要。"
 
 
 def format_invalid_score_signal_id() -> str:

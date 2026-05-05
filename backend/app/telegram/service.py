@@ -11,6 +11,7 @@ from app.providers.tushare import get_tushare_provider_status
 from app.radar.service import (
     get_latest_radar_scan,
     get_radar_overview,
+    get_radar_signal_analysis,
     get_radar_signal_detail,
     list_radar_signals,
 )
@@ -24,6 +25,7 @@ from app.telegram.formatter import (
     format_health,
     format_help,
     format_holdings,
+    format_invalid_analysis_signal_id,
     format_invalid_score_signal_id,
     format_invalid_signal_id,
     format_no_text,
@@ -36,6 +38,7 @@ from app.telegram.formatter import (
     format_radar_overview,
     format_reports,
     format_scores,
+    format_signal_analysis,
     format_signal_detail,
     format_signal_not_found,
     format_signals,
@@ -221,6 +224,9 @@ class TelegramCommandService:
             if command == "/signal":
                 return await self._signal_detail_response(session, arguments)
 
+            if command == "/analysis":
+                return await self._signal_analysis_response(session, arguments)
+
             if command in {"/holding", "/holdings"}:
                 holdings = await list_holdings(session, user_key=_telegram_user_key(chat_id))
                 return format_holdings(holdings)
@@ -274,6 +280,25 @@ class TelegramCommandService:
             return format_signal_not_found(signal_id)
 
         return format_signal_detail(signal)
+
+    async def _signal_analysis_response(
+        self,
+        session: AsyncSession,
+        arguments: list[str],
+    ) -> str:
+        if not arguments:
+            return format_invalid_analysis_signal_id()
+
+        try:
+            signal_id = int(arguments[0])
+        except ValueError:
+            return format_invalid_analysis_signal_id()
+
+        analysis = await get_radar_signal_analysis(session, signal_id)
+        if analysis is None:
+            return format_signal_not_found(signal_id)
+
+        return format_signal_analysis(analysis)
 
     async def _score_response(
         self,
