@@ -84,6 +84,14 @@ uv run python infra/scripts/server_deploy_check.py --json-output evidence/server
 uv run python infra/scripts/server_delivery_acceptance.py
 ```
 
+默认验收 `http://127.0.0.1:8000`。如果 API 运行在非默认端口、内网地址、
+反向代理或域名后面，可以显式传入目标地址；该值只传给部署预检和运行采样，
+不会传给 PostgreSQL backup check-only 阶段：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com
+```
+
 这条命令默认依次运行：
 
 - `server_deploy_check.py --check-containers --check-api --check-m5-smoke`
@@ -100,7 +108,7 @@ uv run python infra/scripts/server_delivery_acceptance.py
 environment。需要调整证据目录、运行采样窗口，或在首个失败阶段停止：
 
 ```powershell
-uv run python infra/scripts/server_delivery_acceptance.py --evidence-dir evidence/server-acceptance-prod --runtime-samples 5 --runtime-interval-seconds 60 --fail-fast
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --evidence-dir evidence/server-acceptance-prod --runtime-samples 5 --runtime-interval-seconds 60 --fail-fast
 ```
 
 预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：

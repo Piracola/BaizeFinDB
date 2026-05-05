@@ -17,6 +17,7 @@ from pathlib import Path
 
 DEFAULT_EVIDENCE_DIR = Path("evidence/server-delivery-acceptance")
 DEFAULT_REPORT_NAME = "server-delivery-acceptance.json"
+DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 MAX_CAPTURE_LENGTH = 2000
 
 
@@ -52,6 +53,8 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             command=[
                 python_executable,
                 "infra/scripts/server_deploy_check.py",
+                "--base-url",
+                args.base_url,
                 "--check-containers",
                 "--check-api",
                 "--check-m5-smoke",
@@ -105,6 +108,8 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
                 command=[
                     python_executable,
                     "infra/scripts/server_runtime_check.py",
+                    "--base-url",
+                    args.base_url,
                     "--samples",
                     str(args.runtime_samples),
                     "--interval-seconds",
@@ -231,6 +236,11 @@ def find_repo_root(start: Path | None = None) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run BaizeFinDB Linux server delivery acceptance checks.",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=DEFAULT_BASE_URL,
+        help=f"API base URL for deploy/runtime checks, default: {DEFAULT_BASE_URL}",
     )
     parser.add_argument(
         "--evidence-dir",

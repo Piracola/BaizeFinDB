@@ -32,6 +32,8 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
     assert stages[0].command == [
         "python",
         "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
         "--check-containers",
         "--check-api",
         "--check-m5-smoke",
@@ -50,6 +52,8 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
     assert stages[2].command == [
         "python",
         "infra/scripts/server_runtime_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
         "--samples",
         "3",
         "--interval-seconds",
@@ -58,6 +62,18 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
         "--json-output",
         str(tmp_path / "server-runtime-check.json"),
     ]
+
+
+def test_build_stage_specs_passes_custom_base_url_to_api_checks(tmp_path: Path) -> None:
+    args = _args(tmp_path, base_url="https://api.example.test")
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert "--base-url" in stages[0].command
+    assert "https://api.example.test" in stages[0].command
+    assert "--base-url" not in stages[1].command
+    assert "--base-url" in stages[2].command
+    assert "https://api.example.test" in stages[2].command
 
 
 def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
