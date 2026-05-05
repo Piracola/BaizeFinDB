@@ -79,7 +79,7 @@
 - Alembic 迁移框架
 - Celery Worker / Beat 调度入口
 - Docker Compose 的 PostgreSQL / Redis 配置
-- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、部署预检脚本、只读 M5 smoke check（含 `/ops/overview`、`/ops/history`、`/ops/trends`、`/ops/readiness`、Tushare 状态、`/radar/signals` 和有信号时的 `/radar/signals/{id}/analysis` 契约）、运行采样验证脚本、cron/systemd 友好的监控摘要脚本、PostgreSQL 备份/恢复脚本、systemd 示例和 nginx HTTPS 反代示例
+- Linux 服务端部署骨架：API Dockerfile、server compose overlay、worker/beat、部署预检脚本、只读 M5 smoke check（含 `/ops/overview`、`/ops/history`、`/ops/trends`、`/ops/readiness`、Tushare 状态、`/radar/signals` 和有信号时的 `/radar/signals/{id}/analysis` 契约）、运行采样验证脚本、cron/systemd 友好的监控摘要脚本和 5 分钟 systemd timer 示例、PostgreSQL 备份/恢复脚本、systemd 自启动示例和 nginx HTTPS 反代示例
 - pytest 冒烟测试
 
 ## 当前进度

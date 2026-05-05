@@ -16,6 +16,8 @@
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
+| `infra/linux/baizefindb-monitor.service` | systemd oneshot 监控摘要示例，定时写 compact monitor JSON 和完整 runtime JSON。 |
+| `infra/linux/baizefindb-monitor.timer` | systemd timer 示例，默认每 5 分钟运行一次 monitor service。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
 
 ## 本地开发不变
@@ -170,6 +172,23 @@ report。`server_monitor_check.py` 复用同一套只读 runtime check，默认�
 uv run python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json
 uv run python infra/scripts/server_monitor_check.py --include-ops-trends --fail-on-warning --json-output evidence/server-monitor-summary.json
 ```
+
+如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
+部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、
+`WorkingDirectory` 和 `PATH`；示例默认每 5 分钟运行一次，不发送通知：
+
+```powershell
+sudo cp infra/linux/baizefindb-monitor.service /etc/systemd/system/baizefindb-monitor.service
+sudo cp infra/linux/baizefindb-monitor.timer /etc/systemd/system/baizefindb-monitor.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now baizefindb-monitor.timer
+systemctl list-timers baizefindb-monitor.timer
+journalctl -u baizefindb-monitor.service -n 50
+```
+
+timer 会写出 `evidence/server-monitor-summary.json` 和
+`evidence/server-runtime-monitor.json`。若你希望 warning-only 巡检也让
+systemd 记录失败，可在 service 的 `ExecStart=` 里追加 `--fail-on-warning`。
 
 当 readiness 因历史 Provider 或数据质量失败显示 `warning`，或运行采样已经判断为 `blocked`，但需要给开发者保留一份可分享的排障证据时，可以在 runtime check 同一条命令里加 `--ops-evidence-output <path>`。runtime check 会继续做原本的短窗口采样，并额外复用 `export_ops_evidence.py` 的脱敏报告逻辑写入只读 OPS evidence；evidence 导出默认只 GET `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness`，不会触发采集、扫描、推送、模型、备份、清理或数据库写入。若同一条 runtime check 显式加了 `--include-ops-trends --trend-bucket-count <n>`，evidence 也会额外读取只读 `/ops/trends?lookback_hours=<n>&bucket_count=<n>` 并写入脱敏后的 `snapshots.ops_trends`；趋势桶数量 `n` 必须在 1 到 48 之间。若 evidence 导出本身读取失败或导出的 readiness 为 `blocked`，runtime check 会带清晰错误返回失败；普通 `warning` 仍为零退出码：
 

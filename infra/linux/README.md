@@ -17,6 +17,8 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
+| `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor and full runtime JSON evidence. |
+| `baizefindb-monitor.timer` | Example systemd timer that runs the monitor unit every 5 minutes. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
 
 ## Ubuntu Prerequisites
@@ -303,6 +305,31 @@ sudo systemctl status baizefindb.service
 
 The unit starts the compose project. Run database migrations manually during
 deployments before restarting the API.
+
+## systemd Monitor Timer
+
+After the compose project is healthy, copy the monitor service and timer examples
+if this host should periodically write compact monitor evidence. Adjust `User`,
+`Group`, `WorkingDirectory`, and the `PATH` in `baizefindb-monitor.service` for
+the real server account before enabling:
+
+```bash
+sudo cp infra/linux/baizefindb-monitor.service /etc/systemd/system/baizefindb-monitor.service
+sudo cp infra/linux/baizefindb-monitor.timer /etc/systemd/system/baizefindb-monitor.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now baizefindb-monitor.timer
+systemctl list-timers baizefindb-monitor.timer
+journalctl -u baizefindb-monitor.service -n 50
+```
+
+The timer runs every 5 minutes and writes:
+
+- `evidence/server-monitor-summary.json` compact `ok` / `warning` / `blocked`
+  summary for cron/systemd and future alert senders.
+- `evidence/server-runtime-monitor.json` full runtime report for debugging.
+
+The service does not send notifications. Add `--fail-on-warning` to
+`ExecStart=` only if warning-only summaries should make the systemd run fail.
 
 ## nginx Reverse Proxy
 

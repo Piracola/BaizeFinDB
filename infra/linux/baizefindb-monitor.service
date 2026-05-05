@@ -1,0 +1,15 @@
+[Unit]
+Description=BaizeFinDB server monitor summary check
+Requires=baizefindb.service
+After=network-online.target baizefindb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=baizefindb
+Group=baizefindb
+WorkingDirectory=/opt/baizefindb
+Environment="PATH=/home/baizefindb/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "BAIZEFINDB_MONITOR_OUTPUT=evidence/server-monitor-summary.json" "BAIZEFINDB_RUNTIME_OUTPUT=evidence/server-runtime-monitor.json"
+ExecStartPre=/usr/bin/mkdir -p /opt/baizefindb/evidence
+ExecStart=/usr/bin/env uv run python infra/scripts/server_monitor_check.py --include-ops-trends --json-output ${BAIZEFINDB_MONITOR_OUTPUT} --runtime-json-output ${BAIZEFINDB_RUNTIME_OUTPUT}
+
