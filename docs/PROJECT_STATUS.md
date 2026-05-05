@@ -251,6 +251,7 @@ uv run python infra/scripts/server_monitor_check.py --json-output evidence/serve
 uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --send --dedupe-state evidence/server-alert-telegram-dedupe-state.json --json-output evidence/server-alert-telegram-send.json
+sudo systemctl start baizefindb-alert-telegram.service
 uv run python infra/scripts/server_deploy_check.py --check-backup --backup-check-json-output evidence/postgres-backup-check.json
 uv run python infra/scripts/postgres_backup.py --check-only --check-json-output evidence/postgres-backup-check.json
 uv run python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql

@@ -137,6 +137,8 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evidence/server-alert-telegram-dedupe-state.json`。该本地 JSON 状态按 alert payload 的 `dedupe_key` 做默认 3600 秒冷却，只在全部 Telegram 发送成功后更新，避免服务器持续 warning 时重复刷屏；preview、配置错误、失败发送和无效 state 不会写入成功状态。
 
+Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，不默认启用 timer；确认手动发送和 dedupe evidence 后再考虑调度。
+
 ## Windows 客户端 MVP
 
 Windows 客户端位于 [clients/windows/](clients/windows/)，默认是源码运行版。仓库提供可选 PyInstaller onedir 打包脚手架，用于开发者在 Windows 目标机验证 exe 形态；它不是签名安装器或生产分发包。

@@ -22,6 +22,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor, full runtime, and no-send alert payload JSON evidence. |
 | `baizefindb-monitor.timer` | Example systemd timer that runs the monitor unit every 5 minutes. |
+| `baizefindb-alert-telegram.service` | Optional oneshot systemd unit that explicitly sends an existing alert payload through the Telegram adapter with dedupe state. |
 | `baizefindb-postgres-backup.service` | Example oneshot systemd unit that runs PostgreSQL backup check-only evidence before a timestamped `pg_dump`. |
 | `baizefindb-postgres-backup.timer` | Example systemd timer that runs the PostgreSQL backup unit daily with jitter. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
@@ -237,6 +238,35 @@ the same alert payload `dedupe_key` for 3600 seconds by default, writes only
 sanitized local JSON state after successful sends, and fails before sending if
 the state file is corrupt. Use `--dedupe-ttl-seconds <seconds>` to adjust the
 window, and reserve `--ignore-dedupe` for intentional manual re-sends.
+
+An optional systemd oneshot service is provided for a manual server-side send.
+Create a local-only credential file first:
+
+```bash
+sudo install -d -m 700 /etc/baizefindb
+sudoedit /etc/baizefindb/telegram-alert.env
+sudo chmod 600 /etc/baizefindb/telegram-alert.env
+```
+
+Example keys for that untracked file:
+
+```ini
+TELEGRAM_ALLOWED_CHAT_IDS=123456789
+TELEGRAM_BOT_TOKEN=<telegram-bot-token>
+```
+
+Then copy and start the service after monitor has produced
+`evidence/server-alert-payload.json`:
+
+```bash
+sudo cp infra/linux/baizefindb-alert-telegram.service /etc/systemd/system/baizefindb-alert-telegram.service
+sudo systemctl daemon-reload
+sudo systemctl start baizefindb-alert-telegram.service
+journalctl -u baizefindb-alert-telegram.service -n 50
+```
+
+This module intentionally provides no timer. Add scheduling only after manual
+send and dedupe evidence are verified.
 
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:

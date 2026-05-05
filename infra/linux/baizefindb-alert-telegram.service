@@ -1,0 +1,15 @@
+[Unit]
+Description=BaizeFinDB Telegram alert delivery
+Requires=baizefindb.service
+After=network-online.target baizefindb.service baizefindb-monitor.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=baizefindb
+Group=baizefindb
+WorkingDirectory=/opt/baizefindb
+Environment="PATH=/home/baizefindb/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "BAIZEFINDB_ALERT_PAYLOAD=evidence/server-alert-payload.json" "BAIZEFINDB_ALERT_TELEGRAM_OUTPUT=evidence/server-alert-telegram-send.json" "BAIZEFINDB_ALERT_TELEGRAM_DEDUPE_STATE=evidence/server-alert-telegram-dedupe-state.json" "BAIZEFINDB_ALERT_TELEGRAM_TTL_SECONDS=3600"
+EnvironmentFile=-/etc/baizefindb/telegram-alert.env
+ExecStartPre=/usr/bin/mkdir -p /opt/baizefindb/evidence
+ExecStart=/usr/bin/env uv run python infra/scripts/server_alert_telegram.py ${BAIZEFINDB_ALERT_PAYLOAD} --send --dedupe-state ${BAIZEFINDB_ALERT_TELEGRAM_DEDUPE_STATE} --dedupe-ttl-seconds ${BAIZEFINDB_ALERT_TELEGRAM_TTL_SECONDS} --json-output ${BAIZEFINDB_ALERT_TELEGRAM_OUTPUT}

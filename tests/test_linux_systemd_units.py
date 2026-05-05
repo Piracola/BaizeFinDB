@@ -60,6 +60,67 @@ def test_monitor_timer_runs_every_five_minutes() -> None:
     assert timer["Install"]["WantedBy"] == "timers.target"
 
 
+def test_alert_telegram_service_invokes_delivery_adapter_with_dedupe() -> None:
+    service = _read_unit("baizefindb-alert-telegram.service")
+
+    assert service["Unit"]["Requires"] == "baizefindb.service"
+    assert "network-online.target" in service["Unit"]["After"]
+    assert "baizefindb-monitor.service" in service["Unit"]["After"]
+    assert service["Service"]["Type"] == "oneshot"
+    assert service["Service"]["WorkingDirectory"] == "/opt/baizefindb"
+    assert service["Service"]["User"] == "baizefindb"
+    assert service["Service"]["Group"] == "baizefindb"
+    assert (
+        service["Service"]["EnvironmentFile"]
+        == "-/etc/baizefindb/telegram-alert.env"
+    )
+    assert service["Service"]["ExecStartPre"] == "/usr/bin/mkdir -p /opt/baizefindb/evidence"
+
+    command = service["Service"]["ExecStart"]
+    assert "server_alert_telegram.py ${BAIZEFINDB_ALERT_PAYLOAD}" in command
+    assert "--send" in command
+    assert "--dedupe-state ${BAIZEFINDB_ALERT_TELEGRAM_DEDUPE_STATE}" in command
+    assert "--dedupe-ttl-seconds ${BAIZEFINDB_ALERT_TELEGRAM_TTL_SECONDS}" in command
+    assert "--json-output ${BAIZEFINDB_ALERT_TELEGRAM_OUTPUT}" in command
+    assert "--ignore-dedupe" not in command
+
+    environment = service["Service"]["Environment"]
+    assert "BAIZEFINDB_ALERT_PAYLOAD=evidence/server-alert-payload.json" in environment
+    assert (
+        "BAIZEFINDB_ALERT_TELEGRAM_OUTPUT=evidence/server-alert-telegram-send.json"
+        in environment
+    )
+    assert (
+        "BAIZEFINDB_ALERT_TELEGRAM_DEDUPE_STATE=evidence/"
+        "server-alert-telegram-dedupe-state.json"
+        in environment
+    )
+    assert "BAIZEFINDB_ALERT_TELEGRAM_TTL_SECONDS=3600" in environment
+
+
+def test_alert_telegram_service_does_not_embed_secrets_or_other_delivery() -> None:
+    text = (LINUX_DIR / "baizefindb-alert-telegram.service").read_text(
+        encoding="utf-8"
+    ).lower()
+
+    forbidden = [
+        "telegram_bot_token",
+        "telegram_webhook_secret",
+        "webhook_url",
+        "password=",
+        "secret=",
+        "token=",
+        "curl ",
+        "sendmail",
+        "smtp",
+        "postgres_backup.py",
+        "server_monitor_check.py",
+        "run_radar_scan",
+    ]
+    for marker in forbidden:
+        assert marker not in text
+
+
 def test_postgres_backup_service_uses_existing_backup_helper() -> None:
     service = _read_unit("baizefindb-postgres-backup.service")
     text = (LINUX_DIR / "baizefindb-postgres-backup.service").read_text(

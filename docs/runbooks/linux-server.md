@@ -22,6 +22,7 @@
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
 | `infra/linux/baizefindb-monitor.service` | systemd oneshot 监控摘要示例，定时写 compact monitor JSON、完整 runtime JSON 和 no-send alert payload JSON。 |
 | `infra/linux/baizefindb-monitor.timer` | systemd timer 示例，默认每 5 分钟运行一次 monitor service。 |
+| `infra/linux/baizefindb-alert-telegram.service` | 可选 Telegram 告警交付 oneshot 示例，消费已有 alert payload，显式 `--send`，并用 dedupe state 防重复。 |
 | `infra/linux/baizefindb-postgres-backup.service` | systemd oneshot PostgreSQL 备份示例，先写 check-only evidence，再生成时间戳 `.sql` 备份。 |
 | `infra/linux/baizefindb-postgres-backup.timer` | systemd timer 示例，默认每日 03:15 加 15 分钟随机延迟运行备份 service。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
@@ -231,6 +232,35 @@ uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-paylo
 `--ignore-dedupe`。dedupe state 只在所有 Telegram 发送成功后更新；preview、
 `should_notify=false`、配置错误、发送失败或无效 state 都不会写入成功状态。无效或损坏的
 dedupe state 会在发送前返回 `2`，避免在状态不可信时继续发通知。
+
+仓库提供了可选 `infra/linux/baizefindb-alert-telegram.service` oneshot 示例，
+但不会默认启用 timer。使用前先在服务器本地创建未纳入 git 的凭据文件：
+
+```powershell
+sudo install -d -m 700 /etc/baizefindb
+sudoedit /etc/baizefindb/telegram-alert.env
+sudo chmod 600 /etc/baizefindb/telegram-alert.env
+```
+
+文件内容只放本机环境变量，不提交到仓库：
+
+```ini
+TELEGRAM_ALLOWED_CHAT_IDS=123456789
+TELEGRAM_BOT_TOKEN=<telegram-bot-token>
+```
+
+确认 `evidence/server-alert-payload.json` 已由 monitor 生成后，再手动试运行 service：
+
+```powershell
+sudo cp infra/linux/baizefindb-alert-telegram.service /etc/systemd/system/baizefindb-alert-telegram.service
+sudo systemctl daemon-reload
+sudo systemctl start baizefindb-alert-telegram.service
+journalctl -u baizefindb-alert-telegram.service -n 50
+```
+
+该 service 会写 `evidence/server-alert-telegram-send.json` 和
+`evidence/server-alert-telegram-dedupe-state.json`，不会读取数据库绑定、
+写 push logs、采集 Provider、跑雷达扫描、调用模型、生成报告、备份或清理。
 
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、
