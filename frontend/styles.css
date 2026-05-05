@@ -420,6 +420,88 @@ h3 {
   gap: 6px;
 }
 
+.ops-trend-chart-wrap {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ops-trend-chart {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 7px;
+  min-height: 168px;
+  border: 1px solid #d8cdb5;
+  border-radius: 8px;
+  background: #eee5d2;
+  padding: 10px 10px 8px;
+}
+
+.ops-trend-chart-bucket {
+  display: grid;
+  grid-template-rows: minmax(112px, 1fr) auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ops-trend-bars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(3px, 1fr));
+  align-items: end;
+  gap: 3px;
+  min-height: 112px;
+}
+
+.ops-trend-bars i {
+  display: block;
+  min-height: 3px;
+  border-radius: 4px 4px 0 0;
+}
+
+.ops-trend-chart-bucket span {
+  overflow: hidden;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ops-trend-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ops-trend-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.trend-scan {
+  background: var(--teal);
+}
+
+.trend-failure {
+  background: var(--red);
+}
+
+.trend-unhealthy {
+  background: var(--orange);
+}
+
 .ops-trend-row {
   display: grid;
   grid-template-columns: minmax(170px, 1.4fr) repeat(6, minmax(64px, 1fr));
@@ -752,6 +834,7 @@ pre {
 
   .status-grid,
   .ops-grid,
+  .ops-trend-chart,
   .ops-trend-row,
   .priority-grid,
   .lifecycle-grid,
@@ -761,6 +844,18 @@ pre {
   .signal-card,
   .portfolio-card {
     grid-template-columns: 1fr;
+  }
+
+  .ops-trend-chart {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .ops-trend-chart-bucket {
+    grid-template-rows: minmax(78px, 1fr) auto;
+  }
+
+  .ops-trend-bars {
+    min-height: 78px;
   }
 
   .span-2 {

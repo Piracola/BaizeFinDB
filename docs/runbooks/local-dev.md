@@ -154,6 +154,8 @@ uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 
 `check_tushare_anns_d_beat_enablement.py` 会把本地 sample gate、`golden_cases/radar_m5_risk_announcements.json` 雷达风险公告 golden gate、token 是否缺失、Beat 当前启停、interval 是否有效、live verify 仍需执行、readiness/live data 默认未检查等 gate 标成 `pass`、`warn` 或 `fail`。雷达风险公告 golden case 要求每个 case 声明 `case_type`，并覆盖真阳性风险、无信号守卫和误报/漏报反馈守卫。`--json-output` 会保存和 stdout 相同的 checklist evidence。需要把 `/providers/tushare/readiness` 也纳入只读检查时，显式加 `--check-readiness`；它仍不能替代真实 Tushare `anns_d` live verify。
 
+Web 状态面板的 `OPS 趋势` 会读取 `/ops/trends?lookback_hours=24&bucket_count=12`，同时展示后端桶计数表和扫描/失败/异常趋势图。该图只做后端计数的视觉化，不从桶计数推导 readiness 或新的 OPS 状态；`trend` / `trends` 命令会滚动到同一块并刷新数据。
+
 手动抓取股票基础信息：
 
 ```powershell

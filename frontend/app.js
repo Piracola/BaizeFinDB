@@ -853,6 +853,7 @@ function renderOpsTrends(trends) {
 
   const latest = buckets[buckets.length - 1];
   const recentBuckets = buckets.slice(-6).reverse();
+  const chartBuckets = buckets.slice(-12);
   elements.opsTrends.innerHTML = `
     <article class="detail-card">
       <div class="meta-row">
@@ -869,6 +870,7 @@ function renderOpsTrends(trends) {
         · 模型 ${escapeHtml(latest.model_call_unhealthy_count ?? 0)}
       </p>
       <div class="muted">${escapeHtml(formatBucketRange(latest))}</div>
+      ${renderOpsTrendChart(chartBuckets)}
     </article>
     <div class="ops-trend-table" role="table" aria-label="最近 OPS 趋势桶">
       <div class="ops-trend-row ops-trend-head" role="row">
@@ -882,6 +884,65 @@ function renderOpsTrends(trends) {
       </div>
       ${recentBuckets.map(renderOpsTrendBucket).join("")}
     </div>
+  `;
+}
+
+function renderOpsTrendChart(buckets) {
+  const maxCount = Math.max(
+    1,
+    ...buckets.map((bucket) =>
+      Math.max(
+        bucketCount(bucket.radar_scan_count),
+        bucketCount(bucket.radar_failure_count),
+        bucketUnhealthyCount(bucket),
+      ),
+    ),
+  );
+
+  return `
+    <div class="ops-trend-chart-wrap">
+      <div
+        class="ops-trend-chart"
+        role="img"
+        aria-label="OPS 趋势图，展示后端返回的扫描、失败和异常计数"
+      >
+        ${buckets.map((bucket) => renderOpsTrendChartBucket(bucket, maxCount)).join("")}
+      </div>
+      <div class="ops-trend-legend" aria-label="OPS 趋势图图例">
+        <span><i class="trend-scan"></i>扫描</span>
+        <span><i class="trend-failure"></i>失败</span>
+        <span><i class="trend-unhealthy"></i>异常</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderOpsTrendChartBucket(bucket, maxCount) {
+  const scanCount = bucketCount(bucket.radar_scan_count);
+  const failureCount = bucketCount(bucket.radar_failure_count);
+  const unhealthyCount = bucketUnhealthyCount(bucket);
+  const labelText = `#${bucket.bucket_index ?? "-"}`;
+  const titleText = `${formatBucketRange(bucket)}：扫描 ${scanCount}，失败 ${failureCount}，异常 ${unhealthyCount}`;
+
+  return `
+    <div class="ops-trend-chart-bucket" title="${escapeHtml(titleText)}">
+      <div class="ops-trend-bars" aria-hidden="true">
+        ${renderOpsTrendBar("trend-scan", scanCount, maxCount)}
+        ${renderOpsTrendBar("trend-failure", failureCount, maxCount)}
+        ${renderOpsTrendBar("trend-unhealthy", unhealthyCount, maxCount)}
+      </div>
+      <span>${escapeHtml(labelText)}</span>
+    </div>
+  `;
+}
+
+function renderOpsTrendBar(className, value, maxCount) {
+  const height = Math.max(3, Math.round((bucketCount(value) / Math.max(1, maxCount)) * 100));
+  return `
+    <i
+      class="${escapeHtml(className)}"
+      style="height: ${escapeHtml(height)}%"
+    ></i>
   `;
 }
 
@@ -901,6 +962,24 @@ function renderOpsTrendBucket(bucket) {
 
 function formatBucketRange(bucket) {
   return `${formatDate(bucket?.bucket_started_at)} - ${formatDate(bucket?.bucket_finished_at)}`;
+}
+
+function bucketUnhealthyCount(bucket) {
+  return (
+    bucketCount(bucket.provider_fetch_unhealthy_count) +
+    bucketCount(bucket.data_quality_unhealthy_count) +
+    bucketCount(bucket.telegram_push_unhealthy_count) +
+    bucketCount(bucket.model_call_unhealthy_count)
+  );
+}
+
+function bucketCount(value) {
+  const count = Number(value);
+  if (!Number.isFinite(count) || count < 0) {
+    return 0;
+  }
+
+  return count;
 }
 
 function renderOpsTrendsUnavailable(reason) {

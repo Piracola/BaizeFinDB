@@ -646,7 +646,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
 ```
 
-该脚本只读，不触发采集、扫描、推送或模型调用；它基于 `/health/ready` 和 `/ops/readiness` 判断阻塞状态，并汇总 `/ops/overview` 的资源摘要、alerts 以及 `/ops/history` 的 failure summary。需要趋势上下文时加 `--include-ops-trends`，脚本会读取 `/ops/trends` 并汇总最新桶的 unhealthy 计数；这只是后续图表和监控的基础，不代表完整监控系统。需要在同一次运行里保存脱敏 evidence 时加 `--ops-evidence-output evidence/ops-evidence.json`，尤其适用于 `warning` 或 `blocked` 状态下把可分享证据随 runtime check 一起留存。
+该脚本只读，不触发采集、扫描、推送或模型调用；它基于 `/health/ready` 和 `/ops/readiness` 判断阻塞状态，并汇总 `/ops/overview` 的资源摘要、alerts 以及 `/ops/history` 的 failure summary。需要趋势上下文时加 `--include-ops-trends`，脚本会读取 `/ops/trends` 并汇总最新桶的 unhealthy 计数；Web 状态面板也会用同一后端桶计数渲染扫描/失败/异常趋势图，但不会从桶计数推导 readiness 或新的 OPS 状态。这只是后续真实监控的基础，不代表完整监控系统。需要在同一次运行里保存脱敏 evidence 时加 `--ops-evidence-output evidence/ops-evidence.json`，尤其适用于 `warning` 或 `blocked` 状态下把可分享证据随 runtime check 一起留存。
 
 Windows 本机演练 server overlay 时，确认 `127.0.0.1:8000` 没有被本机 `uvicorn` 占用，否则浏览器和 `curl` 可能命中本地开发进程而不是 Docker API：
 

@@ -54,6 +54,11 @@ def test_frontend_assets_are_served() -> None:
     assert "loadOpsReadiness" in js_response.text
     assert "loadOpsWarningDrilldown" in js_response.text
     assert "renderOpsWarningDrilldown" in js_response.text
+    assert "renderOpsTrendChart" in js_response.text
+    assert "ops-trend-chart" in js_response.text
+    assert "trend-scan" in js_response.text
+    assert "trend-failure" in js_response.text
+    assert "trend-unhealthy" in js_response.text
     assert "/ops/overview" in js_response.text
     assert "/ops/history" in js_response.text
     assert "/ops/trends" in js_response.text
@@ -115,6 +120,9 @@ def test_frontend_assets_are_served() -> None:
     assert "status-panel" in css_response.text
     assert "ops-grid" in css_response.text
     assert "ops-trends-list" in css_response.text
+    assert "ops-trend-chart" in css_response.text
+    assert "ops-trend-chart-bucket" in css_response.text
+    assert "ops-trend-legend" in css_response.text
     assert "ops-trend-table" in css_response.text
     assert "ops-warning-drilldown" in css_response.text
     assert "ops-drilldown-section" in css_response.text
@@ -246,6 +254,9 @@ def test_frontend_ops_trends_uses_backend_bucket_counts_only() -> None:
     assert "data_quality_unhealthy_count" in trends_block
     assert "telegram_push_unhealthy_count" in trends_block
     assert "model_call_unhealthy_count" in trends_block
+    assert "renderOpsTrendChart(chartBuckets)" in trends_block
+    assert "bucketUnhealthyCount(bucket)" in trends_block
+    assert "role=\"img\"" in trends_block
     assert "readinessStatusLabel" not in trends_block
     assert "statusCardClass" not in trends_block
     assert "alerts.length" not in trends_block
