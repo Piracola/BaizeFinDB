@@ -12,6 +12,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
+| `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture before alert delivery is implemented. |
 | `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
@@ -196,6 +197,16 @@ python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 -
 If the same command also includes `--include-ops-trends --trend-bucket-count <n>`,
 the evidence report additionally reads `/ops/trends` and writes sanitized
 `snapshots.ops_trends`. This remains read-only, and `n` must be between 1 and 48.
+
+For cron or a systemd timer, use the compact monitor summary wrapper. It defaults
+to one read-only runtime sample with no delay, writes `ok`, `warning`, or
+`blocked`, and returns non-zero for `blocked`. Add `--fail-on-warning` if the
+timer should also fail on warning-only summaries:
+
+```bash
+python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json
+python infra/scripts/server_monitor_check.py --include-ops-trends --fail-on-warning --json-output evidence/server-monitor-summary.json
+```
 
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:
