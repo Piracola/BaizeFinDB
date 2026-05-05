@@ -31,6 +31,9 @@ DEFAULT_TELEGRAM_ALERT_SERVICE_DEDUPE_STATE_JSON = Path(
 MAX_CAPTURE_LENGTH = 2000
 DEFAULT_ACCEPTANCE_PROFILE = "default"
 PRODUCTION_READINESS_PROFILE = "production_readiness"
+EXECUTION_MODE_RUN = "run"
+EXECUTION_MODE_PLAN = "plan"
+STATUS_PLANNED = "planned"
 PRODUCTION_READINESS_PRESET_FLAGS = (
     "include_server_compose_contract_check",
     "include_systemd_unit_check",
@@ -62,7 +65,7 @@ class StageResult:
 
     @property
     def ok(self) -> bool:
-        return self.status in {"ok", "warn", "skipped"}
+        return self.status in {"ok", "warn", "skipped", STATUS_PLANNED}
 
 
 def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
@@ -347,11 +350,25 @@ def run_acceptance(args: argparse.Namespace, *, repo_root: Path | None = None) -
     return results
 
 
+def plan_acceptance(args: argparse.Namespace) -> list[StageResult]:
+    return [
+        StageResult(
+            name=stage.name,
+            status="skipped" if not stage.command else STATUS_PLANNED,
+            command=stage.command,
+            exit_code=None,
+            evidence_files=stage.evidence_files,
+        )
+        for stage in build_stage_specs(args)
+    ]
+
+
 def build_report(
     results: list[StageResult],
     *,
     evidence_dir: Path,
     profile: str = DEFAULT_ACCEPTANCE_PROFILE,
+    execution_mode: str = EXECUTION_MODE_RUN,
 ) -> dict[str, object]:
     counts = {
         "ok": sum(1 for result in results if result.status == "ok"),
@@ -359,7 +376,12 @@ def build_report(
         "fail": sum(1 for result in results if result.status == "fail"),
         "skipped": sum(1 for result in results if result.status == "skipped"),
     }
-    if counts["fail"]:
+    planned_count = sum(1 for result in results if result.status == STATUS_PLANNED)
+    if execution_mode == EXECUTION_MODE_PLAN or planned_count:
+        counts[STATUS_PLANNED] = planned_count
+    if execution_mode == EXECUTION_MODE_PLAN:
+        status = STATUS_PLANNED
+    elif counts["fail"]:
         status = "fail"
     elif counts["warn"]:
         status = "warn"
@@ -370,6 +392,7 @@ def build_report(
         "generated_at": datetime.now(UTC).isoformat(),
         "status": status,
         "profile": profile,
+        "execution_mode": execution_mode,
         "evidence_dir": str(evidence_dir),
         "summary": {
             "total": len(results),
@@ -498,6 +521,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Return a failing exit code for warning-only acceptance and pass the "
             "strict warning mode to server_runtime_check.py."
+        ),
+    )
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help=(
+            "Write the acceptance stage/command/evidence plan without running "
+            "helper scripts."
         ),
     )
     parser.add_argument(
@@ -633,10 +664,18 @@ def main(argv: list[str] | None = None) -> int:
         args.json_output = args.evidence_dir / DEFAULT_REPORT_NAME
 
     profile = acceptance_profile(args)
-    results = run_acceptance(args)
-    report = build_report(results, evidence_dir=args.evidence_dir, profile=profile)
+    execution_mode = EXECUTION_MODE_PLAN if args.plan_only else EXECUTION_MODE_RUN
+    results = plan_acceptance(args) if args.plan_only else run_acceptance(args)
+    report = build_report(
+        results,
+        evidence_dir=args.evidence_dir,
+        profile=profile,
+        execution_mode=execution_mode,
+    )
     write_report(args.json_output, report)
     print(_format_summary(report, args.json_output))
+    if args.plan_only:
+        return 0
     if report["status"] == "fail":
         return 1
     if report["status"] == "warn" and args.fail_on_warning:
@@ -648,6 +687,8 @@ def _format_summary(report: dict[str, object], output_path: Path) -> str:
     summary = report["summary"]
     lines = [
         f"[{str(report['status']).upper()}] BaizeFinDB server delivery acceptance",
+        f"profile={report['profile']}",
+        f"execution_mode={report['execution_mode']}",
         f"evidence_dir={report['evidence_dir']}",
         f"json_output={output_path}",
         f"summary={summary}",

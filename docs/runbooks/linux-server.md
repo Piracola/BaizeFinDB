@@ -150,6 +150,18 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 `systemctl` 或 `journalctl`。生产切换需要 warning 阻断或 env 权限严格阻断时，仍需
 显式叠加 `--fail-on-warning` 或 `--telegram-alert-env-strict-permissions`。
 
+首次在服务器上执行前，可先用 plan-only 模式预览同一套 stage、命令和 evidence 路径：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --plan-only --base-url https://api.example.com --production-readiness
+```
+
+plan-only 只写 acceptance JSON，不调用部署预检、runtime、backup、Telegram、Docker、
+API、`systemctl` 或 `journalctl`。报告顶层会写 `execution_mode: "plan"` 和
+`status: "planned"`；非跳过 stage 为 `planned`，已显式跳过的 stage 仍为 `skipped`。
+正式执行时不加 `--plan-only`，报告会写 `execution_mode: "run"` 并按 helper evidence
+汇总 `ok` / `warn` / `fail`。
+
 如果要把 server compose runtime contract 纳入同一交付验收包，可加
 `--include-server-compose-contract-check`。该选项只会让 deploy preflight 阶段追加
 `--check-server-compose-contract`，仍写入 `server-deploy-check.json`；不会启动容器、

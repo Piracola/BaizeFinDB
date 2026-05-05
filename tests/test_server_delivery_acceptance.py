@@ -845,6 +845,62 @@ def test_run_acceptance_fail_fast_continues_after_warning(monkeypatch, tmp_path:
     assert [result.status for result in results] == ["warn", "fail"]
 
 
+def test_plan_acceptance_builds_plan_without_running_helpers(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, production_readiness=True)
+
+    def fail_run_stage(*args, **kwargs):
+        raise AssertionError("plan-only must not run helper stages")
+
+    monkeypatch.setattr(server_delivery_acceptance, "run_stage", fail_run_stage)
+
+    results = server_delivery_acceptance.plan_acceptance(args)
+
+    assert [result.name for result in results] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+        "telegram_alert_env_check",
+    ]
+    assert {result.status for result in results} == {"planned"}
+    assert all(result.exit_code is None for result in results)
+    assert all(result.stdout == "" and result.stderr == "" for result in results)
+    assert "--check-server-compose-contract" in results[0].command
+    assert "--ops-evidence-output" in results[3].command
+
+
+def test_plan_acceptance_preserves_skipped_stages(tmp_path: Path) -> None:
+    args = _args(
+        tmp_path,
+        skip_backup_check=True,
+        skip_backup_retention=True,
+        skip_runtime_check=True,
+    )
+
+    results = server_delivery_acceptance.plan_acceptance(args)
+
+    assert [result.name for result in results] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+    ]
+    assert [result.status for result in results] == [
+        "planned",
+        "skipped",
+        "skipped",
+        "skipped",
+    ]
+    assert results[1].command == []
+    assert results[2].command == []
+    assert results[3].command == []
+
+
 def test_run_stage_promotes_warning_evidence_status(monkeypatch, tmp_path: Path) -> None:
     evidence = tmp_path / "deploy.json"
     evidence.write_text(json.dumps({"status": "warn"}), encoding="utf-8")
@@ -1018,6 +1074,7 @@ def test_build_report_summarizes_stage_results(tmp_path: Path) -> None:
 
     assert report["status"] == "fail"
     assert report["profile"] == "default"
+    assert report["execution_mode"] == "run"
     assert report["evidence_dir"] == str(tmp_path)
     assert report["summary"] == {
         "total": 4,
@@ -1041,6 +1098,7 @@ def test_build_report_warns_without_failure(tmp_path: Path) -> None:
 
     assert report["status"] == "warn"
     assert report["profile"] == "default"
+    assert report["execution_mode"] == "run"
     assert report["summary"] == {
         "total": 2,
         "ok": 1,
@@ -1067,6 +1125,28 @@ def test_build_report_accepts_production_readiness_profile(tmp_path: Path) -> No
 
     assert report["profile"] == "production_readiness"
     assert report["status"] == "ok"
+
+
+def test_build_report_accepts_plan_execution_mode(tmp_path: Path) -> None:
+    report = server_delivery_acceptance.build_report(
+        [
+            _result("deploy_preflight", "planned", None),
+            _result("backup_check", "skipped", None),
+        ],
+        evidence_dir=tmp_path,
+        execution_mode="plan",
+    )
+
+    assert report["execution_mode"] == "plan"
+    assert report["status"] == "planned"
+    assert report["summary"] == {
+        "total": 2,
+        "ok": 0,
+        "warn": 0,
+        "fail": 0,
+        "skipped": 1,
+        "planned": 1,
+    }
 
 
 def test_main_writes_report_and_returns_nonzero_on_failure(
@@ -1110,7 +1190,10 @@ def test_main_writes_report_and_returns_nonzero_on_failure(
     assert exit_code == 1
     assert report["status"] == "fail"
     assert report["profile"] == "default"
+    assert report["execution_mode"] == "run"
     assert report["summary"]["fail"] == 1
+    assert "profile=default" in captured.out
+    assert "execution_mode=run" in captured.out
     assert "[FAIL] runtime_check exit=4" in captured.out
 
 
@@ -1152,6 +1235,7 @@ def test_main_returns_zero_and_reports_warning(monkeypatch, tmp_path: Path, caps
     assert exit_code == 0
     assert report["status"] == "warn"
     assert report["profile"] == "default"
+    assert report["execution_mode"] == "run"
     assert report["summary"]["warn"] == 1
     assert "[WARN] deploy_preflight exit=0" in captured.out
     assert "evidence_statuses=" in captured.out
@@ -1200,6 +1284,7 @@ def test_main_fail_on_warning_returns_nonzero_for_warning_report(
     assert exit_code == 1
     assert report["status"] == "warn"
     assert report["profile"] == "default"
+    assert report["execution_mode"] == "run"
     assert report["summary"]["warn"] == 1
     assert "[WARN] deploy_preflight exit=0" in captured.out
 
@@ -1254,6 +1339,7 @@ def test_main_production_readiness_writes_profile(monkeypatch, tmp_path: Path) -
     report = json.loads(output.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert report["profile"] == "production_readiness"
+    assert report["execution_mode"] == "run"
     assert [stage["name"] for stage in report["stages"]] == [
         "deploy_preflight",
         "backup_check",
@@ -1263,6 +1349,58 @@ def test_main_production_readiness_writes_profile(monkeypatch, tmp_path: Path) -
         "telegram_alert_preview",
         "telegram_alert_env_check",
     ]
+
+
+def test_main_plan_only_writes_production_readiness_plan(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    output = tmp_path / "acceptance-plan.json"
+
+    def fail_subprocess_run(*args, **kwargs):
+        raise AssertionError("plan-only must not invoke helper subprocesses")
+
+    monkeypatch.setattr(server_delivery_acceptance.subprocess, "run", fail_subprocess_run)
+
+    exit_code = server_delivery_acceptance.main(
+        [
+            "--plan-only",
+            "--production-readiness",
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--json-output",
+            str(output),
+            "--python-executable",
+            "python",
+            "--runtime-samples",
+            "1",
+            "--runtime-interval-seconds",
+            "1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["status"] == "planned"
+    assert report["execution_mode"] == "plan"
+    assert report["profile"] == "production_readiness"
+    assert report["summary"] == {
+        "total": 7,
+        "ok": 0,
+        "warn": 0,
+        "fail": 0,
+        "skipped": 0,
+        "planned": 7,
+    }
+    assert [stage["status"] for stage in report["stages"]] == ["planned"] * 7
+    assert report["stages"][0]["exit_code"] is None
+    assert "--check-server-compose-contract" in report["stages"][0]["command"]
+    assert "--ops-evidence-output" in report["stages"][3]["command"]
+    assert "profile=production_readiness" in captured.out
+    assert "execution_mode=plan" in captured.out
+    assert "[PLANNED] deploy_preflight exit=None" in captured.out
 
 
 def _args(tmp_path: Path, **overrides):

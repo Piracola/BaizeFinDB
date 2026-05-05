@@ -152,6 +152,8 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 生产化交付前可用 `server_delivery_acceptance.py --production-readiness` 一次启用当前非破坏性验收预设：server compose runtime contract、systemd 模板静态检查、Telegram 严格绑定 readiness、Tushare `anns_d` Beat enablement checklist、脱敏 OPS evidence、no-send alert payload / Telegram preview 和 Telegram alert env preflight。最终 JSON 会写入 `profile: "production_readiness"`；该预设不会启用手动 alert service evidence verification、严格 env 权限、`--fail-on-warning`、`--fail-fast`、restore、Telegram 发送、backup deletion、`systemctl` 或 `journalctl`，需要更严格门禁时仍要显式叠加对应参数。
 
+需要在真实运行前预览交付验收命令和 evidence 路径时，可加 `--plan-only`，例如 `server_delivery_acceptance.py --plan-only --production-readiness`。该模式只写计划报告，不调用部署预检、runtime、backup、Telegram、Docker、API、`systemctl` 或 `journalctl`；JSON 顶层会写入 `execution_mode: "plan"` 和 `status: "planned"`，每个非跳过阶段状态为 `planned`，跳过阶段仍为 `skipped`。正常执行报告会写入 `execution_mode: "run"`。
+
 Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evidence/server-alert-telegram-dedupe-state.json`。该本地 JSON 状态按 alert payload 的 `dedupe_key` 做默认 3600 秒冷却，只在全部 Telegram 发送成功后更新，避免服务器持续 warning 时重复刷屏；preview、配置错误、失败发送和无效 state 不会写入成功状态。
 
 Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，发送前会先运行 env 预检并写 `evidence/server-alert-telegram-env-check.json`；timer 需要在手动发送、env check 和 dedupe evidence 通过后单独复制启用。
