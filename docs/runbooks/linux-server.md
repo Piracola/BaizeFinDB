@@ -189,6 +189,18 @@ uv run python infra/scripts/server_monitor_check.py --json-output evidence/serve
 uv run python infra/scripts/server_monitor_check.py --include-ops-trends --fail-on-warning --json-output evidence/server-monitor-summary.json
 ```
 
+如果需要先生成后续 Telegram/email/webhook adapter 可消费的告警 payload，但还不发送任何
+通知，可以把 compact monitor summary 转成有界 JSON。`blocked` 会生成
+`severity=critical` 且默认非零退出；`warning` 默认生成 `severity=warning` 和
+`should_notify=true`，但仍零退出，除非加 `--fail-on-notify`。该脚本只读已有 JSON
+文件，不调用 API、Docker、数据库、Telegram、SMTP、webhook、采集、扫描、模型、报告、
+备份或清理：
+
+```powershell
+uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json
+uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --suppress-warning-notify --json-output evidence/server-alert-payload.json
+```
+
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、
 `WorkingDirectory` 和 `PATH`；示例默认每 5 分钟运行一次，不发送通知：
@@ -246,7 +258,7 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --js
 
 三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 的 `--json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本；失败时也会写入脱敏 failure report。announcements evidence 步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
 
-`evidence/`、`runtime-check*.json` 和 `ops-evidence*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。不要把真实 token 环境下生成的 evidence、runtime check 或 ops evidence 报告提交到 git。
+`evidence/`、`runtime-check*.json`、`ops-evidence*.json` 和 `server-alert-payload*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。不要把真实 token 环境下生成的 evidence、runtime check、ops evidence 或 alert payload 报告提交到 git。
 
 手动写入 Tushare 股票基础信息或公告快照：
 

@@ -23,5 +23,6 @@ backups/
 evidence/
 runtime-check*.json
 ops-evidence*.json
+server-alert-payload*.json
 .DS_Store
 Thumbs.db
