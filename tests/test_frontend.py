@@ -97,6 +97,8 @@ def test_frontend_assets_are_served() -> None:
     assert "risk_flags" in js_response.text
     assert "evidence_summary" in js_response.text
     assert "review_summary" in js_response.text
+    assert "agent_assessments" in js_response.text
+    assert "renderAgentAssessments" in js_response.text
     assert "next_actions" in js_response.text
     assert "data_quality" in js_response.text
     assert "renderLifecycleCounts" in js_response.text
@@ -139,6 +141,8 @@ def test_frontend_assets_are_served() -> None:
     assert "backtrace-list" in css_response.text
     assert "analysis-brief" in css_response.text
     assert "analysis-grid" in css_response.text
+    assert "analysis-agent-grid" in css_response.text
+    assert "analysis-agent-list" in css_response.text
 
 
 def test_frontend_manual_deep_report_action_uses_confirmed_backend_endpoint() -> None:
@@ -221,7 +225,13 @@ def test_frontend_signal_analysis_uses_backend_brief_without_raw_fields() -> Non
     assert "risk_flags" in render_block
     assert "evidence_summary" in render_block
     assert "review_summary" in render_block
+    assert "agent_assessments" in render_block
+    assert "renderAgentAssessments" in render_block
+    assert "item.agent_id" in render_block
+    assert "item.status" in render_block
+    assert "item.findings" in render_block
     assert "next_actions" in render_block
+    assert "item.next_actions" in render_block
     assert "priorityBadgeClass(analysis.priority)" in render_block
     assert "label(analysis.lifecycle_stage)" in render_block
     assert "label(analysis.review_status)" in render_block

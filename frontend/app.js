@@ -1499,6 +1499,9 @@ function renderSignalAnalysisBrief(analysis, analysisError) {
 
   const evidenceSummary = analysis.evidence_summary || {};
   const reviewSummary = analysis.review_summary || {};
+  const agentAssessments = Array.isArray(analysis.agent_assessments)
+    ? analysis.agent_assessments
+    : [];
   return `
     <article class="analysis-brief detail-card">
       <div class="meta-row">
@@ -1511,10 +1514,64 @@ function renderSignalAnalysisBrief(analysis, analysisError) {
       ${renderAnalysisList("Key Points", analysis.key_points)}
       ${renderMetricHighlights(analysis.metric_highlights || [])}
       ${renderAnalysisList("Risk Flags", analysis.risk_flags)}
+      ${renderAgentAssessments(agentAssessments)}
       ${renderEvidenceSummary(evidenceSummary)}
       ${renderReviewSummary(reviewSummary)}
       ${renderAnalysisList("Next Actions", analysis.next_actions)}
     </article>
+  `;
+}
+
+function renderAgentAssessments(assessments) {
+  const values = Array.isArray(assessments) ? assessments.filter(Boolean).slice(0, 5) : [];
+  if (values.length === 0) {
+    return renderAnalysisList("Agent Assessments", []);
+  }
+
+  return `
+    <section class="analysis-section">
+      <h4>Agent Assessments</h4>
+      <div class="analysis-agent-grid">
+        ${values
+          .map((item) => {
+            const findings = Array.isArray(item.findings)
+              ? item.findings.filter(Boolean).slice(0, 5)
+              : [];
+            const nextActions = Array.isArray(item.next_actions)
+              ? item.next_actions.filter(Boolean).slice(0, 5)
+              : [];
+            return `
+              <div class="analysis-agent">
+                <div class="meta-row">
+                  <span class="badge">${escapeHtml(label(item.status || "not_applicable"))}</span>
+                  <span class="badge">${escapeHtml(item.agent_id || "-")}</span>
+                </div>
+                <strong>${escapeHtml(item.label || item.agent_id || "Agent")}</strong>
+                <p class="muted">${escapeHtml(item.summary || "后端未返回摘要。")}</p>
+                ${renderAgentAssessmentList("Findings", findings)}
+                ${renderAgentAssessmentList("Next Actions", nextActions)}
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderAgentAssessmentList(title, items) {
+  const values = Array.isArray(items) ? items.filter(Boolean).slice(0, 5) : [];
+  if (values.length === 0) {
+    return "";
+  }
+
+  return `
+    <div class="analysis-agent-list">
+      <span>${escapeHtml(title)}</span>
+      <ul>
+        ${values.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </div>
   `;
 }
 

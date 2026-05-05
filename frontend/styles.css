@@ -371,6 +371,48 @@ h3 {
   color: #6d5316;
 }
 
+.analysis-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.analysis-agent {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(109, 83, 22, 0.2);
+  border-radius: 8px;
+  background: #fff8ea;
+}
+
+.analysis-agent strong {
+  color: #6d5316;
+}
+
+.analysis-agent p {
+  margin: 0;
+}
+
+.analysis-agent-list {
+  display: grid;
+  gap: 4px;
+}
+
+.analysis-agent-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analysis-agent-list ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
 .priority-number {
   font-size: 30px;
   font-weight: 900;

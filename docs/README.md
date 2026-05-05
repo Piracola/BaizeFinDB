@@ -36,6 +36,7 @@
 - `server_deploy_check.py --check-systemd-units` 只读验证仓库内 `infra/linux/` systemd 模板，不检查已安装 unit；它用于在复制到服务器前发现 service/timer 目标、周期、证据输出、dedupe、strict env preflight 或 no-secret 边界漂移。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取、失败记录、日志、快照查询和 `/providers/tushare/readiness` 只读准入自检；`anns_d` 重大风险公告可被雷达扫描映射为 risk P0，`golden_cases/radar_m5_risk_announcements.json` 已覆盖重大风险公告、退市风险公告、普通公告无信号和误报反馈守卫的完整扫描样例，并已纳入 `check_tushare_anns_d_beat_enablement.py --json-output <path>` 默认离线 gate。该文件的每个 case 必须声明 `case_type`，支持 `true_positive_major_risk`、`true_positive_critical_risk`、`false_positive_guard`、`false_negative_guard` 和 `ordinary_no_signal`，后续真实误报/漏报样例优先追加到这里。`anns_d` Beat 调度默认关闭，启用前必须再做真实 token 验证、字段漂移、积分消耗和误差样例。
 - Web、Windows 客户端、Telegram `/tushare` 和 `/tushare_ready` 只读展示 Tushare 配置状态和准入自检，不触发真实抓取，不泄露 token 原文。
+- Web 信号详情已展示 `/radar/signals/{signal_id}/analysis` 返回的确定性 `agent_assessments` scaffold，只显示后端 label/status/summary/findings/next_actions，不在浏览器本地生成多 agent 分析或重算雷达/审查状态。
 - Telegram `/analysis <id>` 只读消费 `/radar/signals/{signal_id}/analysis`，展示后端单信号研究摘要；该接口已返回确定性 `agent_assessments` scaffold，但 Telegram 当前仍可只展示既有摘要字段，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令。
 - Windows 客户端 `查看分析` 按钮只读消费 `/radar/signals/{signal_id}/analysis`，展示后端单信号研究摘要；该接口已返回确定性 `agent_assessments` scaffold，但 Windows 当前仍可只展示既有摘要字段，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令。
 - Windows 客户端 `生成 Deep Report` 按钮先确认，再调用 `/reports/deep/from-signal?user_key=<User Key>` 并发送 `confirm_deep_report=true`；取消确认不调用 API，客户端只展示后端返回报告摘要，不生成报告正文、审查状态或建议标签。
