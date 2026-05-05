@@ -19,6 +19,8 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor and full runtime JSON evidence. |
 | `baizefindb-monitor.timer` | Example systemd timer that runs the monitor unit every 5 minutes. |
+| `baizefindb-postgres-backup.service` | Example oneshot systemd unit that runs PostgreSQL backup check-only evidence before a timestamped `pg_dump`. |
+| `baizefindb-postgres-backup.timer` | Example systemd timer that runs the PostgreSQL backup unit daily with jitter. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
 
 ## Ubuntu Prerequisites
@@ -387,6 +389,28 @@ stream database contents.
 
 `backups/` is ignored by git. Also back up `.env` through a secure server-side
 secret process, not through git.
+
+### systemd Backup Timer
+
+After the compose project is healthy, copy the backup service and timer examples
+if this host should run daily local PostgreSQL backups. Adjust `User`, `Group`,
+`WorkingDirectory`, and the `PATH` in `baizefindb-postgres-backup.service` for
+the real server account before enabling:
+
+```bash
+sudo cp infra/linux/baizefindb-postgres-backup.service /etc/systemd/system/baizefindb-postgres-backup.service
+sudo cp infra/linux/baizefindb-postgres-backup.timer /etc/systemd/system/baizefindb-postgres-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now baizefindb-postgres-backup.timer
+systemctl list-timers baizefindb-postgres-backup.timer
+journalctl -u baizefindb-postgres-backup.service -n 50
+```
+
+The timer runs daily at `03:15` with up to `15min` randomized delay. Each run
+creates `backups/` and `evidence/`, writes backup preflight metadata to
+`evidence/postgres-backup-timer-check.json`, then writes a timestamped `.sql`
+backup under `backups/`. The example does not restore data, send notifications,
+or embed secrets.
 
 ## Restore
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BaizeFinDB PostgreSQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=baizefindb-postgres-backup.service
+
+[Install]
+WantedBy=timers.target

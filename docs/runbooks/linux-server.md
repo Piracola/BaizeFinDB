@@ -18,6 +18,8 @@
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
 | `infra/linux/baizefindb-monitor.service` | systemd oneshot 监控摘要示例，定时写 compact monitor JSON 和完整 runtime JSON。 |
 | `infra/linux/baizefindb-monitor.timer` | systemd timer 示例，默认每 5 分钟运行一次 monitor service。 |
+| `infra/linux/baizefindb-postgres-backup.service` | systemd oneshot PostgreSQL 备份示例，先写 check-only evidence，再生成时间戳 `.sql` 备份。 |
+| `infra/linux/baizefindb-postgres-backup.timer` | systemd timer 示例，默认每日 03:15 加 15 分钟随机延迟运行备份 service。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
 
 ## 本地开发不变
@@ -273,6 +275,25 @@ uv run python infra/scripts/postgres_backup.py
 ```powershell
 uv run python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql
 ```
+
+如果要让服务器自己定时写本地 PostgreSQL 备份，可复制 backup systemd timer
+示例。复制前先根据实际部署账号调整
+`infra/linux/baizefindb-postgres-backup.service` 里的 `User`、`Group`、
+`WorkingDirectory` 和 `PATH`：
+
+```powershell
+sudo cp infra/linux/baizefindb-postgres-backup.service /etc/systemd/system/baizefindb-postgres-backup.service
+sudo cp infra/linux/baizefindb-postgres-backup.timer /etc/systemd/system/baizefindb-postgres-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now baizefindb-postgres-backup.timer
+systemctl list-timers baizefindb-postgres-backup.timer
+journalctl -u baizefindb-postgres-backup.service -n 50
+```
+
+timer 默认每日 03:15 执行，并带 15 分钟随机延迟。每次运行会创建
+`backups/` 和 `evidence/`，先写
+`evidence/postgres-backup-timer-check.json` 作为 check-only evidence，再把
+时间戳 `.sql` 备份写入 `backups/`。示例不执行恢复、不发送通知、不包含密钥。
 
 从备份恢复 PostgreSQL：
 

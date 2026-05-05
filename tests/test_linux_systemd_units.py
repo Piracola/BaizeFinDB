@@ -58,6 +58,57 @@ def test_monitor_timer_runs_every_five_minutes() -> None:
     assert timer["Install"]["WantedBy"] == "timers.target"
 
 
+def test_postgres_backup_service_uses_existing_backup_helper() -> None:
+    service = _read_unit("baizefindb-postgres-backup.service")
+    text = (LINUX_DIR / "baizefindb-postgres-backup.service").read_text(
+        encoding="utf-8"
+    )
+
+    assert service["Unit"]["Requires"] == "baizefindb.service"
+    assert "baizefindb.service" in service["Unit"]["After"]
+    assert "docker.service" in service["Unit"]["After"]
+    assert service["Service"]["Type"] == "oneshot"
+    assert service["Service"]["WorkingDirectory"] == "/opt/baizefindb"
+    assert service["Service"]["User"] == "baizefindb"
+    assert service["Service"]["Group"] == "baizefindb"
+    assert "/usr/bin/mkdir -p /opt/baizefindb/backups /opt/baizefindb/evidence" in text
+    assert "postgres_backup.py --backup-dir backups --check-only" in text
+    assert "--check-json-output ${BAIZEFINDB_BACKUP_CHECK_OUTPUT}" in text
+    assert "postgres_backup.py --backup-dir backups" in service["Service"]["ExecStart"]
+    assert "postgres_restore.py" not in text
+    assert "--confirm-restore" not in text
+
+
+def test_postgres_backup_service_does_not_embed_secrets_or_notifications() -> None:
+    text = (LINUX_DIR / "baizefindb-postgres-backup.service").read_text(
+        encoding="utf-8"
+    ).lower()
+
+    forbidden = [
+        "telegram_bot_token",
+        "telegram_webhook_secret",
+        "webhook_url",
+        "password=",
+        "secret=",
+        "token=",
+        "curl ",
+        "sendmail",
+        "smtp",
+    ]
+    for marker in forbidden:
+        assert marker not in text
+
+
+def test_postgres_backup_timer_runs_daily_with_jitter() -> None:
+    timer = _read_unit("baizefindb-postgres-backup.timer")
+
+    assert timer["Timer"]["Unit"] == "baizefindb-postgres-backup.service"
+    assert timer["Timer"]["OnCalendar"] == "*-*-* 03:15:00"
+    assert timer["Timer"]["RandomizedDelaySec"] == "15min"
+    assert timer["Timer"]["Persistent"] == "true"
+    assert timer["Install"]["WantedBy"] == "timers.target"
+
+
 def _read_unit(name: str) -> configparser.ConfigParser:
     parser = configparser.ConfigParser(interpolation=None, strict=False)
     path = LINUX_DIR / name

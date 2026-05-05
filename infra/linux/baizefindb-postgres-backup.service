@@ -1,0 +1,14 @@
+[Unit]
+Description=BaizeFinDB PostgreSQL backup
+Requires=baizefindb.service
+After=baizefindb.service docker.service
+
+[Service]
+Type=oneshot
+User=baizefindb
+Group=baizefindb
+WorkingDirectory=/opt/baizefindb
+Environment="PATH=/home/baizefindb/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "BAIZEFINDB_BACKUP_CHECK_OUTPUT=evidence/postgres-backup-timer-check.json"
+ExecStartPre=/usr/bin/mkdir -p /opt/baizefindb/backups /opt/baizefindb/evidence
+ExecStartPre=/usr/bin/env uv run python infra/scripts/postgres_backup.py --backup-dir backups --check-only --check-json-output ${BAIZEFINDB_BACKUP_CHECK_OUTPUT}
+ExecStart=/usr/bin/env uv run python infra/scripts/postgres_backup.py --backup-dir backups
