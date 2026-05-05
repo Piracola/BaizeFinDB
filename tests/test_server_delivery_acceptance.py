@@ -62,6 +62,7 @@ def test_build_stage_specs_runs_delivery_checks_in_order(tmp_path: Path) -> None
         "--json-output",
         str(tmp_path / "server-runtime-check.json"),
     ]
+    assert stages[2].evidence_files == [tmp_path / "server-runtime-check.json"]
 
 
 def test_build_stage_specs_passes_custom_base_url_to_api_checks(tmp_path: Path) -> None:
@@ -86,6 +87,19 @@ def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path
     assert "--fail-on-warning" in stages[2].command
 
 
+def test_build_stage_specs_includes_optional_ops_evidence(tmp_path: Path) -> None:
+    args = _args(tmp_path, include_ops_evidence=True)
+
+    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[2]
+
+    assert "--ops-evidence-output" in runtime_stage.command
+    assert str(tmp_path / "server-ops-evidence.json") in runtime_stage.command
+    assert runtime_stage.evidence_files == [
+        tmp_path / "server-runtime-check.json",
+        tmp_path / "server-ops-evidence.json",
+    ]
+
+
 def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
     args = _args(tmp_path, runtime_samples=5, runtime_interval_seconds=7)
 
@@ -98,7 +112,12 @@ def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
 
 
 def test_build_stage_specs_marks_skipped_stages(tmp_path: Path) -> None:
-    args = _args(tmp_path, skip_backup_check=True, skip_runtime_check=True)
+    args = _args(
+        tmp_path,
+        skip_backup_check=True,
+        skip_runtime_check=True,
+        include_ops_evidence=True,
+    )
 
     stages = server_delivery_acceptance.build_stage_specs(args)
 
@@ -106,6 +125,7 @@ def test_build_stage_specs_marks_skipped_stages(tmp_path: Path) -> None:
     assert stages[1].command == []
     assert stages[2].name == "runtime_check"
     assert stages[2].command == []
+    assert stages[2].evidence_files == []
 
 
 def test_run_acceptance_runs_all_stages_by_default(monkeypatch, tmp_path: Path) -> None:
@@ -198,6 +218,67 @@ def test_run_stage_promotes_warning_evidence_status(monkeypatch, tmp_path: Path)
     assert result.status == "warn"
     assert result.ok
     assert result.evidence_statuses == {str(evidence): "warn"}
+
+
+def test_run_stage_promotes_optional_ops_evidence_warning(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    runtime_evidence = tmp_path / "runtime.json"
+    ops_evidence = tmp_path / "ops-evidence.json"
+    runtime_evidence.write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    ops_evidence.write_text(json.dumps({"status": "warning"}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        server_delivery_acceptance.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0),
+    )
+
+    result = server_delivery_acceptance.run_stage(
+        server_delivery_acceptance.StageSpec(
+            name="runtime_check",
+            command=["python", "helper.py"],
+            evidence_files=[runtime_evidence, ops_evidence],
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert result.status == "warn"
+    assert result.evidence_statuses == {
+        str(runtime_evidence): "ok",
+        str(ops_evidence): "warning",
+    }
+
+
+def test_run_stage_fails_for_missing_optional_ops_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    runtime_evidence = tmp_path / "runtime.json"
+    ops_evidence = tmp_path / "ops-evidence.json"
+    runtime_evidence.write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        server_delivery_acceptance.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0),
+    )
+
+    result = server_delivery_acceptance.run_stage(
+        server_delivery_acceptance.StageSpec(
+            name="runtime_check",
+            command=["python", "helper.py"],
+            evidence_files=[runtime_evidence, ops_evidence],
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert result.status == "fail"
+    assert result.evidence_statuses == {
+        str(runtime_evidence): "ok",
+        str(ops_evidence): "missing",
+    }
 
 
 def test_run_stage_fails_for_missing_expected_evidence(monkeypatch, tmp_path: Path) -> None:

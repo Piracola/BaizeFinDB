@@ -235,9 +235,10 @@ JSON. Warning-only evidence stays visible as non-blocking `warn`; missing,
 unreadable, invalid, failing, `error`, or `blocked` evidence marks the stage as
 `fail`. Use `--fail-on-warning` for production handoff gates that should return a
 non-zero exit code on warning-only acceptance while preserving report
-`status="warn"`. Use `--evidence-dir`, `--runtime-samples`,
-`--runtime-interval-seconds`, and `--fail-fast` to adjust the evidence bundle or
-stop on the first failing stage.
+`status="warn"`. Add `--include-ops-evidence` when the same evidence bundle should
+also contain sanitized OPS evidence from the runtime stage. Use `--evidence-dir`,
+`--runtime-samples`, `--runtime-interval-seconds`, and `--fail-fast` to adjust the
+evidence bundle or stop on the first failing stage.
 
 Verify Tushare `stock_basic` without writing to the database:
 

@@ -112,6 +112,15 @@ failure，但 CLI 会返回非零；该严格模式也会透传给运行采样�
 uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --fail-on-warning
 ```
 
+如果需要把脱敏 OPS evidence 也放入同一验收包，可以加 `--include-ops-evidence`。
+该参数会让 runtime stage 额外写
+`<evidence-dir>/server-ops-evidence.json`，并把该文件的顶层 `status` 纳入
+交付验收汇总；默认不写也不期望这个文件：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-ops-evidence
+```
+
 它只编排已有 helper，不直接导出数据库、不读取 `.env` 内容、不输出展开后的 compose
 environment。需要调整证据目录、运行采样窗口，或在首个失败阶段停止：
 

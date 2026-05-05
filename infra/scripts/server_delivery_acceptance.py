@@ -102,6 +102,7 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             )
         )
     else:
+        runtime_report = evidence_dir / "server-runtime-check.json"
         runtime_command = [
             python_executable,
             "infra/scripts/server_runtime_check.py",
@@ -112,9 +113,14 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             "--interval-seconds",
             str(args.runtime_interval_seconds),
             "--include-ops-trends",
-            "--json-output",
-            str(evidence_dir / "server-runtime-check.json"),
         ]
+        runtime_evidence_files = [runtime_report]
+        if args.include_ops_evidence:
+            ops_evidence = evidence_dir / "server-ops-evidence.json"
+            runtime_command.extend(["--ops-evidence-output", str(ops_evidence)])
+            runtime_evidence_files.append(ops_evidence)
+
+        runtime_command.extend(["--json-output", str(runtime_report)])
         if args.fail_on_warning:
             runtime_command.append("--fail-on-warning")
 
@@ -122,7 +128,7 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             StageSpec(
                 name="runtime_check",
                 command=runtime_command,
-                evidence_files=[evidence_dir / "server-runtime-check.json"],
+                evidence_files=runtime_evidence_files,
             )
         )
 
@@ -299,6 +305,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Return a failing exit code for warning-only acceptance and pass the "
             "strict warning mode to server_runtime_check.py."
+        ),
+    )
+    parser.add_argument(
+        "--include-ops-evidence",
+        action="store_true",
+        help=(
+            "Ask server_runtime_check.py to write sanitized read-only OPS evidence "
+            "inside the acceptance evidence directory."
         ),
     )
     return parser
