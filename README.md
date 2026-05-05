@@ -56,6 +56,7 @@
 - `/radar/signals` 查看候选信号列表
 - `/radar/signals/{signal_id}` 查看候选信号和证据
 - `/radar/signals/{signal_id}/analysis` 查看后端生成的只读研究摘要：基于已有信号、证据和审查数据，输出 bounded key points、metric highlights、risk flags、evidence/review summary、agent inputs、确定性 `agent_assessments` 和 next actions；当前 agent assessments 是后端规则化多 agent scaffold，不调用 LLM、不做真实多模型编排，不改变规则定级，不输出原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令
+- `infra/scripts/model_provider_readiness.py --json-output <path>` 可做未来 LLM-backed 多 agent 接入前的只读配置自检；默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled`，不会调用模型、验证 token、读取数据库、生成报告、发送 Telegram 或输出 API key。启用前可配置 `MODEL_PROVIDER=openai` + `MODEL_PRIMARY_MODEL` + `OPENAI_API_KEY`，或 `MODEL_PROVIDER=custom` + `MODEL_PRIMARY_MODEL` + `MODEL_API_BASE_URL` + `MODEL_API_KEY`
 - `/radar/signals/{signal_id}/review` 对单个雷达信号执行轻量规则审查
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由
@@ -143,6 +144,14 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 `server_deploy_check.py --check-server-compose-contract` 可选解析 `docker compose -f docker-compose.yml -f docker-compose.server.yml config --format json` 的结果，验证 `api`、`worker`、`beat`、`postgres`、`redis` 服务存在，API/worker/beat 的 server 环境变量、healthy PostgreSQL/Redis 依赖、API 8000 端口和 `/health` healthcheck、Celery worker/beat 命令、beat schedule 文件和 `restart: unless-stopped` 不漂移。该检查不启动容器；compose JSON 命令失败时不输出 stdout，避免把展开后的 env 值写进日志。
 
 `server_deploy_check.py --check-telegram-strict-binding` 可选读取 `/telegram/status`，确认公网/生产式 Telegram 白名单入口是否已经关闭本地开放兜底：`TELEGRAM_REQUIRE_BINDING=true` 为通过；未开启严格绑定但存在环境白名单或 active 数据库绑定也为通过；未开启严格绑定且无白名单/active 绑定时为非阻塞 warning。该检查只读 API 状态，只输出计数和模式，不读取 `.env` 明文、不调用 `/telegram/bindings`、不发送 Telegram、不输出 token、secret 或 raw chat id。
+
+模型 Provider readiness 仍是本地配置预检，不代表已启用真实多 agent 编排：
+
+```powershell
+uv run python infra/scripts/model_provider_readiness.py --json-output evidence/model-provider-readiness.json
+```
+
+默认禁用模型分析时该检查为 OK；显式启用后会检查 provider、primary/fallback model、API base URL 和 key 是否具备，不会发起网络请求或模型调用。`MODEL_AUDIT_STORE_RAW_PROMPT=true` 会作为 warning 出现，默认保持 false。
 
 需要把 server compose runtime contract 检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-server-compose-contract-check`；该参数只会让 deploy preflight 阶段追加 `--check-server-compose-contract`，不新增独立阶段、不启动容器、不把该检查传给 backup/runtime/Telegram 阶段。
 

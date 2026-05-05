@@ -23,6 +23,19 @@ def test_settings_defaults() -> None:
     assert not settings.telegram_webhook_secret_enabled
     assert settings.telegram_require_binding is False
     assert settings.telegram_push_enabled is False
+    assert settings.model_analysis_enabled is False
+    assert settings.model_provider == "disabled"
+    assert settings.model_provider_normalized == "disabled"
+    assert settings.model_primary_model is None
+    assert settings.model_fallback_model is None
+    assert settings.model_api_base_url is None
+    assert settings.model_api_key is None
+    assert settings.openai_api_key is None
+    assert settings.model_primary_model_configured is False
+    assert settings.model_fallback_model_configured is False
+    assert settings.model_api_base_url_configured is False
+    assert settings.model_api_key_configured is False
+    assert settings.openai_api_key_configured is False
     assert settings.model_audit_store_raw_prompt is False
     assert settings.ops_disk_free_percent_alert_threshold == 10.0
     assert settings.ops_cpu_usage_percent_alert_threshold == 90.0
@@ -87,3 +100,23 @@ def test_settings_reads_model_audit_environment(monkeypatch) -> None:
 
     assert settings.model_audit_store_raw_prompt is True
 
+
+def test_settings_reads_model_provider_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_ANALYSIS_ENABLED", "true")
+    monkeypatch.setenv("MODEL_PROVIDER", "OpenAI")
+    monkeypatch.setenv("MODEL_PRIMARY_MODEL", "gpt-test-primary")
+    monkeypatch.setenv("MODEL_FALLBACK_MODEL", "gpt-test-fallback")
+    monkeypatch.setenv("MODEL_API_BASE_URL", "https://models.example.test/v1")
+    monkeypatch.setenv("MODEL_API_KEY", "custom-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+
+    settings = Settings()
+
+    assert settings.model_analysis_enabled is True
+    assert settings.model_provider == "OpenAI"
+    assert settings.model_provider_normalized == "openai"
+    assert settings.model_primary_model_configured is True
+    assert settings.model_fallback_model_configured is True
+    assert settings.model_api_base_url_configured is True
+    assert settings.model_api_key_configured is True
+    assert settings.openai_api_key_configured is True

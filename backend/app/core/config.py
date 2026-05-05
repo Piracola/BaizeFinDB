@@ -61,6 +61,16 @@ class Settings(BaseSettings):
         alias="TELEGRAM_REQUIRE_BINDING",
     )
     telegram_push_enabled: bool = Field(default=False, alias="TELEGRAM_PUSH_ENABLED")
+    model_analysis_enabled: bool = Field(
+        default=False,
+        alias="MODEL_ANALYSIS_ENABLED",
+    )
+    model_provider: str = Field(default="disabled", alias="MODEL_PROVIDER")
+    model_primary_model: str | None = Field(default=None, alias="MODEL_PRIMARY_MODEL")
+    model_fallback_model: str | None = Field(default=None, alias="MODEL_FALLBACK_MODEL")
+    model_api_base_url: str | None = Field(default=None, alias="MODEL_API_BASE_URL")
+    model_api_key: str | None = Field(default=None, alias="MODEL_API_KEY")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     model_audit_store_raw_prompt: bool = Field(
         default=False,
         alias="MODEL_AUDIT_STORE_RAW_PROMPT",
@@ -115,6 +125,30 @@ class Settings(BaseSettings):
     @property
     def tushare_token_configured(self) -> bool:
         return bool(self.tushare_token and self.tushare_token.strip())
+
+    @property
+    def model_provider_normalized(self) -> str:
+        return self.model_provider.strip().lower() if self.model_provider else "disabled"
+
+    @property
+    def model_primary_model_configured(self) -> bool:
+        return bool(self.model_primary_model and self.model_primary_model.strip())
+
+    @property
+    def model_fallback_model_configured(self) -> bool:
+        return bool(self.model_fallback_model and self.model_fallback_model.strip())
+
+    @property
+    def model_api_base_url_configured(self) -> bool:
+        return bool(self.model_api_base_url and self.model_api_base_url.strip())
+
+    @property
+    def model_api_key_configured(self) -> bool:
+        return bool(self.model_api_key and self.model_api_key.strip())
+
+    @property
+    def openai_api_key_configured(self) -> bool:
+        return bool(self.openai_api_key and self.openai_api_key.strip())
 
 
 @lru_cache

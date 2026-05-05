@@ -273,8 +273,28 @@ TELEGRAM_ALLOWED_CHAT_IDS=
 TELEGRAM_WEBHOOK_SECRET=
 TELEGRAM_REQUIRE_BINDING=false
 TELEGRAM_PUSH_ENABLED=false
+```
+
+未来接入 LLM-backed 多 agent 前，先保持模型分析禁用，并用只读 readiness
+检查配置形状和 secret posture：
+
+```dotenv
+MODEL_ANALYSIS_ENABLED=false
+MODEL_PROVIDER=disabled
+MODEL_PRIMARY_MODEL=
+MODEL_FALLBACK_MODEL=
+MODEL_API_BASE_URL=
+MODEL_API_KEY=
+OPENAI_API_KEY=
 MODEL_AUDIT_STORE_RAW_PROMPT=false
 ```
+
+```powershell
+uv run python infra/scripts/model_provider_readiness.py --json-output evidence/model-provider-readiness.json
+```
+
+该检查只读取配置，不调用模型、不验证 token、不访问数据库、不生成报告、不发送 Telegram。
+`MODEL_AUDIT_STORE_RAW_PROMPT=true` 只用于明确 debug，会在 readiness 中显示为 warning。
 
 本地开发时可以先不填 `TELEGRAM_BOT_TOKEN`。此时 webhook 不会调用 Telegram Bot API，而是返回 `preview`，方便直接看 Bot 会发送的中文内容。
 
