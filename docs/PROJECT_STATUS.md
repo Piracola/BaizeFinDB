@@ -31,12 +31,13 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
 2026-05-05 已把主开发环境迁移到 Linux 服务器
-`/home/ling/projects/finance/BaizeFinDB`：`uv` 已安装，Linux `.venv` 已重建，
-Windows 迁移虚拟环境已移入迁移备份目录，迁移产生的 CRLF 假改动已清理。
+`/home/ling/projects/finance/BaizeFinDB`：`uv` 和 `python3-tk` 已安装，
+Linux `.venv` 已重建，Windows 迁移虚拟环境已移入迁移备份目录，
+迁移产生的 CRLF 假改动已清理。
 当前服务器门禁已通过 `ruff check`、`pytest`、Alembic SQL 生成、base/server
-compose config 和基础部署预检；其中 pytest 为 `336 passed, 32 skipped`，
-Tkinter/PowerShell 相关 Windows GUI/launcher 项在缺少系统 GUI/PowerShell
-能力的 Linux 服务器上跳过。
+compose config 和基础部署预检；其中 pytest 为 `357 passed, 31 skipped`，
+Windows GUI helper 测试已可运行，剩余跳过项主要是 Linux 服务器缺少
+PowerShell/Windows 打包脚本运行环境。
 
 下一阶段开发基线切换为 **M5 生产化验证和真实数据增强**。核心是让现有雷达闭环在 Docker / Linux 服务器上可持续运行、可观测、可恢复，并逐步接入更稳定的真实公告、监管、情绪和后续评分校准数据源。
 
