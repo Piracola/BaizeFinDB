@@ -189,10 +189,10 @@ Windows 客户端：
 - `RADAR_CONTINUITY_WINDOW_MINUTES`：连续 P1 计算窗口，默认 `30`。
 - `TUSHARE_ANNS_D_BEAT_ENABLED`：Tushare 公告 Beat 开关，默认 `false`。
 - `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS`：Tushare 公告 Beat 间隔，默认 `3600`。
-- `infra/scripts/check_tushare_anns_d_beat_enablement.py`：Tushare `anns_d` Beat 启用前 JSON checklist，默认离线/no-token，汇总 sample gate、token、Beat 启停、interval、live verify 和 readiness/live data 检查状态。
+- `infra/scripts/check_tushare_anns_d_beat_enablement.py`：Tushare `anns_d` Beat 启用前 JSON checklist，默认离线/no-token，汇总 sample gate、雷达风险公告 golden gate、token、Beat 启停、interval、live verify 和 readiness/live data 检查状态。
 - `infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement`：可选部署预检集成项，复用上述 checklist；`warn` 只告警不阻断，只有 checklist `fail` 会让部署预检失败。
 - `infra/scripts/verify_tushare_anns_d_preflight.py`：离线/no-token `anns_d` 预调度校验，读取本地 golden case，验证必需字段、重大风险 P0 样例和普通公告无风险信号样例。
-- `golden_cases/radar_m5_risk_announcements.json`：完整雷达扫描 golden cases，覆盖 Tushare 重大风险公告、退市风险公告映射 risk P0，以及普通公告不生成信号。
+- `golden_cases/radar_m5_risk_announcements.json`：完整雷达扫描 golden cases，覆盖 Tushare 重大风险公告、退市风险公告映射 risk P0，以及普通公告不生成信号；默认已纳入 `check_tushare_anns_d_beat_enablement.py` 的离线启用前 gate。
 - `infra/scripts/verify_tushare_stock_basic.py --json-output <path>`、`infra/scripts/verify_tushare_announcements.py --json-output <path>`、`infra/scripts/verify_tushare_stock_company.py --json-output <path>`：真实 token live verify 脱敏 evidence 输出；不写数据库，成功和失败都会保存状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去 URL/source/token/secret-like 字段的少量归一化样例或错误摘要，样例值会递归脱敏并截断超长文本。
 - `evidence/`、`runtime-check*.json` 和 `ops-evidence*.json`：本地/服务器运行证据产物，已加入 `.gitignore`，真实 token 环境下生成后不要提交到 git。
 

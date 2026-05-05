@@ -152,7 +152,7 @@ uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 ```
 
-`check_tushare_anns_d_beat_enablement.py` 会把本地 sample gate、token 是否缺失、Beat 当前启停、interval 是否有效、live verify 仍需执行、readiness/live data 默认未检查等 gate 标成 `pass`、`warn` 或 `fail`。需要把 `/providers/tushare/readiness` 也纳入只读检查时，显式加 `--check-readiness`；它仍不能替代真实 Tushare `anns_d` live verify。
+`check_tushare_anns_d_beat_enablement.py` 会把本地 sample gate、`golden_cases/radar_m5_risk_announcements.json` 雷达风险公告 golden gate、token 是否缺失、Beat 当前启停、interval 是否有效、live verify 仍需执行、readiness/live data 默认未检查等 gate 标成 `pass`、`warn` 或 `fail`。需要把 `/providers/tushare/readiness` 也纳入只读检查时，显式加 `--check-readiness`；它仍不能替代真实 Tushare `anns_d` live verify。
 
 手动抓取股票基础信息：
 
@@ -447,7 +447,7 @@ TELEGRAM_PUSH_ENABLED=false
 TELEGRAM_REQUIRE_BINDING=false
 ```
 
-`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 和 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 checklist、`anns_d` 归一化必需字段、重大风险 P0 样例和普通公告无信号样例仍符合预期，再执行 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存脱敏 live evidence。
+`TUSHARE_ANNS_D_BEAT_ENABLED=false` 是默认策略，不改变 5 分钟主雷达闭环。只有显式设置为 `true` 时，Beat 才会额外加入 `baizefindb.providers.collect_tushare_announcements`，按 `TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS` 抓取当天 `anns_d` 公告。改成 `true` 前先执行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 和 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，确认 checklist、`anns_d` 归一化必需字段、重大风险 P0 样例、普通公告无信号样例，以及完整雷达风险公告 golden cases 仍符合预期，再执行 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存脱敏 live evidence。
 
 需要调试后台任务时，先启动 worker：
 

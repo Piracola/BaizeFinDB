@@ -31,6 +31,7 @@ def test_default_no_token_behavior_is_offline_warning(monkeypatch, capsys) -> No
     assert payload["database_mutated"] is False
     assert "\\u" not in captured.out
     assert by_id["offline_sample_preflight"]["status"] == "pass"
+    assert by_id["radar_risk_announcement_golden_cases"]["status"] == "pass"
     assert by_id["tushare_token"]["status"] == "warn"
     assert by_id["tushare_token"]["details"]["configured"] is False
     assert by_id["beat_enabled_state"]["status"] == "pass"
@@ -116,16 +117,72 @@ def test_invalid_interval_fails_and_returns_nonzero(monkeypatch, capsys) -> None
     assert "positive" in by_id["beat_interval"]["message"]
 
 
+def test_missing_radar_risk_cases_file_fails_checklist(tmp_path: Path) -> None:
+    payload = check_tushare_anns_d_beat_enablement.build_report(
+        environ={},
+        radar_risk_cases_path=tmp_path / "missing-radar-cases.json",
+    )
+    by_id = {item["id"]: item for item in payload["checklist"]}
+
+    assert payload["status"] == "fail"
+    assert by_id["radar_risk_announcement_golden_cases"]["status"] == "fail"
+    assert "FileNotFoundError" in by_id["radar_risk_announcement_golden_cases"][
+        "details"
+    ]["error"]
+
+
+def test_cli_accepts_custom_radar_risk_cases_path(tmp_path: Path, capsys) -> None:
+    case_path = tmp_path / "radar-risk-cases.json"
+    case_path.write_text(
+        json.dumps(
+            [
+                {
+                    "name": "ordinary_announcements_do_not_create_radar_signals",
+                    "rows": [
+                        {
+                            "ann_date": "20260503",
+                            "ts_code": "000004.SZ",
+                            "name": "普通样例一",
+                            "title": "董事会决议公告",
+                        }
+                    ],
+                    "expected": {
+                        "status": "no_data",
+                        "candidate_count": 0,
+                        "priority_counts": {},
+                        "signals": [],
+                    },
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = check_tushare_anns_d_beat_enablement.main(
+        ["--radar-risk-cases", str(case_path)]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    by_id = {item["id"]: item for item in payload["checklist"]}
+    assert exit_code == 0
+    assert by_id["radar_risk_announcement_golden_cases"]["status"] == "pass"
+    assert by_id["radar_risk_announcement_golden_cases"]["details"][
+        "cases_path"
+    ] == str(case_path)
+
+
 def test_output_contract_contains_expected_gate_ids() -> None:
     payload = check_tushare_anns_d_beat_enablement.build_report(environ={})
     gate_ids = [item["id"] for item in payload["checklist"]]
 
     assert payload["endpoint"] == "anns_d"
     assert payload["generated_by"] == "check_tushare_anns_d_beat_enablement"
-    assert payload["summary"] == {"pass": 3, "warn": 3, "fail": 0}
+    assert payload["summary"] == {"pass": 4, "warn": 3, "fail": 0}
     assert payload["safe_to_enable_beat"] is False
     assert gate_ids == [
         "offline_sample_preflight",
+        "radar_risk_announcement_golden_cases",
         "tushare_token",
         "beat_enabled_state",
         "beat_interval",

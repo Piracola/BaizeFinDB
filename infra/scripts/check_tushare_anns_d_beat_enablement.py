@@ -7,10 +7,18 @@ import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
-from app.providers.tushare_anns_preflight import PreflightReport, validate_anns_d_preflight_cases
+from app.providers.tushare_anns_preflight import (
+    PreflightReport,
+    RadarRiskGoldenReport,
+    validate_anns_d_preflight_cases,
+    validate_radar_risk_announcement_golden_cases,
+)
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_CASES_PATH = ROOT_DIR / "golden_cases" / "tushare_anns_d_preflight.json"
+DEFAULT_RADAR_RISK_CASES_PATH = (
+    ROOT_DIR / "golden_cases" / "radar_m5_risk_announcements.json"
+)
 DEFAULT_READINESS_URL = "http://127.0.0.1:8000/providers/tushare/readiness"
 DEFAULT_ANNS_D_BEAT_INTERVAL_SECONDS = 3600
 SCRIPT_NAME = "check_tushare_anns_d_beat_enablement"
@@ -27,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--cases",
         default=str(DEFAULT_CASES_PATH),
         help="Path to local JSON preflight cases.",
+    )
+    parser.add_argument(
+        "--radar-risk-cases",
+        default=str(DEFAULT_RADAR_RISK_CASES_PATH),
+        help="Path to local radar risk announcement golden cases.",
     )
     parser.add_argument(
         "--check-readiness",
@@ -53,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
 def build_report(
     *,
     cases_path: Path = DEFAULT_CASES_PATH,
+    radar_risk_cases_path: Path = DEFAULT_RADAR_RISK_CASES_PATH,
     environ: Mapping[str, str] | None = None,
     check_readiness: bool = False,
     readiness_url: str = DEFAULT_READINESS_URL,
@@ -63,6 +77,10 @@ def build_report(
 
     preflight_report = _run_offline_preflight(cases_path)
     checklist.append(_offline_preflight_gate(preflight_report, cases_path))
+    radar_risk_report = _run_radar_risk_golden_cases(radar_risk_cases_path)
+    checklist.append(
+        _radar_risk_golden_gate(radar_risk_report, radar_risk_cases_path)
+    )
     checklist.append(_token_gate(env))
     checklist.append(_beat_enabled_gate(env))
     checklist.append(_interval_gate(env))
@@ -94,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = build_report(
         cases_path=Path(args.cases),
+        radar_risk_cases_path=Path(args.radar_risk_cases),
         check_readiness=args.check_readiness,
         readiness_url=args.readiness_url,
         timeout_seconds=args.timeout_seconds,
@@ -105,6 +124,15 @@ def main(argv: list[str] | None = None) -> int:
 def _run_offline_preflight(cases_path: Path) -> PreflightReport | Exception:
     try:
         return validate_anns_d_preflight_cases(_load_cases(cases_path))
+    except Exception as exc:
+        return exc
+
+
+def _run_radar_risk_golden_cases(
+    cases_path: Path,
+) -> RadarRiskGoldenReport | Exception:
+    try:
+        return validate_radar_risk_announcement_golden_cases(_load_cases(cases_path))
     except Exception as exc:
         return exc
 
@@ -153,6 +181,38 @@ def _offline_preflight_gate(
             "case_count": preflight_report.case_count,
             "issue_count": len(preflight_report.issues),
             "required_fields": preflight_report.required_fields,
+        },
+    }
+
+
+def _radar_risk_golden_gate(
+    radar_risk_report: RadarRiskGoldenReport | Exception,
+    cases_path: Path,
+) -> dict[str, object]:
+    if isinstance(radar_risk_report, Exception):
+        return {
+            "id": "radar_risk_announcement_golden_cases",
+            "status": "fail",
+            "message": "radar risk announcement golden cases could not run",
+            "details": {
+                "cases_path": str(cases_path),
+                "error": f"{radar_risk_report.__class__.__name__}: {str(radar_risk_report)[:800]}",
+            },
+        }
+
+    return {
+        "id": "radar_risk_announcement_golden_cases",
+        "status": "pass" if radar_risk_report.ok else "fail",
+        "message": (
+            "radar risk announcement golden cases passed"
+            if radar_risk_report.ok
+            else "radar risk announcement golden cases failed"
+        ),
+        "details": {
+            "cases_path": str(cases_path),
+            "validator_status": radar_risk_report.status,
+            "case_count": radar_risk_report.case_count,
+            "issue_count": len(radar_risk_report.issues),
         },
     }
 
@@ -342,6 +402,7 @@ def _summarize(checklist: list[dict[str, object]]) -> dict[str, int]:
 def _safe_to_enable(checklist: list[dict[str, object]]) -> bool:
     required_gate_ids = {
         "offline_sample_preflight",
+        "radar_risk_announcement_golden_cases",
         "tushare_token",
         "beat_enabled_state",
         "beat_interval",
