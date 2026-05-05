@@ -81,6 +81,7 @@ def test_frontend_assets_are_served() -> None:
     assert "statusCardClass" in js_response.text
     assert "loadPortfolio" in js_response.text
     assert "createReport" in js_response.text
+    assert "createDeepReport" in js_response.text
     assert "loadPeriodicReport" in js_response.text
     assert "scoreSelectedSignal" in js_response.text
     assert "renderScoreComponents" in js_response.text
@@ -130,6 +131,38 @@ def test_frontend_assets_are_served() -> None:
     assert "backtrace-list" in css_response.text
     assert "analysis-brief" in css_response.text
     assert "analysis-grid" in css_response.text
+
+
+def test_frontend_manual_deep_report_action_uses_confirmed_backend_endpoint() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    quick_start = js_text.index("async function createReport")
+    quick_end = js_text.index("async function createDeepReport")
+    quick_block = js_text[quick_start:quick_end]
+    deep_start = js_text.index("async function createDeepReport")
+    deep_end = js_text.index("async function scoreSelectedSignal")
+    deep_block = js_text[deep_start:deep_end]
+    detail_start = js_text.index("function renderSignalDetail")
+    detail_end = js_text.index("function renderSignalAnalysisBrief")
+    detail_block = js_text[detail_start:detail_end]
+
+    assert 'postJson(`/reports/from-signal${portfolioQuery()}`' in quick_block
+    assert 'report_type: reportType' in quick_block
+    assert "deep" not in quick_block.lower()
+    assert "window.confirm" in deep_block
+    assert 'postJson(`/reports/deep/from-signal${portfolioQuery()}`' in deep_block
+    assert "confirm_deep_report: true" in deep_block
+    assert "report_type" not in deep_block
+    assert "loadReports()" in deep_block
+    assert 'data-deep-report="true"' in detail_block
+    assert 'data-report-type="quick"' in detail_block
+    assert 'data-report-type="standard"' in detail_block
+    assert "createDeepReport" in detail_block
+    assert 'createReport("deep")' not in js_text
 
 
 def test_frontend_ops_warning_drilldown_keeps_backend_owned_status_boundary() -> None:

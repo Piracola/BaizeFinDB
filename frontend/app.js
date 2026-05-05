@@ -456,6 +456,37 @@ async function createReport(reportType) {
   }
 }
 
+async function createDeepReport() {
+  if (!state.selectedSignalId) {
+    showMessage("error", "请先选择一个信号。");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "Deep Report 会生成更长的研究记录。确认手动生成当前信号的 Deep Report？",
+  );
+  if (!confirmed) {
+    showMessage("info", "已取消 Deep Report 生成。");
+    return;
+  }
+
+  setButtonsBusy(true);
+  showMessage("info", `正在生成信号 #${state.selectedSignalId} Deep Report。`);
+
+  try {
+    const report = await postJson(`/reports/deep/from-signal${portfolioQuery()}`, {
+      signal_id: Number(state.selectedSignalId),
+      confirm_deep_report: true,
+    });
+    showMessage("info", `Deep Report 已生成：#${report.id} ${report.title}`);
+    await loadReports();
+  } catch (error) {
+    showMessage("error", `生成 Deep Report 失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
 async function scoreSelectedSignal() {
   if (!state.selectedSignalId) {
     showMessage("error", "请先选择一个信号。");
@@ -1327,6 +1358,7 @@ function renderSignalDetail(detail, analysis = null, analysisError = null) {
       <div class="report-actions">
         <button type="button" data-report-type="quick">生成 Quick Report</button>
         <button type="button" data-report-type="standard">生成 Standard Report</button>
+        <button type="button" data-deep-report="true">生成 Deep Report</button>
         <button type="button" data-score-signal="true">生成综合评分</button>
       </div>
     </article>
@@ -1373,6 +1405,7 @@ function renderSignalDetail(detail, analysis = null, analysisError = null) {
   elements.signalDetail.querySelectorAll("[data-report-type]").forEach((button) => {
     button.addEventListener("click", () => createReport(button.dataset.reportType));
   });
+  elements.signalDetail.querySelector("[data-deep-report]").addEventListener("click", createDeepReport);
   elements.signalDetail.querySelector("[data-score-signal]").addEventListener("click", scoreSelectedSignal);
 }
 
@@ -1556,7 +1589,9 @@ function renderWatchlistItems(items) {
 
 function renderReports(reports) {
   if (!Array.isArray(reports) || reports.length === 0) {
-    elements.reportsList.innerHTML = emptyState("暂无报告。选择信号后可生成 quick 或 standard report。");
+    elements.reportsList.innerHTML = emptyState(
+      "暂无报告。选择信号后可生成 quick、standard 或确认后的 deep report。",
+    );
     return;
   }
 
