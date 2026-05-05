@@ -349,6 +349,12 @@ docker compose up -d postgres redis
 uv run alembic upgrade head
 ```
 
+查看当前数据库迁移、表和关键业务表计数，不输出连接串、密码或行内容：
+
+```powershell
+uv run python infra/scripts/database_inventory.py --json-output evidence/database-inventory.json
+```
+
 新库只完成迁移后仍是空业务库。需要让 Web、Windows 客户端、Telegram 和
 M5 smoke check 立刻有样例可用时，可写入可重复执行的开发/演示数据：
 

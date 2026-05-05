@@ -6,6 +6,10 @@
 
 当前 Alembic head：`202605030010`。
 
+可用 `uv run python infra/scripts/database_inventory.py --json-output evidence/database-inventory.json`
+只读查看当前数据库的 dialect/driver、repo head、已应用迁移、应用表存在情况和关键表计数；
+该 helper 不输出数据库连接串、密码、行内容、Provider 原始数据、报告正文或 prompt。
+
 | 表 | 阶段 | 作用 |
 | --- | --- | --- |
 | `schema_health_checks` | M1 | 数据库连通和 schema 健康检查预留表 |

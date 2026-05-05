@@ -487,7 +487,20 @@ docker compose ps
 
 期望 `postgres` 和 `redis` 都是 `healthy`。
 
-### 7.2 进入 PostgreSQL
+### 7.2 只读数据库清单
+
+优先用只读清单确认当前数据库、迁移和关键业务表计数。该命令不会输出数据库连接串、
+密码、行内容、Provider 原始数据、报告正文或 prompt：
+
+```powershell
+uv run python infra/scripts/database_inventory.py --json-output evidence/database-inventory.json
+```
+
+正常本地库会显示类似 `database=postgresql+asyncpg url=redacted`、
+`repo_heads=202605030010`、`applied_versions=202605030010` 和
+`tables=16/16 application present`。如果只迁移未 seed，业务行数可以是 0。
+
+### 7.3 进入 PostgreSQL
 
 ```powershell
 docker compose exec postgres psql -U baizefindb -d baizefindb
@@ -502,7 +515,7 @@ select id, endpoint, status, row_count, created_at from provider_fetch_logs orde
 select id, status, started_at, finished_at from radar_scan_batches order by id desc limit 10;
 ```
 
-### 7.3 重置本地数据库
+### 7.4 重置本地数据库
 
 会删除本地 Docker volume 内的数据，只在开发环境使用：
 

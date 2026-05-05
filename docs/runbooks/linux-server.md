@@ -10,6 +10,7 @@
 | `.dockerignore` | 排除 `.env`、虚拟环境、缓存和本地日志，避免把 secrets 或本地状态打进镜像。 |
 | `docker-compose.server.yml` | 服务器 compose overlay，新增 `api`、`worker`、`beat` 服务，依赖 healthy 的 `postgres` / `redis`。 |
 | `infra/scripts/dev_environment_check.py` | 开发环境只读自检脚本，验证 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、Tkinter、PowerShell 可选项和 Git 工作区。 |
+| `infra/scripts/database_inventory.py` | 数据库只读清单脚本，输出脱敏迁移状态、应用表存在情况和关键表计数，不输出连接串或行内容。 |
 | `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选 server compose runtime contract、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、Ops 趋势快照、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
 | `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，可选读取 Ops 趋势快照，用退出码区分阻塞状态。 |
 | `infra/scripts/server_monitor_check.py` | cron/systemd 友好的 compact monitor summary 脚本，可在同一次只读采样里额外写 no-send alert payload。 |
@@ -37,9 +38,14 @@
 ```powershell
 docker compose up -d postgres redis
 uv run alembic upgrade head
+uv run python infra/scripts/database_inventory.py --json-output evidence/database-inventory.json
 uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json
 uv run uvicorn app.main:app --reload
 ```
+
+`database_inventory.py` 只读当前 `DATABASE_URL` 指向的数据库，用于确认 Alembic repo
+head、已应用迁移、应用表是否齐全和关键表计数；输出固定把数据库 URL 标记为
+`redacted`，不导出行内容、Provider 原始数据、报告正文、prompt 或 secrets。
 
 `seed_demo_data.py` 只用于开发/演示或服务器迁移后首用验证；它写入合成 demo 用户、
 持仓/自选、雷达信号、证据、审查和 quick 报告，不访问真实数据源、不写 token、

@@ -24,6 +24,8 @@ Web 雷达终端工作台已在状态面板加入只读 OPS 趋势摘要、OPS �
 
 `infra/scripts/dev_environment_check.py` 已新增为开发环境只读自检入口，可在新机器迁移或继续开发前检查 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、Tkinter、PowerShell 可选项和 Git 工作区，并可写出有界 JSON evidence；它不安装软件、不启动容器、不输出 `.env` 或 secrets。
 
+`infra/scripts/database_inventory.py` 已新增为数据库只读清单入口：读取当前 `DATABASE_URL` 指向的数据库，输出脱敏 dialect/driver、Alembic repo head、已应用迁移、应用表存在情况和关键业务表计数，可用 `--json-output` 保存 evidence；该脚本不输出数据库连接串、密码、行内容、Provider 原始数据、报告正文、prompt 或 secrets，不执行迁移、seed、采集、扫描、报告、推送或模型调用。
+
 `infra/scripts/server_alert_telegram_service_verify.py` 已新增为手动 Telegram alert systemd service 的只读 evidence 验证入口：读取 `server-alert-telegram-env-check.json`、`server-alert-telegram-send.json` 和 `server-alert-telegram-dedupe-state.json`，确认 env check、显式 send 和 dedupe state 是否满足后续调度前提；`sent` / `deduped` 且 state 有效为 `ok`，`skipped` 为非阻塞 `warn`，preview、配置错误、发送失败、损坏或缺失 evidence 为 `fail`，报告不输出 token、raw chat id、raw URL、env 文件内容或 message preview。
 
 `server_delivery_acceptance.py` 已可用 `--include-alert-telegram-service-verify` 把上述手动 alert service evidence 验证纳入同一交付验收包；该阶段只调用 verifier 读取已有 JSON evidence，不启动 systemd、不发送 Telegram、不读取凭据明文。

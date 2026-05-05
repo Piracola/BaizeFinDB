@@ -10,6 +10,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
+| `../scripts/database_inventory.py` | Read-only database inventory for sanitized migration status, application table presence, and key table counts. |
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional server compose runtime contract, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, Telegram strict binding readiness, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture and no-send alert payload generation before delivery adapters are implemented. |
@@ -155,6 +156,13 @@ Run migrations:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.server.yml run --rm api alembic upgrade head
+```
+
+Inspect the configured database without dumping row contents or printing the
+connection URL:
+
+```bash
+uv run python infra/scripts/database_inventory.py --json-output evidence/database-inventory.json
 ```
 
 Optional development/demo data for first-use validation:
