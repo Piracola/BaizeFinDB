@@ -701,6 +701,40 @@ def test_fetch_signal_analysis_uses_signal_analysis_endpoint() -> None:
     }
 
 
+def test_fetch_signal_model_analysis_draft_posts_to_manual_endpoint() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["method"] = request.get_method()
+        calls["data"] = request.data
+        calls["timeout"] = timeout
+        return FakeResponse(
+            json.dumps(
+                {
+                    "signal_id": 7,
+                    "model_status": "disabled",
+                    "draft_status": "not_available",
+                    "boundary": "manual only",
+                },
+            ),
+        )
+
+    draft = client_api.fetch_signal_model_analysis_draft(
+        "http://localhost:8000",
+        7,
+        opener=opener,
+    )
+
+    assert draft["draft_status"] == "not_available"
+    assert calls == {
+        "url": "http://localhost:8000/radar/signals/7/model-analysis-draft",
+        "method": "POST",
+        "data": None,
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
 def test_format_signal_analysis_outputs_backend_brief_without_sensitive_terms() -> None:
     text = client_api.format_signal_analysis(
         {
@@ -800,6 +834,82 @@ def test_format_signal_analysis_outputs_backend_brief_without_sensitive_terms() 
     assert "sell" not in text.lower()
     assert "买入" not in text
     assert "卖出" not in text
+
+
+def test_format_signal_model_analysis_draft_outputs_sanitized_backend_fields() -> None:
+    text = client_api.format_signal_model_analysis_draft(
+        {
+            "signal_id": 7,
+            "model_status": "fallback",
+            "draft_status": "ok",
+            "provider": "openai",
+            "model": "fallback-model",
+            "fallback_model": "fallback-model",
+            "audit_log_id": 12,
+            "advisory_summary": "模型草稿摘要，参考 [source omitted]。",
+            "observations": [
+                "Backend model draft uses sanitized deterministic analysis.",
+                "source_ref: https://example.com/raw",
+            ],
+            "risk_notes": ["Raw note says buy now."],
+            "follow_up_questions": ["Check whether provider quality recovered."],
+            "suggested_attention_label": "继续观察",
+            "blocked_terms": ["马上买入", "sell"],
+            "boundary": "Manual opt-in model draft; does not change backend state.",
+            "raw_prompt": "secret prompt",
+            "response_excerpt": "raw response",
+            "source_url": "https://example.com/source",
+            "cost_price": 10.25,
+            "position_ratio": 0.2,
+        },
+    )
+
+    assert "信号 #7 模型草稿" in text
+    assert "模型状态：已使用备用模型 (fallback)" in text
+    assert "草稿状态：已生成 (ok)" in text
+    assert "Provider：openai" in text
+    assert "Model：fallback-model" in text
+    assert "Audit Log：#12" in text
+    assert "模型草稿摘要" in text
+    assert "Backend model draft uses sanitized deterministic analysis." in text
+    assert "Check whether provider quality recovered." in text
+    assert "Suggested Attention Label" in text
+    assert "继续观察" in text
+    assert "阻断词数量：2" in text
+    assert "不本地计算模型状态" in text
+    assert "source_ref" not in text
+    assert "response_excerpt" not in text
+    assert "raw_prompt" not in text
+    assert "https://example.com" not in text
+    assert "cost_price" not in text
+    assert "position_ratio" not in text
+    assert "buy" not in text.lower()
+    assert "sell" not in text.lower()
+    assert "马上买入" not in text
+    assert "买入" not in text
+    assert "卖出" not in text
+
+
+def test_format_signal_model_analysis_draft_shows_blocked_count_without_phrase_text() -> None:
+    text = client_api.format_signal_model_analysis_draft(
+        {
+            "signal_id": 7,
+            "model_status": "ok",
+            "draft_status": "blocked",
+            "advisory_summary": "",
+            "observations": [],
+            "risk_notes": [],
+            "follow_up_questions": [],
+            "blocked_terms": ["马上买入", "满仓"],
+            "boundary": "Manual opt-in model draft.",
+        },
+    )
+
+    assert "草稿状态：已阻断 (blocked)" in text
+    assert "模型输出被安全规则阻断，未展示草稿正文。" in text
+    assert "阻断词数量：2" in text
+    assert "马上买入" not in text
+    assert "满仓" not in text
 
 
 def test_fetch_holdings_uses_user_key_query() -> None:

@@ -290,6 +290,12 @@ def test_gui_declares_signal_analysis_button() -> None:
     assert "查看分析" in source
 
 
+def test_gui_declares_model_analysis_draft_button() -> None:
+    source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
+
+    assert "生成模型草稿" in source
+
+
 def test_gui_declares_deep_report_button() -> None:
     source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
 
@@ -350,6 +356,70 @@ def test_view_signal_analysis_reads_backend_analysis_for_signal_id(
     assert calls["fetch"] == ("http://localhost:8000", 7)
     assert calls["format_payload"] == {"signal_id": 7, "analysis_title": "backend brief"}
     assert calls["result"] == "formatted signal analysis"
+
+
+def test_create_model_analysis_draft_blocks_invalid_signal_id_before_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    app.signal_id = FakeVar("0")
+    errors: list[tuple[str, str]] = []
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start for invalid signal id")
+
+    def fake_showerror(title: str, message: str) -> None:
+        errors.append((title, message))
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "showerror", fake_showerror)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.create_model_analysis_draft()
+
+    assert errors == [
+        (
+            baizefindb_client.WINDOW_TITLE,
+            "Signal ID 必须是正整数。",
+        ),
+    ]
+
+
+def test_create_model_analysis_draft_posts_and_formats_backend_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    calls: dict[str, Any] = {}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_fetch(base_url: str, signal_id: int) -> dict[str, object]:
+        calls["fetch"] = (base_url, signal_id)
+        return {"signal_id": signal_id, "draft_status": "not_available"}
+
+    def fake_format(payload: object) -> str:
+        calls["format_payload"] = payload
+        return "formatted model draft"
+
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "fetch_signal_model_analysis_draft",
+        fake_fetch,
+    )
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "format_signal_model_analysis_draft",
+        fake_format,
+    )
+
+    app.create_model_analysis_draft()
+
+    assert calls["action"] == "生成信号 #7 模型草稿"
+    assert calls["fetch"] == ("http://localhost:8000", 7)
+    assert calls["format_payload"] == {"signal_id": 7, "draft_status": "not_available"}
+    assert calls["result"] == "formatted model draft"
 
 
 def test_create_deep_report_blocks_invalid_signal_id_before_confirmation(

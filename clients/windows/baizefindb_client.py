@@ -123,6 +123,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "刷新雷达", self.refresh_radar)
         self._add_button(button_frame, "查看信号", self.view_signals)
         self._add_button(button_frame, "查看分析", self.view_signal_analysis)
+        self._add_button(button_frame, "生成模型草稿", self.create_model_analysis_draft)
         self._add_button(button_frame, "查看持仓", self.view_holdings)
         self._add_button(button_frame, "查看自选", self.view_watchlist)
         self._add_button(button_frame, "查看报告", self.view_reports)
@@ -319,6 +320,22 @@ class BaizeFinDBClientApp:
             return client_api.format_signal_analysis(analysis)
 
         self._run_worker(f"读取信号 #{signal_id} 分析", worker)
+
+    def create_model_analysis_draft(self) -> None:
+        try:
+            signal_id = self._normalized_signal_id()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        def worker() -> str:
+            draft = client_api.fetch_signal_model_analysis_draft(
+                self._normalized_server_url(),
+                signal_id,
+            )
+            return client_api.format_signal_model_analysis_draft(draft)
+
+        self._run_worker(f"生成信号 #{signal_id} 模型草稿", worker)
 
     def view_holdings(self) -> None:
         def worker() -> str:

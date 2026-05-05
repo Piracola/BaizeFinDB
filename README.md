@@ -56,7 +56,7 @@
 - `/radar/signals` 查看候选信号列表
 - `/radar/signals/{signal_id}` 查看候选信号和证据
 - `/radar/signals/{signal_id}/analysis` 查看后端生成的只读研究摘要：基于已有信号、证据和审查数据，输出 bounded key points、metric highlights、risk flags、evidence/review summary、agent inputs、确定性 `agent_assessments` 和 next actions；当前 agent assessments 是后端规则化多 agent scaffold，不调用 LLM、不做真实多模型编排，不改变规则定级，不输出原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令
-- `POST /radar/signals/{signal_id}/model-analysis-draft` 显式手动请求模型分析草稿：默认关闭时返回 `model_status=disabled` 且不联网、不写审计；启用后只使用已脱敏的 deterministic analysis 上下文，模型 JSON 输出必须经 `app.ai.analysis_output` 净化，fallback/degraded/blocked/malformed 路径会写 `model_call_logs`，但不会修改 P0/P1/P2、生命周期、审查状态、报告、Telegram、Provider 或确定性 `/analysis` 输出；Web 信号详情已有手动 `生成模型草稿` 按钮，Windows/Telegram 仍未接入
+- `POST /radar/signals/{signal_id}/model-analysis-draft` 显式手动请求模型分析草稿：默认关闭时返回 `model_status=disabled` 且不联网、不写审计；启用后只使用已脱敏的 deterministic analysis 上下文，模型 JSON 输出必须经 `app.ai.analysis_output` 净化，fallback/degraded/blocked/malformed 路径会写 `model_call_logs`，但不会修改 P0/P1/P2、生命周期、审查状态、报告、Telegram、Provider 或确定性 `/analysis` 输出；Web 信号详情和 Windows 客户端已有手动 `生成模型草稿` 入口，Telegram 仍未接入
 - `infra/scripts/model_provider_readiness.py --json-output <path>` 可做未来 LLM-backed 多 agent 接入前的只读配置自检；`server_deploy_check.py --check-model-provider-readiness --model-provider-readiness-json-output <path>` 可把同一检查纳入 Linux 部署预检；默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled`，不会调用模型、验证 token、读取数据库、生成报告、发送 Telegram 或输出 API key。启用前可配置 `MODEL_PROVIDER=openai` + `MODEL_PRIMARY_MODEL` + `OPENAI_API_KEY`，或 `MODEL_PROVIDER=custom` + `MODEL_PRIMARY_MODEL` + `MODEL_API_BASE_URL` + `MODEL_API_KEY`
 - `app.ai.model_client` 已提供默认关闭的 OpenAI-compatible 模型客户端和审计包装器：启用后可向 `openai` 或 `custom` provider 的 `/chat/completions` 发送 `model`、`messages` 和可选 `response_format`，主模型成功不写审计，主模型失败会按配置尝试 fallback，fallback/degraded 结果写入 `model_call_logs`；该模块当前只接入手动模型草稿 API，不接管 `/radar/signals/{signal_id}/analysis`，不会修改雷达优先级、生命周期、审查状态、报告、Telegram、Provider 或其他业务表
 - `app.ai.analysis_output` 已提供模型分析草稿的输出净化契约：只解析模型返回的 JSON 文本，允许 bounded advisory summary、observations、risk notes、follow-up questions 和固定建议标签，自动脱源 URL/domain、限制长度和条数，遇到 malformed JSON 返回 degraded，遇到直接交易语言返回 blocked；它已用于手动模型草稿 API，但不直接调用模型、不修改雷达或报告
@@ -70,7 +70,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要和确定性 agent assessments、持仓、自选、报告摘要、确认后手动生成 deep 报告、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；查看 Telegram 绑定时会同时显示严格绑定模式和汇总计数；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史、就绪自检、告警钻取和首用诊断选择 1 到 168 小时统计窗口，默认 24
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要和确定性 agent assessments、手动生成模型分析草稿、持仓、自选、报告摘要、确认后手动生成 deep 报告、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；查看 Telegram 绑定时会同时显示严格绑定模式和汇总计数；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史、就绪自检、告警钻取和首用诊断选择 1 到 168 小时统计窗口，默认 24
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送；Tushare `anns_d` Beat 调度默认不加入，只有 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时才额外启用
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含

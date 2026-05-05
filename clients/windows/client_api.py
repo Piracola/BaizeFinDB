@@ -24,6 +24,7 @@ ANALYSIS_LIST_PREVIEW_LIMIT = 8
 ANALYSIS_METRIC_PREVIEW_LIMIT = 6
 ANALYSIS_AGENT_PREVIEW_LIMIT = 5
 ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT = 3
+MODEL_DRAFT_LIST_PREVIEW_LIMIT = 5
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
@@ -127,6 +128,18 @@ SCORE_COMPONENT_ORDER = (
     "data_quality",
     "timeliness",
 )
+MODEL_STATUS_LABELS = {
+    "disabled": "未启用",
+    "ok": "正常",
+    "fallback": "已使用备用模型",
+    "degraded": "降级",
+}
+MODEL_DRAFT_STATUS_LABELS = {
+    "not_available": "不可用",
+    "ok": "已生成",
+    "blocked": "已阻断",
+    "degraded": "降级",
+}
 
 
 class BaizeApiError(RuntimeError):
@@ -425,6 +438,21 @@ def fetch_signal_analysis(
         opener=opener,
     )
     return _expect_object(payload, "/radar/signals/{signal_id}/analysis")
+
+
+def fetch_signal_model_analysis_draft(
+    base_url: str | None,
+    signal_id: int,
+    *,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_signal_id = _positive_int(signal_id, "signal_id")
+    payload = post_json(
+        base_url,
+        f"/radar/signals/{normalized_signal_id}/model-analysis-draft",
+        opener=opener,
+    )
+    return _expect_object(payload, "/radar/signals/{signal_id}/model-analysis-draft")
 
 
 def fetch_holdings(
@@ -1126,6 +1154,69 @@ def format_signal_analysis(analysis: Mapping[str, Any]) -> str:
     return _trim_text("\n".join(lines))
 
 
+def format_signal_model_analysis_draft(draft: Mapping[str, Any]) -> str:
+    signal_id = _int_text(draft.get("signal_id"))
+    model_status = _text(draft.get("model_status"), "-")
+    draft_status = _text(draft.get("draft_status"), "-")
+    blocked_count = len(_sequence(draft.get("blocked_terms")))
+    lines = [
+        f"信号 #{signal_id} 模型草稿",
+        (
+            f"模型状态：{MODEL_STATUS_LABELS.get(model_status, model_status)} "
+            f"({model_status}) | "
+            f"草稿状态：{MODEL_DRAFT_STATUS_LABELS.get(draft_status, draft_status)} "
+            f"({draft_status})"
+        ),
+    ]
+
+    metadata = _model_draft_metadata_lines(draft)
+    if metadata:
+        lines.extend(metadata)
+
+    lines.append("")
+    if draft_status == "not_available":
+        lines.append("模型分析未启用或 Provider 未配置，当前没有模型草稿。")
+    elif draft_status == "blocked":
+        lines.append("模型输出被安全规则阻断，未展示草稿正文。")
+    elif draft_status == "degraded":
+        lines.append("模型草稿不可用，保留后端降级状态。")
+    else:
+        summary = _analysis_text(draft.get("advisory_summary"), "")
+        lines.append(f"Advisory Summary：{summary or '后端未返回该项。'}")
+
+    lines.extend(
+        [
+            f"阻断词数量：{blocked_count}",
+            "",
+        ],
+    )
+    lines.extend(_model_draft_list_lines("Observations", draft.get("observations")))
+    lines.extend(_model_draft_list_lines("Risk Notes", draft.get("risk_notes")))
+    lines.extend(
+        _model_draft_list_lines(
+            "Follow-up Questions",
+            draft.get("follow_up_questions"),
+        ),
+    )
+
+    attention_label = _analysis_text(draft.get("suggested_attention_label"), "")
+    if attention_label:
+        lines.extend(["Suggested Attention Label：", f"- {attention_label}", ""])
+
+    boundary = _analysis_text(draft.get("boundary"), "")
+    if boundary:
+        lines.extend(["Boundary：", f"- {boundary}", ""])
+
+    lines.extend(
+        [
+            "该视图只展示后端净化后的模型草稿，不本地计算模型状态、雷达定级、生命周期、审查状态、评分或操作建议。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
 def _analysis_list_lines(title: str, value: Any) -> list[str]:
     items = _analysis_values(value, ANALYSIS_LIST_PREVIEW_LIMIT)
     lines = [f"{title}："]
@@ -1136,6 +1227,36 @@ def _analysis_list_lines(title: str, value: Any) -> list[str]:
     lines.extend(f"- {item}" for item in items)
     lines.append("")
     return lines
+
+
+def _model_draft_list_lines(title: str, value: Any) -> list[str]:
+    items = _analysis_values(value, MODEL_DRAFT_LIST_PREVIEW_LIMIT)
+    lines = [f"{title}："]
+    if not items:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    lines.extend(f"- {item}" for item in items)
+    lines.append("")
+    return lines
+
+
+def _model_draft_metadata_lines(draft: Mapping[str, Any]) -> list[str]:
+    metadata = []
+    provider = _analysis_text(draft.get("provider"), "")
+    model = _analysis_text(draft.get("model"), "")
+    fallback_model = _analysis_text(draft.get("fallback_model"), "")
+    audit_log_id = draft.get("audit_log_id")
+    if provider:
+        metadata.append(f"Provider：{provider}")
+    if model:
+        metadata.append(f"Model：{model}")
+    if fallback_model:
+        metadata.append(f"Fallback Model：{fallback_model}")
+    if audit_log_id is not None:
+        metadata.append(f"Audit Log：#{_int_text(audit_log_id)}")
+
+    return metadata
 
 
 def _analysis_metric_lines(value: Any) -> list[str]:
