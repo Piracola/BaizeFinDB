@@ -87,6 +87,47 @@ def test_build_stage_specs_passes_custom_base_url_to_api_checks(tmp_path: Path) 
     assert "https://api.example.test" in stages[3].command
 
 
+def test_build_stage_specs_includes_optional_systemd_unit_check(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_systemd_unit_check=True)
+
+    deploy_stage = server_delivery_acceptance.build_stage_specs(args)[0]
+
+    assert deploy_stage.command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-systemd-units",
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
+
+
+def test_build_stage_specs_systemd_unit_check_is_deploy_only(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_systemd_unit_check=True,
+        include_alert_telegram_preview=True,
+        include_alert_telegram_env_check=True,
+        include_alert_telegram_service_verify=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert "--check-systemd-units" in stages[0].command
+    assert all("--check-systemd-units" not in stage.command for stage in stages[1:])
+    assert all("systemctl" not in stage.command for stage in stages)
+    assert all("journalctl" not in stage.command for stage in stages)
+
+
 def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path) -> None:
     args = _args(tmp_path, fail_on_warning=True)
 

@@ -118,6 +118,15 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 - `postgres_backup_retention.py --json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
 
+如果还想把仓库内 systemd 模板静态检查纳入同一验收包，可加
+`--include-systemd-unit-check`。该选项只会让 deploy preflight 阶段追加
+`--check-systemd-units`，仍写入 `server-deploy-check.json`；不会调用 `systemctl`
+或 `journalctl`，也不会检查服务器已安装 unit：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-systemd-unit-check
+```
+
 如果还想在同一个验收包里验证告警 payload 和 Telegram delivery preview，可加
 `--include-alert-telegram-preview`。该选项会额外运行一次 compact monitor summary，
 写出 no-send alert payload，再调用 `server_alert_telegram.py` 的 preview 模式；不会传

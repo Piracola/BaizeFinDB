@@ -137,6 +137,8 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 `server_deploy_check.py --check-systemd-units` 可选静态验证 `infra/linux/` 里的 systemd service/timer 模板是否仍符合当前 contract，包括 monitor/alert/backup timer 目标、周期、证据输出、env preflight、dedupe 和 no-secret 边界；该检查只读仓库文件，不调用 `systemctl` / `journalctl`，也不检查服务器已安装 unit。
 
+需要把这项静态 systemd 模板检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-systemd-unit-check`；该参数只会让 deploy preflight 阶段追加 `--check-systemd-units`，不新增独立 systemd 阶段、不启动服务、不读取凭据。
+
 Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evidence/server-alert-telegram-dedupe-state.json`。该本地 JSON 状态按 alert payload 的 `dedupe_key` 做默认 3600 秒冷却，只在全部 Telegram 发送成功后更新，避免服务器持续 warning 时重复刷屏；preview、配置错误、失败发送和无效 state 不会写入成功状态。
 
 Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，发送前会先运行 env 预检并写 `evidence/server-alert-telegram-env-check.json`；timer 需要在手动发送、env check 和 dedupe evidence 通过后单独复制启用。

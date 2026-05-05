@@ -57,20 +57,27 @@ class StageResult:
 def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
     evidence_dir = args.evidence_dir
     python_executable = args.python_executable
+    deploy_preflight_command = [
+        python_executable,
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        args.base_url,
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+    ]
+    if args.include_systemd_unit_check:
+        deploy_preflight_command.append("--check-systemd-units")
+    deploy_preflight_command.extend(
+        [
+            "--json-output",
+            str(evidence_dir / "server-deploy-check.json"),
+        ]
+    )
     stages = [
         StageSpec(
             name="deploy_preflight",
-            command=[
-                python_executable,
-                "infra/scripts/server_deploy_check.py",
-                "--base-url",
-                args.base_url,
-                "--check-containers",
-                "--check-api",
-                "--check-m5-smoke",
-                "--json-output",
-                str(evidence_dir / "server-deploy-check.json"),
-            ],
+            command=deploy_preflight_command,
             evidence_files=[evidence_dir / "server-deploy-check.json"],
         ),
     ]
@@ -456,6 +463,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask server_runtime_check.py to write sanitized read-only OPS evidence "
             "inside the acceptance evidence directory."
+        ),
+    )
+    parser.add_argument(
+        "--include-systemd-unit-check",
+        action="store_true",
+        help=(
+            "Ask the deploy preflight stage to statically validate tracked "
+            "infra/linux systemd service/timer templates."
         ),
     )
     parser.add_argument(
