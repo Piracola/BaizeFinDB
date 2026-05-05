@@ -250,6 +250,7 @@ uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-secon
 uv run python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json --alert-json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json
+uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --send --dedupe-state evidence/server-alert-telegram-dedupe-state.json --json-output evidence/server-alert-telegram-send.json
 uv run python infra/scripts/server_deploy_check.py --check-backup --backup-check-json-output evidence/postgres-backup-check.json
 uv run python infra/scripts/postgres_backup.py --check-only --check-json-output evidence/postgres-backup-check.json
 uv run python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql

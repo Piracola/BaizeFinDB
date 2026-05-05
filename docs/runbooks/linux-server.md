@@ -222,7 +222,15 @@ Telegram 告警交付适配器消费 `server-alert-payload.json`。默认是 pre
 ```powershell
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --send --json-output evidence/server-alert-telegram-send.json
+uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --send --dedupe-state evidence/server-alert-telegram-dedupe-state.json --json-output evidence/server-alert-telegram-send.json
 ```
+
+如果把 Telegram 交付放进 cron 或 systemd，必须优先使用 `--dedupe-state`。
+它按 alert payload 的 `dedupe_key` 做本地 JSON 冷却，默认 3600 秒内不重复发送同一告警；
+可用 `--dedupe-ttl-seconds <seconds>` 调整窗口，确实需要人工重发时才用
+`--ignore-dedupe`。dedupe state 只在所有 Telegram 发送成功后更新；preview、
+`should_notify=false`、配置错误、发送失败或无效 state 都不会写入成功状态。无效或损坏的
+dedupe state 会在发送前返回 `2`，避免在状态不可信时继续发通知。
 
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、
@@ -286,7 +294,7 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --js
 `evidence/`、`runtime-check*.json`、`ops-evidence*.json`、`server-alert-payload*.json`
 和 `server-alert-telegram*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。
 不要把真实 token 环境下生成的 evidence、runtime check、ops evidence、alert payload
-或 Telegram delivery 报告提交到 git。
+或 Telegram delivery / dedupe state 报告提交到 git。
 
 手动写入 Tushare 股票基础信息或公告快照：
 

@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 MODULE_PATH = (
@@ -141,6 +142,143 @@ def test_run_delivery_sends_with_existing_client() -> None:
     assert "BaizeFinDB server warning" in client.calls[0][1]
 
 
+def test_run_delivery_updates_dedupe_state_after_success(tmp_path: Path) -> None:
+    client = FakeTelegramClient(
+        [server_alert_telegram.TelegramSendResult(ok=True, status_code=200)]
+    )
+    state_path = tmp_path / "dedupe.json"
+    now = datetime(2026, 5, 5, 1, 0, tzinfo=UTC)
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            _alert_payload(),
+            chat_ids=[1001],
+            bot_token="bot-token",
+            send=True,
+            client=client,
+            dedupe_state_path=state_path,
+            now=now,
+        )
+    )
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    entry = state["entries"][server_alert_telegram.dedupe_entry_key("baizefindb:warning:test")]
+
+    assert exit_code == 0
+    assert report["status"] == "sent"
+    assert report["dedupe"]["decision"] == "allowed"
+    assert report["dedupe"]["state_updated"] is True
+    assert entry["last_sent_at"] == now.isoformat()
+    assert entry["recipient_refs"] == ["telegram-chat-***1001"]
+    assert entry["send_count"] == 1
+
+
+def test_run_delivery_suppresses_duplicate_within_ttl(tmp_path: Path) -> None:
+    state_path = tmp_path / "dedupe.json"
+    now = datetime(2026, 5, 5, 1, 0, tzinfo=UTC)
+    _write_dedupe_state(state_path, "baizefindb:warning:test", now - timedelta(minutes=10))
+    client = FakeTelegramClient(
+        [server_alert_telegram.TelegramSendResult(ok=True, status_code=200)]
+    )
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            _alert_payload(),
+            chat_ids=[1001],
+            bot_token="bot-token",
+            send=True,
+            client=client,
+            dedupe_state_path=state_path,
+            dedupe_ttl_seconds=3600,
+            now=now,
+        )
+    )
+
+    assert exit_code == 0
+    assert report["status"] == "deduped"
+    assert report["dedupe"]["decision"] == "suppressed"
+    assert report["dedupe"]["matched_entry"]["age_seconds"] == 600
+    assert client.calls == []
+
+
+def test_run_delivery_resends_after_ttl_and_increments_state(tmp_path: Path) -> None:
+    state_path = tmp_path / "dedupe.json"
+    now = datetime(2026, 5, 5, 1, 0, tzinfo=UTC)
+    _write_dedupe_state(state_path, "baizefindb:warning:test", now - timedelta(hours=2))
+    client = FakeTelegramClient(
+        [server_alert_telegram.TelegramSendResult(ok=True, status_code=200)]
+    )
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            _alert_payload(),
+            chat_ids=[1001],
+            bot_token="bot-token",
+            send=True,
+            client=client,
+            dedupe_state_path=state_path,
+            dedupe_ttl_seconds=3600,
+            now=now,
+        )
+    )
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    entry = state["entries"][server_alert_telegram.dedupe_entry_key("baizefindb:warning:test")]
+
+    assert exit_code == 0
+    assert report["status"] == "sent"
+    assert report["dedupe"]["decision"] == "allowed"
+    assert entry["send_count"] == 2
+    assert client.calls
+
+
+def test_run_delivery_ignore_dedupe_sends_and_updates_state(tmp_path: Path) -> None:
+    state_path = tmp_path / "dedupe.json"
+    now = datetime(2026, 5, 5, 1, 0, tzinfo=UTC)
+    _write_dedupe_state(state_path, "baizefindb:warning:test", now - timedelta(minutes=1))
+    client = FakeTelegramClient(
+        [server_alert_telegram.TelegramSendResult(ok=True, status_code=200)]
+    )
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            _alert_payload(),
+            chat_ids=[1001],
+            bot_token="bot-token",
+            send=True,
+            client=client,
+            dedupe_state_path=state_path,
+            ignore_dedupe=True,
+            now=now,
+        )
+    )
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    entry = state["entries"][server_alert_telegram.dedupe_entry_key("baizefindb:warning:test")]
+
+    assert exit_code == 0
+    assert report["status"] == "sent"
+    assert report["dedupe"]["decision"] == "ignored"
+    assert entry["send_count"] == 2
+    assert client.calls
+
+
+def test_run_delivery_preview_does_not_create_dedupe_state(tmp_path: Path) -> None:
+    state_path = tmp_path / "dedupe.json"
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            _alert_payload(),
+            chat_ids=[1001],
+            bot_token=None,
+            send=False,
+            dedupe_state_path=state_path,
+        )
+    )
+
+    assert exit_code == 0
+    assert report["status"] == "preview"
+    assert report["dedupe"]["decision"] == "preview"
+    assert not state_path.exists()
+
+
 def test_run_delivery_returns_failure_for_failed_send() -> None:
     client = FakeTelegramClient(
         [server_alert_telegram.TelegramSendResult(ok=False, status_code=500, error="HTTPError")]
@@ -160,6 +298,28 @@ def test_run_delivery_returns_failure_for_failed_send() -> None:
     assert report["status"] == "failed"
     assert report["deliveries"][0]["status"] == "failed"
     assert report["deliveries"][0]["error"] == "HTTPError"
+
+
+def test_run_delivery_failed_send_does_not_create_dedupe_state(tmp_path: Path) -> None:
+    client = FakeTelegramClient(
+        [server_alert_telegram.TelegramSendResult(ok=False, status_code=500, error="HTTPError")]
+    )
+    state_path = tmp_path / "dedupe.json"
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            _alert_payload(),
+            chat_ids=[1001],
+            bot_token="bot-token",
+            send=True,
+            client=client,
+            dedupe_state_path=state_path,
+        )
+    )
+
+    assert exit_code == 1
+    assert report["status"] == "failed"
+    assert not state_path.exists()
 
 
 def test_main_writes_preview_report_from_env_recipients(
@@ -183,6 +343,63 @@ def test_main_writes_preview_report_from_env_recipients(
     assert report["recipient_count"] == 2
     assert "bot-token-secret" not in encoded
     assert "json_output=" in captured.out
+
+
+def test_main_rejects_invalid_dedupe_state_before_sending(
+    monkeypatch, tmp_path: Path
+) -> None:
+    input_path = tmp_path / "alert.json"
+    state_path = tmp_path / "dedupe.json"
+    output_path = tmp_path / "delivery.json"
+    input_path.write_text(json.dumps(_alert_payload()), encoding="utf-8")
+    state_path.write_text("[]", encoding="utf-8")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1001")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "bot-token-secret")
+
+    exit_code = server_alert_telegram.main(
+        [
+            str(input_path),
+            "--send",
+            "--dedupe-state",
+            str(state_path),
+            "--json-output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 2
+    assert not output_path.exists()
+
+
+def test_dedupe_state_and_evidence_redact_secret_like_values(tmp_path: Path) -> None:
+    state_path = tmp_path / "dedupe.json"
+    payload = _alert_payload(
+        dedupe_key="https://provider.example/raw?token=secret-token",
+    )
+    client = FakeTelegramClient(
+        [server_alert_telegram.TelegramSendResult(ok=True, status_code=200)]
+    )
+
+    report, exit_code = _run(
+        server_alert_telegram.run_delivery(
+            payload,
+            chat_ids=[123456789],
+            bot_token="bot-token",
+            send=True,
+            client=client,
+            dedupe_state_path=state_path,
+        )
+    )
+    encoded_report = json.dumps(report, ensure_ascii=False)
+    encoded_state = state_path.read_text(encoding="utf-8")
+
+    assert exit_code == 0
+    assert "secret-token" not in encoded_report
+    assert "secret-token" not in encoded_state
+    assert "https://" not in encoded_report
+    assert "https://" not in encoded_state
+    assert "123456789" not in encoded_report
+    assert "123456789" not in encoded_state
 
 
 def test_main_rejects_invalid_payload_without_writing_output(tmp_path: Path) -> None:
@@ -211,6 +428,7 @@ class FakeTelegramClient:
 def _alert_payload(
     *,
     should_notify: bool = True,
+    dedupe_key: str = "baizefindb:warning:test",
     items: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     return {
@@ -219,7 +437,7 @@ def _alert_payload(
         "status": "warning",
         "severity": "warning",
         "should_notify": should_notify,
-        "dedupe_key": "baizefindb:warning:test",
+        "dedupe_key": dedupe_key,
         "title": "BaizeFinDB server warning",
         "message": "status=warning severity=warning runtime_status=ok failures=0 warnings=1",
         "summary": {
@@ -230,6 +448,30 @@ def _alert_payload(
         "items": items or [],
         "boundary": "no-send alert payload",
     }
+
+
+def _write_dedupe_state(path: Path, dedupe_key: str, last_sent_at: datetime) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "report_type": "server_alert_telegram_dedupe_state",
+                "updated_at": last_sent_at.isoformat(),
+                "entries": {
+                    server_alert_telegram.dedupe_entry_key(dedupe_key): {
+                        "dedupe_key": dedupe_key,
+                        "last_sent_at": last_sent_at.isoformat(),
+                        "status": "warning",
+                        "severity": "warning",
+                        "recipient_refs": ["telegram-chat-***1001"],
+                        "send_count": 1,
+                        "last_delivery_status": "sent",
+                        "delivery_count": 1,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _run(awaitable):
