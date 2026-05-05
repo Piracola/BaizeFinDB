@@ -302,6 +302,61 @@ def test_build_stage_specs_tushare_beat_enablement_is_deploy_only(
     )
 
 
+def test_build_stage_specs_includes_optional_database_inventory(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_database_inventory=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "database_inventory",
+        "runtime_check",
+    ]
+    assert stages[3].command == [
+        "python",
+        "infra/scripts/database_inventory.py",
+        "--json-output",
+        str(tmp_path / "database-inventory.json"),
+    ]
+    assert stages[3].evidence_files == [tmp_path / "database-inventory.json"]
+
+
+def test_build_stage_specs_database_inventory_is_read_only(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_database_inventory=True,
+        base_url="https://api.example.test",
+    )
+
+    database_stage = server_delivery_acceptance.build_stage_specs(args)[3]
+
+    forbidden_args = {
+        "--base-url",
+        "--check-backup",
+        "--check-json-output",
+        "--confirm-restore",
+        "--delete",
+        "--send",
+        "--env-file",
+        "--ops-evidence-output",
+        "--require-radar-signal-analysis-sample",
+        "seed_demo_data.py",
+        "server_runtime_check.py",
+        "server_deploy_check.py",
+        "postgres_backup.py",
+        "postgres_restore.py",
+        "systemctl",
+        "journalctl",
+    }
+    assert forbidden_args.isdisjoint(database_stage.command)
+
+
 def test_build_stage_specs_production_readiness_preset_expands_checks(
     tmp_path: Path,
 ) -> None:
@@ -313,6 +368,7 @@ def test_build_stage_specs_production_readiness_preset_expands_checks(
         "deploy_preflight",
         "backup_check",
         "backup_retention",
+        "database_inventory",
         "runtime_check",
         "monitor_alert_payload",
         "telegram_alert_preview",
@@ -340,13 +396,19 @@ def test_build_stage_specs_production_readiness_preset_expands_checks(
         tmp_path / "server-deploy-check.json",
         tmp_path / "tushare-anns-d-beat-enablement.json",
     ]
-    assert "--ops-evidence-output" in stages[3].command
-    assert str(tmp_path / "server-ops-evidence.json") in stages[3].command
-    assert stages[3].evidence_files == [
+    assert stages[3].command == [
+        "python",
+        "infra/scripts/database_inventory.py",
+        "--json-output",
+        str(tmp_path / "database-inventory.json"),
+    ]
+    assert "--ops-evidence-output" in stages[4].command
+    assert str(tmp_path / "server-ops-evidence.json") in stages[4].command
+    assert stages[4].evidence_files == [
         tmp_path / "server-runtime-check.json",
         tmp_path / "server-ops-evidence.json",
     ]
-    assert stages[4].command == [
+    assert stages[5].command == [
         "python",
         "infra/scripts/server_monitor_check.py",
         "--base-url",
@@ -357,14 +419,14 @@ def test_build_stage_specs_production_readiness_preset_expands_checks(
         "--alert-json-output",
         str(tmp_path / "server-alert-payload.json"),
     ]
-    assert stages[5].command == [
+    assert stages[6].command == [
         "python",
         "infra/scripts/server_alert_telegram.py",
         str(tmp_path / "server-alert-payload.json"),
         "--json-output",
         str(tmp_path / "server-alert-telegram-preview.json"),
     ]
-    assert stages[6].command == [
+    assert stages[7].command == [
         "python",
         "infra/scripts/server_alert_telegram_env_check.py",
         "--env-file",
@@ -415,6 +477,7 @@ def test_build_stage_specs_production_readiness_composes_with_strict_options(
         "deploy_preflight",
         "backup_check",
         "backup_retention",
+        "database_inventory",
         "runtime_check",
         "monitor_alert_payload",
         "telegram_alert_preview",
@@ -424,9 +487,10 @@ def test_build_stage_specs_production_readiness_composes_with_strict_options(
     assert "--fail-on-warning" not in stages[0].command
     assert "--fail-on-warning" not in stages[1].command
     assert "--fail-on-warning" not in stages[2].command
-    assert "--fail-on-warning" in stages[3].command
-    assert "--strict-permissions" in stages[6].command
-    assert stages[7].command[1] == "infra/scripts/server_alert_telegram_service_verify.py"
+    assert "--fail-on-warning" not in stages[3].command
+    assert "--fail-on-warning" in stages[4].command
+    assert "--strict-permissions" in stages[7].command
+    assert stages[8].command[1] == "infra/scripts/server_alert_telegram_service_verify.py"
 
 
 def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path) -> None:
@@ -885,6 +949,7 @@ def test_plan_acceptance_builds_plan_without_running_helpers(
         "deploy_preflight",
         "backup_check",
         "backup_retention",
+        "database_inventory",
         "runtime_check",
         "monitor_alert_payload",
         "telegram_alert_preview",
@@ -894,7 +959,8 @@ def test_plan_acceptance_builds_plan_without_running_helpers(
     assert all(result.exit_code is None for result in results)
     assert all(result.stdout == "" and result.stderr == "" for result in results)
     assert "--check-server-compose-contract" in results[0].command
-    assert "--ops-evidence-output" in results[3].command
+    assert results[3].command[1] == "infra/scripts/database_inventory.py"
+    assert "--ops-evidence-output" in results[4].command
 
 
 def test_plan_acceptance_preserves_skipped_stages(tmp_path: Path) -> None:
@@ -1367,6 +1433,7 @@ def test_main_production_readiness_writes_profile(monkeypatch, tmp_path: Path) -
         "deploy_preflight",
         "backup_check",
         "backup_retention",
+        "database_inventory",
         "runtime_check",
         "monitor_alert_payload",
         "telegram_alert_preview",
@@ -1410,17 +1477,18 @@ def test_main_plan_only_writes_production_readiness_plan(
     assert report["execution_mode"] == "plan"
     assert report["profile"] == "production_readiness"
     assert report["summary"] == {
-        "total": 7,
+        "total": 8,
         "ok": 0,
         "warn": 0,
         "fail": 0,
         "skipped": 0,
-        "planned": 7,
+        "planned": 8,
     }
-    assert [stage["status"] for stage in report["stages"]] == ["planned"] * 7
+    assert [stage["status"] for stage in report["stages"]] == ["planned"] * 8
     assert report["stages"][0]["exit_code"] is None
     assert "--check-server-compose-contract" in report["stages"][0]["command"]
-    assert "--ops-evidence-output" in report["stages"][3]["command"]
+    assert report["stages"][3]["command"][1] == "infra/scripts/database_inventory.py"
+    assert "--ops-evidence-output" in report["stages"][4]["command"]
     assert "profile=production_readiness" in captured.out
     assert "execution_mode=plan" in captured.out
     assert "[PLANNED] deploy_preflight exit=None" in captured.out

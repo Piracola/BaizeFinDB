@@ -152,7 +152,9 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 需要把 Tushare `anns_d` Beat enablement 离线/no-token checklist 纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-tushare-anns-d-beat-enablement`；该参数只会让 deploy preflight 阶段追加 `--check-tushare-anns-d-beat-enablement` 和 `--tushare-anns-d-beat-enablement-json-output <evidence-dir>/tushare-anns-d-beat-enablement.json`，不新增独立 Tushare 阶段、不访问 Tushare、不写数据库、不触发抓取或扫描。
 
-生产化交付前可用 `server_delivery_acceptance.py --production-readiness` 一次启用当前非破坏性验收预设：server compose runtime contract、systemd 模板静态检查、Telegram 严格绑定 readiness、Tushare `anns_d` Beat enablement checklist、严格 radar analysis 样本门禁、脱敏 OPS evidence、no-send alert payload / Telegram preview 和 Telegram alert env preflight。最终 JSON 会写入 `profile: "production_readiness"`；该预设不会启用手动 alert service evidence verification、严格 env 权限、`--fail-on-warning`、`--fail-fast`、restore、Telegram 发送、backup deletion、`systemctl` 或 `journalctl`，需要更严格门禁时仍要显式叠加对应参数。
+需要把数据库迁移和应用表计数纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-database-inventory`；该参数会新增一个只读 `database_inventory` stage，写入 `<evidence-dir>/database-inventory.json`，不输出连接串、密码或行内容，不执行迁移、seed、采集、扫描、报告、推送或模型调用。
+
+生产化交付前可用 `server_delivery_acceptance.py --production-readiness` 一次启用当前非破坏性验收预设：server compose runtime contract、systemd 模板静态检查、Telegram 严格绑定 readiness、Tushare `anns_d` Beat enablement checklist、严格 radar analysis 样本门禁、数据库只读清单、脱敏 OPS evidence、no-send alert payload / Telegram preview 和 Telegram alert env preflight。最终 JSON 会写入 `profile: "production_readiness"`；该预设不会启用手动 alert service evidence verification、严格 env 权限、`--fail-on-warning`、`--fail-fast`、restore、Telegram 发送、backup deletion、`systemctl` 或 `journalctl`，需要更严格门禁时仍要显式叠加对应参数。
 
 需要在真实运行前预览交付验收命令和 evidence 路径时，可加 `--plan-only`，例如 `server_delivery_acceptance.py --plan-only --production-readiness`。该模式只写计划报告，不调用部署预检、runtime、backup、Telegram、Docker、API、`systemctl` 或 `journalctl`；JSON 顶层会写入 `execution_mode: "plan"` 和 `status: "planned"`，每个非跳过阶段状态为 `planned`，跳过阶段仍为 `skipped`。正常执行报告会写入 `execution_mode: "run"`。
 

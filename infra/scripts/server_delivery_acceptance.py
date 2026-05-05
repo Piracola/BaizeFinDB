@@ -43,6 +43,7 @@ PRODUCTION_READINESS_PRESET_FLAGS = (
     "include_alert_telegram_preview",
     "include_alert_telegram_env_check",
     "require_radar_signal_analysis_sample",
+    "include_database_inventory",
 )
 
 
@@ -181,6 +182,21 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
                     str(restore_report),
                 ],
                 evidence_files=[restore_report],
+            )
+        )
+
+    if args.include_database_inventory:
+        database_inventory_report = evidence_dir / "database-inventory.json"
+        stages.append(
+            StageSpec(
+                name="database_inventory",
+                command=[
+                    python_executable,
+                    "infra/scripts/database_inventory.py",
+                    "--json-output",
+                    str(database_inventory_report),
+                ],
+                evidence_files=[database_inventory_report],
             )
         )
 
@@ -541,8 +557,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Enable the non-destructive production-readiness preset: server "
             "compose contract, systemd template check, Telegram strict binding "
             "readiness, Tushare anns_d Beat enablement checklist, OPS evidence, "
-            "no-send alert preview, Telegram alert env preflight, and strict "
-            "radar signal analysis sample coverage."
+            "database inventory, no-send alert preview, Telegram alert env "
+            "preflight, and strict radar signal analysis sample coverage."
         ),
     )
     parser.add_argument(
@@ -559,6 +575,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask server_runtime_check.py to write sanitized read-only OPS evidence "
             "inside the acceptance evidence directory."
+        ),
+    )
+    parser.add_argument(
+        "--include-database-inventory",
+        action="store_true",
+        help=(
+            "Run the read-only database inventory helper inside the acceptance "
+            "evidence directory before runtime API sampling."
         ),
     )
     parser.add_argument(

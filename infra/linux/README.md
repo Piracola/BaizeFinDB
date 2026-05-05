@@ -409,8 +409,9 @@ python infra/scripts/server_delivery_acceptance.py --base-url https://<your-doma
 
 For a non-destructive production-readiness rehearsal, enable the preset. It adds
 server compose contract, systemd template, Telegram strict binding readiness,
-Tushare Beat enablement, strict radar analysis sample coverage, OPS evidence,
-no-send alert preview, and Telegram alert env preflight stages:
+Tushare Beat enablement, strict radar analysis sample coverage, database
+inventory, OPS evidence, no-send alert preview, and Telegram alert env preflight
+stages:
 
 ```bash
 python infra/scripts/server_delivery_acceptance.py --production-readiness
@@ -439,6 +440,11 @@ should also read `/telegram/status` and record whether strict binding or another
 whitelist path is ready. This only appends `--check-telegram-strict-binding` to
 `server_deploy_check.py`; warning-only output stays non-blocking unless the
 acceptance command also uses `--fail-on-warning`.
+Add `--include-database-inventory` when the same evidence bundle should include
+the read-only database inventory report. This adds a separate `database_inventory`
+stage that writes `database-inventory.json`; it does not run migrations, seed
+data, backups, restores, Provider fetches, scans, reports, Telegram, models,
+Docker, or systemd commands.
 Add `--require-radar-signal-analysis-sample` when the deploy preflight stage
 should fail if M5 smoke cannot sample a radar signal and validate
 `/radar/signals/{id}/analysis`. This only appends
