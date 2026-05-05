@@ -28,6 +28,8 @@ Web 雷达终端工作台已在状态面板加入只读 OPS 趋势摘要、OPS �
 
 Windows 首次试运行入口已可通过 `clients/windows/first-trial.ps1 -StartDockerBackend -DatabaseInventoryJsonOutput <path>` 在本机 Docker 后端健康后、deploy preflight/smoke/GUI 前保存同一份脱敏数据库只读清单 evidence；该参数只能和 `-StartDockerBackend` 同用，脚本只调用现有 `infra/scripts/database_inventory.py`，不在 PowerShell 中解析数据库内容，失败时阻断后续启动。
 
+Windows 首次试运行入口已可通过 `clients/windows/first-trial.ps1 -StartDockerBackend -SeedDemoDataJsonOutput <path>` 在本机 Docker 后端健康后显式写入 synthetic demo 数据并保存 evidence；该参数只能和 `-StartDockerBackend` 同用，会在 database inventory、deploy preflight、smoke 和 GUI 前运行，失败时阻断后续启动。该路径只调用现有 `infra/scripts/seed_demo_data.py`，重复执行复用稳定 demo key，不访问真实 Provider、不写 token、不保存真实个人持仓、不发送 Telegram、不调用模型。
+
 `infra/scripts/server_alert_telegram_service_verify.py` 已新增为手动 Telegram alert systemd service 的只读 evidence 验证入口：读取 `server-alert-telegram-env-check.json`、`server-alert-telegram-send.json` 和 `server-alert-telegram-dedupe-state.json`，确认 env check、显式 send 和 dedupe state 是否满足后续调度前提；`sent` / `deduped` 且 state 有效为 `ok`，`skipped` 为非阻塞 `warn`，preview、配置错误、发送失败、损坏或缺失 evidence 为 `fail`，报告不输出 token、raw chat id、raw URL、env 文件内容或 message preview。
 
 `server_delivery_acceptance.py` 已可用 `--include-alert-telegram-service-verify` 把上述手动 alert service evidence 验证纳入同一交付验收包；该阶段只调用 verifier 读取已有 JSON evidence，不启动 systemd、不发送 Telegram、不读取凭据明文。

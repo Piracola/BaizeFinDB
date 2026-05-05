@@ -8,6 +8,7 @@ param(
     [string]$DeployCheckJsonOutput,
     [string]$DeployCheckBackupJsonOutput,
     [string]$DatabaseInventoryJsonOutput,
+    [string]$SeedDemoDataJsonOutput,
     [switch]$DeployCheckServerComposeContract,
     [switch]$DeployCheckM5Smoke,
     [switch]$SmokeStrict,
@@ -136,8 +137,32 @@ function Invoke-DatabaseInventory {
     }
 }
 
+function Invoke-DemoSeed {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$JsonOutput
+    )
+
+    $SeedArgs = @(
+        "infra/scripts/seed_demo_data.py",
+        "--json-output",
+        $JsonOutput
+    )
+
+    & python @SeedArgs
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("Demo seed failed with exit code $LASTEXITCODE")
+        exit $LASTEXITCODE
+    }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput) -and -not $StartDockerBackend) {
     [Console]::Error.WriteLine("-DeployCheckJsonOutput requires -StartDockerBackend")
+    exit 2
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SeedDemoDataJsonOutput) -and -not $StartDockerBackend) {
+    [Console]::Error.WriteLine("-SeedDemoDataJsonOutput requires -StartDockerBackend")
     exit 2
 }
 
@@ -168,6 +193,10 @@ if ($StartDockerBackend) {
     Invoke-BackendCompose -ComposeArgs @("run", "--rm", "api", "alembic", "upgrade", "head")
     Invoke-BackendCompose -ComposeArgs @("up", "-d", "api", "worker", "beat")
     Wait-BackendHealth -HealthUrl (Join-HealthUrl -BaseUrl $ServerUrl) -TimeoutSeconds $BackendHealthTimeoutSeconds -PollIntervalSeconds $BackendHealthPollIntervalSeconds
+
+    if (-not [string]::IsNullOrWhiteSpace($SeedDemoDataJsonOutput)) {
+        Invoke-DemoSeed -JsonOutput $SeedDemoDataJsonOutput
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($DatabaseInventoryJsonOutput)) {
         Invoke-DatabaseInventory -JsonOutput $DatabaseInventoryJsonOutput
