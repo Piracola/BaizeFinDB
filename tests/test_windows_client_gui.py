@@ -3,6 +3,8 @@ from typing import Any
 
 import pytest
 
+pytest.importorskip("tkinter", reason="Windows GUI helper tests require tkinter.")
+
 from clients.windows import baizefindb_client
 
 

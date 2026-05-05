@@ -13,6 +13,9 @@
 
 Docker Desktop 需要启用 Linux engine。验证输出里应看到：
 
+Linux 服务器开发时，完整运行 Windows GUI helper 测试还需要系统包 `python3-tk`；
+没有该包时相关 Tkinter 测试会跳过，但后端、OPS、API 和非 GUI 客户端测试仍应通过。
+
 ```text
 Context: desktop-linux
 Server: Docker Desktop
