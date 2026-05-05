@@ -516,6 +516,8 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 用途：查看候选信号列表。
 部署预检 `server_deploy_check.py --check-m5-smoke` 会用 `limit=1` 只读采样该列表；
 空列表只产生 warning，用于提示还无法抽样验证单信号分析摘要，不阻断新服务器预检。
+显式加 `--require-radar-signal-analysis-sample` 时，空列表会升级为失败，用于演示/生产
+验收前确认 analysis 契约确实有样本覆盖；该严格模式只读 API，不自动 seed、采集或扫描。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals
@@ -557,6 +559,7 @@ Web 信号详情、Windows 客户端 `查看分析` 按钮和 Telegram `/analysi
 部署预检 `server_deploy_check.py --check-m5-smoke` 在 `/radar/signals?limit=1` 返回
 信号时会抽样校验该接口的必需字段，并校验固定 `agent_assessments` 角色顺序、
 状态取值和 findings/next_actions 数组形状；如果没有任何信号，则只记录 warning。
+加 `--require-radar-signal-analysis-sample` 后，缺少可抽样信号会失败。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/analysis

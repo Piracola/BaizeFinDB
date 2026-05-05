@@ -42,6 +42,7 @@ PRODUCTION_READINESS_PRESET_FLAGS = (
     "include_ops_evidence",
     "include_alert_telegram_preview",
     "include_alert_telegram_env_check",
+    "require_radar_signal_analysis_sample",
 )
 
 
@@ -83,6 +84,8 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
         "--check-api",
         "--check-m5-smoke",
     ]
+    if args.require_radar_signal_analysis_sample:
+        deploy_preflight_command.append("--require-radar-signal-analysis-sample")
     if args.include_server_compose_contract_check:
         deploy_preflight_command.append("--check-server-compose-contract")
     if args.include_telegram_strict_binding_check:
@@ -538,7 +541,16 @@ def build_parser() -> argparse.ArgumentParser:
             "Enable the non-destructive production-readiness preset: server "
             "compose contract, systemd template check, Telegram strict binding "
             "readiness, Tushare anns_d Beat enablement checklist, OPS evidence, "
-            "no-send alert preview, and Telegram alert env preflight."
+            "no-send alert preview, Telegram alert env preflight, and strict "
+            "radar signal analysis sample coverage."
+        ),
+    )
+    parser.add_argument(
+        "--require-radar-signal-analysis-sample",
+        action="store_true",
+        help=(
+            "Ask the deploy preflight stage to fail if M5 smoke cannot sample a "
+            "radar signal and validate /radar/signals/{id}/analysis."
         ),
     )
     parser.add_argument(

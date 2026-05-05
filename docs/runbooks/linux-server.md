@@ -300,6 +300,14 @@ uv run python infra/scripts/server_deploy_check.py --check-containers --check-ap
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke
 ```
 
+首用演示或生产化验收前，如果已经通过 demo seed 或真实扫描生成了雷达信号，
+可以把空信号列表升级为 blocker，确保 `/radar/signals/{id}/analysis`
+真的被抽样验证：
+
+```powershell
+uv run python infra/scripts/server_deploy_check.py --check-m5-smoke --require-radar-signal-analysis-sample
+```
+
 服务启动后做短窗口运行采样，默认连续读取 `/health`、`/health/ready`、`/ops/overview`、`/ops/history` 和 `/ops/readiness` 三次。`blocked` 或接口读取失败会返回失败退出码；普通 `warning` 只记录为告警，除非加 `--fail-on-warning`：
 
 ```powershell

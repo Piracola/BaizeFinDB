@@ -218,6 +218,14 @@ scan:
 python infra/scripts/server_deploy_check.py --check-m5-smoke
 ```
 
+For first-use demos or production-like acceptance, after demo seed data or real
+scans have created at least one radar signal, require the sampled analysis
+contract instead of accepting the empty-list warning:
+
+```bash
+python infra/scripts/server_deploy_check.py --check-m5-smoke --require-radar-signal-analysis-sample
+```
+
 Sample the running API for a short validation window. Endpoint failures or
 `blocked` readiness return a failing exit code; warnings are recorded unless
 `--fail-on-warning` is supplied:
@@ -391,6 +399,15 @@ server:
 python infra/scripts/server_delivery_acceptance.py --base-url https://<your-domain>
 ```
 
+For a non-destructive production-readiness rehearsal, enable the preset. It adds
+server compose contract, systemd template, Telegram strict binding readiness,
+Tushare Beat enablement, strict radar analysis sample coverage, OPS evidence,
+no-send alert preview, and Telegram alert env preflight stages:
+
+```bash
+python infra/scripts/server_delivery_acceptance.py --production-readiness
+```
+
 Delivery acceptance reads the top-level `status` field from each helper evidence
 JSON. Warning-only evidence stays visible as non-blocking `warn`; missing,
 unreadable, invalid, failing, `error`, or `blocked` evidence marks the stage as
@@ -414,6 +431,12 @@ should also read `/telegram/status` and record whether strict binding or another
 whitelist path is ready. This only appends `--check-telegram-strict-binding` to
 `server_deploy_check.py`; warning-only output stays non-blocking unless the
 acceptance command also uses `--fail-on-warning`.
+Add `--require-radar-signal-analysis-sample` when the deploy preflight stage
+should fail if M5 smoke cannot sample a radar signal and validate
+`/radar/signals/{id}/analysis`. This only appends
+`--require-radar-signal-analysis-sample` to `server_deploy_check.py`; it does
+not seed demo data, run provider fetches, trigger scans, generate reports, send
+Telegram messages, or call models.
 Add `--include-alert-telegram-preview` when the same evidence bundle should also
 contain a compact monitor summary, no-send alert payload, and Telegram delivery
 preview evidence. This preview path does not pass `--send`, does not need a bot

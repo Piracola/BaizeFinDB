@@ -109,6 +109,28 @@ def test_build_stage_specs_includes_optional_telegram_strict_binding_check(
     assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
 
 
+def test_build_stage_specs_can_require_radar_signal_analysis_sample(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, require_radar_signal_analysis_sample=True)
+
+    deploy_stage = server_delivery_acceptance.build_stage_specs(args)[0]
+
+    assert deploy_stage.command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--require-radar-signal-analysis-sample",
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
+
+
 def test_build_stage_specs_includes_optional_server_compose_contract_check(
     tmp_path: Path,
 ) -> None:
@@ -304,6 +326,7 @@ def test_build_stage_specs_production_readiness_preset_expands_checks(
         "--check-containers",
         "--check-api",
         "--check-m5-smoke",
+        "--require-radar-signal-analysis-sample",
         "--check-server-compose-contract",
         "--check-telegram-strict-binding",
         "--check-systemd-units",

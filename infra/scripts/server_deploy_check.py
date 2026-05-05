@@ -333,7 +333,12 @@ def check_http_json_fields(
     return CheckResult(name, "ok", f"fields present: {', '.join(required_fields)}")
 
 
-def check_m5_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
+def check_m5_smoke(
+    base_url: str,
+    *,
+    timeout: int,
+    require_radar_signal_analysis_sample: bool = False,
+) -> list[CheckResult]:
     results = [
         check_http_json_fields(
             base_url,
@@ -343,11 +348,22 @@ def check_m5_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
         )
         for path, required_fields in M5_SMOKE_ENDPOINTS
     ]
-    results.extend(check_radar_signal_analysis_smoke(base_url, timeout=timeout))
+    results.extend(
+        check_radar_signal_analysis_smoke(
+            base_url,
+            timeout=timeout,
+            require_sample=require_radar_signal_analysis_sample,
+        )
+    )
     return results
 
 
-def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
+def check_radar_signal_analysis_smoke(
+    base_url: str,
+    *,
+    timeout: int,
+    require_sample: bool = False,
+) -> list[CheckResult]:
     name = f"HTTP JSON {RADAR_SIGNAL_LIST_SMOKE_PATH}"
     payload, error = _read_http_json(
         base_url,
@@ -362,11 +378,17 @@ def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[Ch
         return [CheckResult(name, "fail", "JSON response is not an array")]
 
     if not payload:
+        status = "fail" if require_sample else "warn"
+        detail = (
+            "no radar signals available; required signal analysis contract sample missing"
+            if require_sample
+            else "no radar signals available; skipped signal analysis contract sample"
+        )
         return [
             CheckResult(
                 name,
-                "warn",
-                "no radar signals available; skipped signal analysis contract sample",
+                status,
+                detail,
             ),
         ]
 
@@ -806,6 +828,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Check read-only M5 API JSON contracts on the target API.",
     )
     parser.add_argument(
+        "--require-radar-signal-analysis-sample",
+        action="store_true",
+        help=(
+            "With --check-m5-smoke, fail when /radar/signals?limit=1 is empty "
+            "instead of warning and skipping the signal analysis contract sample."
+        ),
+    )
+    parser.add_argument(
         "--check-telegram-strict-binding",
         action="store_true",
         help=(
@@ -907,6 +937,8 @@ def main(argv: list[str] | None = None) -> int:
             "--tushare-anns-d-beat-enablement-json-output requires "
             "--check-tushare-anns-d-beat-enablement"
         )
+    if args.require_radar_signal_analysis_sample and not args.check_m5_smoke:
+        parser.error("--require-radar-signal-analysis-sample requires --check-m5-smoke")
 
     root = find_repo_root()
     checks = [
@@ -974,7 +1006,15 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.check_m5_smoke:
-        checks.extend(check_m5_smoke(args.base_url, timeout=args.timeout))
+        checks.extend(
+            check_m5_smoke(
+                args.base_url,
+                timeout=args.timeout,
+                require_radar_signal_analysis_sample=(
+                    args.require_radar_signal_analysis_sample
+                ),
+            )
+        )
 
     if args.check_telegram_strict_binding:
         checks.append(

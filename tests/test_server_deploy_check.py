@@ -103,6 +103,17 @@ def test_tushare_beat_json_output_requires_check_before_checks(monkeypatch) -> N
     assert calls == []
 
 
+def test_require_radar_signal_analysis_sample_requires_m5_smoke(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: calls.append("root"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        server_deploy_check.main(["--require-radar-signal-analysis-sample"])
+
+    assert exc_info.value.code == 2
+    assert calls == []
+
+
 def test_check_backup_evidence_delegates_to_check_only_without_dump(
     monkeypatch,
     tmp_path: Path,
@@ -739,8 +750,13 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
         calls.append((base_url, path, required_fields, timeout))
         return server_deploy_check.CheckResult(path, "ok")
 
-    def fake_signal_analysis_smoke(base_url: str, *, timeout: int):
-        calls.append((base_url, "radar signal analysis smoke", (), timeout))
+    def fake_signal_analysis_smoke(
+        base_url: str,
+        *,
+        timeout: int,
+        require_sample: bool = False,
+    ):
+        calls.append((base_url, "radar signal analysis smoke", (), timeout, require_sample))
         return [server_deploy_check.CheckResult("radar signal analysis smoke", "ok")]
 
     monkeypatch.setattr(server_deploy_check, "check_http_json_fields", fake_check)
@@ -789,6 +805,34 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
     assert "require_binding" in telegram_call[2]
     assert "allowed_chat_count" in telegram_call[2]
     assert "active_binding_count" in telegram_call[2]
+    assert calls[-1][4] is False
+
+
+def test_m5_smoke_can_require_radar_signal_analysis_sample(monkeypatch) -> None:
+    calls = []
+
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_http_json_fields",
+        lambda *args, **kwargs: server_deploy_check.CheckResult("contract", "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_radar_signal_analysis_smoke",
+        lambda base_url, *, timeout, require_sample=False: calls.append(
+            (base_url, timeout, require_sample)
+        )
+        or [server_deploy_check.CheckResult("radar signal analysis smoke", "ok")],
+    )
+
+    results = server_deploy_check.check_m5_smoke(
+        "http://api.test",
+        timeout=3,
+        require_radar_signal_analysis_sample=True,
+    )
+
+    assert all(result.ok for result in results)
+    assert calls == [("http://api.test", 3, True)]
 
 
 def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) -> None:
@@ -830,6 +874,43 @@ def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) 
         "/radar/signals?limit=1",
         "/radar/signals/42/analysis",
     ]
+
+
+def test_radar_signal_analysis_smoke_warns_when_no_signal_exists(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse([]),
+    )
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "warn"
+    assert results[0].ok
+    assert "skipped signal analysis contract sample" in results[0].detail
+
+
+def test_radar_signal_analysis_smoke_fails_when_sample_required(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse([]),
+    )
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+        require_sample=True,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "fail"
+    assert not results[0].ok
+    assert "required signal analysis contract sample missing" in results[0].detail
 
 
 def test_radar_signal_analysis_smoke_fails_for_invalid_agent_assessment_roles(
@@ -885,24 +966,6 @@ def test_radar_signal_analysis_smoke_fails_for_invalid_agent_assessment_shape(
 
     assert [result.status for result in results] == ["ok", "fail"]
     assert "next_actions must be an array" in results[1].detail
-
-
-def test_radar_signal_analysis_smoke_warns_when_no_signal_exists(monkeypatch) -> None:
-    monkeypatch.setattr(
-        server_deploy_check,
-        "urlopen",
-        lambda *args, **kwargs: _FakeJsonResponse([]),
-    )
-
-    results = server_deploy_check.check_radar_signal_analysis_smoke(
-        "http://api.test",
-        timeout=2,
-    )
-
-    assert len(results) == 1
-    assert results[0].status == "warn"
-    assert results[0].ok
-    assert "skipped signal analysis" in results[0].detail
 
 
 def test_radar_signal_analysis_smoke_fails_for_malformed_signal_list(monkeypatch) -> None:
