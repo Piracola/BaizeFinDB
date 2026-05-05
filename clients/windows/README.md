@@ -183,7 +183,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - GUI 的 `首用诊断` 按钮复用同一个 `clients.windows.smoke_check.run_smoke_check` 和 `format_summary`，传入当前 Server URL、User Key 和 `OPS Lookback (hours)`，只在窗口内显示摘要；默认不写 evidence 文件，也不会打开第二个 GUI 窗口。
 - smoke check 会额外用同一窗口可选读取 `/ops/trends?lookback_hours=<selected>&bucket_count=12`，该端点失败只作为 warning，不阻断首用；默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
 - 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/radar/signals/{signal_id}/analysis`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/deep/from-signal`、`/reports/periodic`、`/scores/signals/{signal_id}`。
-- GUI 的 `查看分析` 按钮读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，只展示后端返回的 key points、metric highlights、risk flags、evidence/review summary 和 next actions；不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。
+- GUI 的 `查看分析` 按钮读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，只展示后端返回的 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions；不本地生成分析、不重算 agent 状态，不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。
 - GUI 的 `生成 Deep Report` 按钮读取窗口里的 Signal ID，先弹出确认，再调用 `/reports/deep/from-signal?user_key=<User Key>` 并发送 `confirm_deep_report=true`；取消确认不会调用 API。报告正文、审查状态、建议标签和生成元数据都由后端决定，客户端只展示返回报告摘要。
 - Telegram 绑定管理查看时调用 `/telegram/status` 和 `/telegram/bindings`，显示严格绑定模式和白名单/绑定汇总计数；绑定和禁用仍只调用 `/telegram/bindings`。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
 - P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、OPS readiness、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。

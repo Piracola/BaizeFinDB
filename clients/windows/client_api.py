@@ -22,6 +22,8 @@ OPS_TREND_BUCKET_COUNT = 12
 OPS_TREND_PREVIEW_LIMIT = 6
 ANALYSIS_LIST_PREVIEW_LIMIT = 8
 ANALYSIS_METRIC_PREVIEW_LIMIT = 6
+ANALYSIS_AGENT_PREVIEW_LIMIT = 5
+ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT = 3
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
@@ -1110,6 +1112,7 @@ def format_signal_analysis(analysis: Mapping[str, Any]) -> str:
     lines.extend(_analysis_list_lines("Key Points", analysis.get("key_points")))
     lines.extend(_analysis_metric_lines(analysis.get("metric_highlights")))
     lines.extend(_analysis_list_lines("Risk Flags", analysis.get("risk_flags")))
+    lines.extend(_analysis_agent_assessment_lines(analysis.get("agent_assessments")))
     lines.extend(_analysis_evidence_summary_lines(evidence_summary))
     lines.extend(_analysis_review_summary_lines(review_summary))
     lines.extend(_analysis_list_lines("Next Actions", analysis.get("next_actions")))
@@ -1147,6 +1150,38 @@ def _analysis_metric_lines(value: Any) -> list[str]:
         metric_value = _analysis_text(item.get("value"), "-")
         interpretation = _analysis_text(item.get("interpretation"), "后端未返回说明。")
         lines.append(f"- {label}: {metric_value} | {interpretation}")
+    lines.append("")
+    return lines
+
+
+def _analysis_agent_assessment_lines(value: Any) -> list[str]:
+    assessments = [_mapping(item) for item in _sequence(value)][:ANALYSIS_AGENT_PREVIEW_LIMIT]
+    lines = ["Agent Assessments："]
+    if not assessments:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    for item in assessments:
+        label = _analysis_text(item.get("label"), "Agent")
+        agent_id = _analysis_text(item.get("agent_id"), "-")
+        status = _analysis_text(item.get("status"), "not_applicable")
+        summary = _analysis_text(item.get("summary"), "后端未返回摘要。")
+        lines.append(f"- {label}（{agent_id} / {status}）：{summary}")
+
+        findings = _analysis_values(
+            item.get("findings"),
+            ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT,
+        )
+        if findings:
+            lines.append(f"  - Findings：{'; '.join(findings)}")
+
+        next_actions = _analysis_values(
+            item.get("next_actions"),
+            ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT,
+        )
+        if next_actions:
+            lines.append(f"  - Next Actions：{'; '.join(next_actions)}")
+
     lines.append("")
     return lines
 

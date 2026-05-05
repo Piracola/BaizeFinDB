@@ -66,7 +66,7 @@
 - `/telegram/bindings` 管理 Telegram chat 与 `user_key` 的绑定、白名单和禁用状态
 - `/telegram/push/latest` 按最新扫描生成 P0/P1/P2 折叠推送，复用审查过滤 blocked，并写入 `push_logs`
 - `/telegram/push/logs` 查看当前 `user_key` 的 Telegram 推送记录
-- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要、持仓、自选、报告摘要、确认后手动生成 deep 报告、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；查看 Telegram 绑定时会同时显示严格绑定模式和汇总计数；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史、就绪自检、告警钻取和首用诊断选择 1 到 168 小时统计窗口，默认 24
+- Windows 客户端 MVP：用 Python 标准库 + Tkinter 连接本地或服务器 API，查看健康状态、运行状态、服务端磁盘/CPU/内存摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要和确定性 agent assessments、持仓、自选、报告摘要、确认后手动生成 deep 报告、日报/周报、单信号 v2 评分明细，维护 Telegram chat 绑定/白名单并打开 Web 面板；查看 Telegram 绑定时会同时显示严格绑定模式和汇总计数；GUI 可用 `OPS Lookback (hours)` 为运行状态、运维历史、就绪自检、告警钻取和首用诊断选择 1 到 168 小时统计窗口，默认 24
 - Celery 5 分钟调度 MVP：`baizefindb.radar.collect_and_scan` 顺序执行 AKShare 最小采集、雷达扫描，并在 `TELEGRAM_PUSH_ENABLED=true` 时触发 Telegram 折叠推送；Tushare `anns_d` Beat 调度默认不加入，只有 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 时才额外启用
 - 雷达连续扫描记忆：记录同一板块前后变化、连续 P1 次数和生命周期转移
 - P2 7 天观察窗口：当前总览和默认信号列表隐藏超出观察期的 P2，历史排查可显式包含

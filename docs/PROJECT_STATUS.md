@@ -14,7 +14,7 @@ M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻�
 
 Windows 客户端已增加只读 OPS 趋势摘要：GUI `OPS 趋势` 按钮使用当前 `OPS Lookback (hours)` 请求 `/ops/trends?lookback_hours=<selected>&bucket_count=12`，只展示后端趋势桶里的扫描、失败和 Provider、数据质量、Telegram 推送、模型调用 unhealthy 计数，不本地推导 OPS readiness 或状态，也不触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作。
 
-Windows 客户端已增加单信号后端分析摘要入口：GUI `查看分析` 按钮读取当前 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、evidence/review summary 和 next actions；该 API 响应已包含 5 个固定角色的确定性 `agent_assessments` scaffold，但客户端当前仍可只展示既有摘要字段。客户端不本地生成分析、不重算雷达定级、生命周期、审查状态或评分，也不展示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。
+Windows 客户端已增加单信号后端分析摘要入口：GUI `查看分析` 按钮读取当前 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions。客户端不本地生成分析、不重算雷达定级、生命周期、审查状态、agent 状态或评分，也不展示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。
 
 Windows 客户端已增加手动 deep 报告入口：GUI `生成 Deep Report` 按钮读取当前 Signal ID，先弹出确认；确认后调用 `/reports/deep/from-signal?user_key=<User Key>` 并发送 `confirm_deep_report=true`，取消确认不会调用 API。报告正文、审查状态、建议标签和生成元数据仍由后端决定，Windows 客户端只展示返回报告摘要，不通过 quick/standard endpoint 或本地模板生成 deep 报告。
 

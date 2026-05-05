@@ -234,7 +234,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 | 数据源自检 | 调用 `/providers/tushare/readiness`，显示 Tushare token、端点、最近抓取和数据质量准入状态；不触发真实抓取或调度。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |
-| 查看分析 | 读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，显示后端 key points、metric highlights、risk flags、evidence/review summary 和 next actions；不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。 |
+| 查看分析 | 读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，显示后端 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions；不本地生成分析、不重算 agent 状态，不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。 |
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |
 | 查看自选 | 调用 `/portfolio/watchlist`，按 User Key 显示个人自选。 |
 | 查看报告 | 调用 `/reports`，按 User Key 显示 quick/standard/deep 报告摘要。 |

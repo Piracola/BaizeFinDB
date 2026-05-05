@@ -742,6 +742,27 @@ def test_format_signal_analysis_outputs_backend_brief_without_sensitive_terms() 
                 "human_review_required": True,
                 "details": {"cost_price": 10.25, "position_ratio": 0.2},
             },
+            "agent_assessments": [
+                {
+                    "agent_id": "data_quality_agent",
+                    "label": "Data Quality Agent",
+                    "status": "warning",
+                    "summary": "Confidence bucket needs review.",
+                    "findings": [
+                        "Confidence bucket: low.",
+                        "source_ref: https://example.com/raw",
+                    ],
+                    "next_actions": ["Refresh provider snapshots."],
+                },
+                {
+                    "agent_id": "risk_agent",
+                    "label": "Risk Agent",
+                    "status": "warning",
+                    "summary": "Raw note says buy now.",
+                    "findings": ["position_ratio: 0.2"],
+                    "next_actions": ["Keep output framed as research review."],
+                },
+            ],
             "agent_inputs": {
                 "guardrails": ["Do not override backend rule priority"],
             },
@@ -759,6 +780,10 @@ def test_format_signal_analysis_outputs_backend_brief_without_sensitive_terms() 
     assert "Backend priority is P1" in text
     assert "sector_pct_change: +3.4%" in text
     assert "provider_quality_degraded" in text
+    assert "Agent Assessments" in text
+    assert "Data Quality Agent（data_quality_agent / warning）" in text
+    assert "Confidence bucket: low." in text
+    assert "Refresh provider snapshots." in text
     assert "证据数量：1" in text
     assert "信心分桶：low" in text
     assert "0.123" not in text
