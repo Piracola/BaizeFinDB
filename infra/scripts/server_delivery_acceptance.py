@@ -39,6 +39,7 @@ PRODUCTION_READINESS_PRESET_FLAGS = (
     "include_systemd_unit_check",
     "include_telegram_strict_binding_check",
     "include_tushare_anns_d_beat_enablement",
+    "include_model_provider_readiness",
     "include_ops_evidence",
     "include_alert_telegram_preview",
     "include_alert_telegram_env_check",
@@ -103,6 +104,16 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             ]
         )
         deploy_evidence_files.append(tushare_report)
+    if args.include_model_provider_readiness:
+        model_provider_report = evidence_dir / "model-provider-readiness.json"
+        deploy_preflight_command.append("--check-model-provider-readiness")
+        deploy_preflight_command.extend(
+            [
+                "--model-provider-readiness-json-output",
+                str(model_provider_report),
+            ]
+        )
+        deploy_evidence_files.append(model_provider_report)
     deploy_preflight_command.extend(
         [
             "--json-output",
@@ -615,6 +626,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask the deploy preflight stage to run the offline/no-token Tushare "
             "anns_d Beat enablement checklist."
+        ),
+    )
+    parser.add_argument(
+        "--include-model-provider-readiness",
+        action="store_true",
+        help=(
+            "Ask the deploy preflight stage to run the read-only/no-call model "
+            "provider readiness preflight."
         ),
     )
     parser.add_argument(

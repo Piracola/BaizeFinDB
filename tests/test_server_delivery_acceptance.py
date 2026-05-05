@@ -302,6 +302,73 @@ def test_build_stage_specs_tushare_beat_enablement_is_deploy_only(
     )
 
 
+def test_build_stage_specs_includes_optional_model_provider_readiness(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_model_provider_readiness=True)
+
+    deploy_stage = server_delivery_acceptance.build_stage_specs(args)[0]
+
+    assert deploy_stage.command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-model-provider-readiness",
+        "--model-provider-readiness-json-output",
+        str(tmp_path / "model-provider-readiness.json"),
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert deploy_stage.evidence_files == [
+        tmp_path / "server-deploy-check.json",
+        tmp_path / "model-provider-readiness.json",
+    ]
+
+
+def test_build_stage_specs_model_provider_readiness_is_deploy_only(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_systemd_unit_check=True,
+        include_model_provider_readiness=True,
+        include_alert_telegram_preview=True,
+        include_alert_telegram_env_check=True,
+        include_alert_telegram_service_verify=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert stages[0].command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-systemd-units",
+        "--check-model-provider-readiness",
+        "--model-provider-readiness-json-output",
+        str(tmp_path / "model-provider-readiness.json"),
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert stages[0].evidence_files == [
+        tmp_path / "server-deploy-check.json",
+        tmp_path / "model-provider-readiness.json",
+    ]
+    assert all("--check-model-provider-readiness" not in stage.command for stage in stages[1:])
+    assert all(
+        "--model-provider-readiness-json-output" not in stage.command
+        for stage in stages[1:]
+    )
+
+
 def test_build_stage_specs_includes_optional_database_inventory(
     tmp_path: Path,
 ) -> None:
@@ -389,12 +456,16 @@ def test_build_stage_specs_production_readiness_preset_expands_checks(
         "--check-tushare-anns-d-beat-enablement",
         "--tushare-anns-d-beat-enablement-json-output",
         str(tmp_path / "tushare-anns-d-beat-enablement.json"),
+        "--check-model-provider-readiness",
+        "--model-provider-readiness-json-output",
+        str(tmp_path / "model-provider-readiness.json"),
         "--json-output",
         str(tmp_path / "server-deploy-check.json"),
     ]
     assert stages[0].evidence_files == [
         tmp_path / "server-deploy-check.json",
         tmp_path / "tushare-anns-d-beat-enablement.json",
+        tmp_path / "model-provider-readiness.json",
     ]
     assert stages[3].command == [
         "python",
@@ -1487,6 +1558,10 @@ def test_main_plan_only_writes_production_readiness_plan(
     assert [stage["status"] for stage in report["stages"]] == ["planned"] * 8
     assert report["stages"][0]["exit_code"] is None
     assert "--check-server-compose-contract" in report["stages"][0]["command"]
+    assert "--check-model-provider-readiness" in report["stages"][0]["command"]
+    assert str(tmp_path / "evidence" / "model-provider-readiness.json") in report[
+        "stages"
+    ][0]["evidence_files"]
     assert report["stages"][3]["command"][1] == "infra/scripts/database_inventory.py"
     assert "--ops-evidence-output" in report["stages"][4]["command"]
     assert "profile=production_readiness" in captured.out

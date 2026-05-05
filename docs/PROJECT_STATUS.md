@@ -26,6 +26,8 @@ Web 雷达终端工作台已在状态面板加入只读 OPS 趋势摘要、OPS �
 
 `infra/scripts/model_provider_readiness.py` 已新增为未来 LLM-backed 多 agent 接入前的只读配置自检入口：默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled` 为 OK；启用 `openai` 时检查 `MODEL_PRIMARY_MODEL` 和 `OPENAI_API_KEY`，启用 `custom` 时检查 `MODEL_PRIMARY_MODEL`、`MODEL_API_BASE_URL` 和 `MODEL_API_KEY`。该 helper 不调用模型、不验证 token、不读取数据库、不生成报告、不发送 Telegram、不输出 API key；`MODEL_AUDIT_STORE_RAW_PROMPT=true` 会作为 warning。
 
+`server_deploy_check.py --check-model-provider-readiness` 已可把上述模型 Provider readiness 纳入 Linux 部署预检；可选 `--model-provider-readiness-json-output <path>` 会写出独立脱敏 evidence，`warn` 保持非阻塞，`fail` 会让部署预检失败。`server_delivery_acceptance.py --include-model-provider-readiness` 会把该检查纳入同一交付验收包并追踪 `<evidence-dir>/model-provider-readiness.json`；`--production-readiness` 默认包含该 evidence，plan-only 会只展示命令和路径，不调用 helper。
+
 `infra/scripts/database_inventory.py` 已新增为数据库只读清单入口：读取当前 `DATABASE_URL` 指向的数据库，输出脱敏 dialect/driver、Alembic repo head、已应用迁移、应用表存在情况和关键业务表计数，可用 `--json-output` 保存 evidence；该脚本不输出数据库连接串、密码、行内容、Provider 原始数据、报告正文、prompt 或 secrets，不执行迁移、seed、采集、扫描、报告、推送或模型调用。
 
 Windows 首次试运行入口已可通过 `clients/windows/first-trial.ps1 -StartDockerBackend -DatabaseInventoryJsonOutput <path>` 在本机 Docker 后端健康后、deploy preflight/smoke/GUI 前保存同一份脱敏数据库只读清单 evidence；该参数只能和 `-StartDockerBackend` 同用，脚本只调用现有 `infra/scripts/database_inventory.py`，不在 PowerShell 中解析数据库内容，失败时阻断后续启动。

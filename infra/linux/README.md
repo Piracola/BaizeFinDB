@@ -107,6 +107,7 @@ python infra/scripts/server_deploy_check.py --strict-env --json-output evidence/
 python infra/scripts/server_deploy_check.py --check-server-compose-contract --json-output evidence/server-deploy-check-compose.json
 python infra/scripts/server_deploy_check.py --check-telegram-strict-binding --json-output evidence/server-deploy-check-telegram.json
 python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
+python infra/scripts/server_deploy_check.py --check-model-provider-readiness --model-provider-readiness-json-output evidence/model-provider-readiness.json --json-output evidence/server-deploy-check-model.json
 ```
 
 The preflight uses `docker compose config --quiet` so real environment values
@@ -409,7 +410,7 @@ python infra/scripts/server_delivery_acceptance.py --base-url https://<your-doma
 
 For a non-destructive production-readiness rehearsal, enable the preset. It adds
 server compose contract, systemd template, Telegram strict binding readiness,
-Tushare Beat enablement, strict radar analysis sample coverage, database
+Tushare Beat enablement, model provider readiness, strict radar analysis sample coverage, database
 inventory, OPS evidence, no-send alert preview, and Telegram alert env preflight
 stages:
 
@@ -440,6 +441,13 @@ should also read `/telegram/status` and record whether strict binding or another
 whitelist path is ready. This only appends `--check-telegram-strict-binding` to
 `server_deploy_check.py`; warning-only output stays non-blocking unless the
 acceptance command also uses `--fail-on-warning`.
+Add `--include-model-provider-readiness` when the deploy preflight stage should
+also run the read-only/no-call model provider readiness preflight and write
+`model-provider-readiness.json` into the same evidence bundle. This only appends
+`--check-model-provider-readiness` and
+`--model-provider-readiness-json-output <evidence-dir>/model-provider-readiness.json`
+to `server_deploy_check.py`; it does not call models, validate tokens over the
+network, read databases, generate reports, send Telegram, or output API keys.
 Add `--include-database-inventory` when the same evidence bundle should include
 the read-only database inventory report. This adds a separate `database_inventory`
 stage that writes `database-inventory.json`; it does not run migrations, seed

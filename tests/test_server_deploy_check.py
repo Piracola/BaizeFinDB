@@ -103,6 +103,21 @@ def test_tushare_beat_json_output_requires_check_before_checks(monkeypatch) -> N
     assert calls == []
 
 
+def test_model_provider_readiness_json_output_requires_check_before_checks(
+    monkeypatch,
+) -> None:
+    calls = []
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: calls.append("root"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        server_deploy_check.main(
+            ["--model-provider-readiness-json-output", "evidence.json"]
+        )
+
+    assert exc_info.value.code == 2
+    assert calls == []
+
+
 def test_require_radar_signal_analysis_sample_requires_m5_smoke(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: calls.append("root"))
@@ -1100,6 +1115,28 @@ def test_tushare_anns_d_beat_enablement_flag_can_be_enabled() -> None:
     )
 
 
+def test_model_provider_readiness_flag_defaults_off() -> None:
+    args = server_deploy_check.build_parser().parse_args([])
+
+    assert args.check_model_provider_readiness is False
+    assert args.model_provider_readiness_json_output is None
+
+
+def test_model_provider_readiness_flag_can_be_enabled() -> None:
+    args = server_deploy_check.build_parser().parse_args(
+        [
+            "--check-model-provider-readiness",
+            "--model-provider-readiness-json-output",
+            "evidence/model-readiness.json",
+        ]
+    )
+
+    assert args.check_model_provider_readiness is True
+    assert args.model_provider_readiness_json_output == Path(
+        "evidence/model-readiness.json"
+    )
+
+
 def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -1118,6 +1155,32 @@ def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
         "check_tushare_anns_d_beat_enablement",
         lambda **kwargs: calls.append("tushare")
         or server_deploy_check.CheckResult("tushare", "ok"),
+    )
+
+    exit_code = server_deploy_check.main([])
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_main_default_does_not_run_model_provider_readiness(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_model_provider_readiness",
+        lambda *args, **kwargs: calls.append("model")
+        or server_deploy_check.CheckResult("model", "ok"),
     )
 
     exit_code = server_deploy_check.main([])
@@ -1653,6 +1716,211 @@ def test_tushare_anns_d_beat_enablement_summary_does_not_leak_token(monkeypatch)
 
     assert "super-secret-token" not in result.detail
     assert "token value should not be copied" not in result.detail
+
+
+def test_main_model_provider_readiness_warn_exits_zero(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_model_provider_readiness",
+        lambda *args, **kwargs: server_deploy_check.CheckResult(
+            "model provider readiness",
+            "warn",
+            "status=warn; summary ok=6 warn=1 fail=0",
+        ),
+    )
+
+    exit_code = server_deploy_check.main(["--check-model-provider-readiness"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "[WARN] model provider readiness" in captured.out
+
+
+def test_main_model_provider_readiness_fail_exits_nonzero(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_model_provider_readiness",
+        lambda *args, **kwargs: server_deploy_check.CheckResult(
+            "model provider readiness",
+            "fail",
+            "status=fail; summary ok=4 warn=1 fail=2",
+        ),
+    )
+
+    exit_code = server_deploy_check.main(["--check-model-provider-readiness"])
+
+    assert exit_code == 1
+
+
+def test_main_model_provider_readiness_writes_deploy_report(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "evidence" / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_model_provider_readiness_report",
+        lambda root: _model_provider_readiness_report("ok"),
+    )
+
+    exit_code = server_deploy_check.main(
+        ["--check-model-provider-readiness", "--json-output", str(output)]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    names = {check["name"] for check in report["checks"]}
+    assert exit_code == 0
+    assert report["status"] == "ok"
+    assert "model provider readiness" in names
+
+
+def test_model_provider_readiness_ok_maps_to_ok(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_model_provider_readiness_report",
+        lambda root: _model_provider_readiness_report("ok"),
+    )
+
+    result = server_deploy_check.check_model_provider_readiness(tmp_path)
+
+    assert result.status == "ok"
+    assert result.ok
+    assert "summary ok=7 warn=0 fail=0" in result.detail
+
+
+def test_model_provider_readiness_warn_is_non_fatal(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_model_provider_readiness_report",
+        lambda root: _model_provider_readiness_report("warn"),
+    )
+
+    result = server_deploy_check.check_model_provider_readiness(tmp_path)
+
+    assert result.status == "warn"
+    assert result.ok
+    assert "raw_prompt_storage_enabled=True" in result.detail
+
+
+def test_model_provider_readiness_fail_is_fatal(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_model_provider_readiness_report",
+        lambda root: _model_provider_readiness_report("fail"),
+    )
+
+    result = server_deploy_check.check_model_provider_readiness(tmp_path)
+
+    assert result.status == "fail"
+    assert not result.ok
+    assert "summary ok=4 warn=1 fail=2" in result.detail
+
+
+def test_model_provider_readiness_writes_standalone_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "nested" / "model-readiness.json"
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_model_provider_readiness_report",
+        lambda root: _model_provider_readiness_report("warn"),
+    )
+
+    result = server_deploy_check.check_model_provider_readiness(
+        tmp_path,
+        json_output=output,
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert result.status == "warn"
+    assert report["report_type"] == "model_provider_readiness"
+    assert report["status"] == "warn"
+    assert "evidence written" in result.detail
+
+
+def test_model_provider_readiness_summary_does_not_leak_api_key(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_model_provider_readiness_report",
+        lambda root: {
+            **_model_provider_readiness_report("warn"),
+            "checks": [
+                {
+                    "name": "model credentials",
+                    "status": "warn",
+                    "detail": "secret should not be copied",
+                    "metadata": {"value": "fake-redacted-key-value"},
+                }
+            ],
+        },
+    )
+
+    result = server_deploy_check.check_model_provider_readiness(tmp_path)
+
+    assert "fake-redacted-key-value" not in result.detail
+    assert "secret should not be copied" not in result.detail
+
+
+def _model_provider_readiness_report(status: str) -> dict[str, object]:
+    summary_by_status = {
+        "ok": {"check_count": 7, "ok_count": 7, "warning_count": 0, "failure_count": 0},
+        "warn": {"check_count": 7, "ok_count": 6, "warning_count": 1, "failure_count": 0},
+        "fail": {"check_count": 7, "ok_count": 4, "warning_count": 1, "failure_count": 2},
+    }
+    return {
+        "generated_at": "2026-05-05T00:00:00+00:00",
+        "report_type": "model_provider_readiness",
+        "status": status,
+        "configuration": {
+            "model_analysis_enabled": status != "ok",
+            "model_provider": "openai" if status != "ok" else "disabled",
+            "primary_model": {"configured": status != "fail", "name": "gpt-primary"},
+            "fallback_model": {"configured": False, "name": None},
+            "custom_base_url": {"configured": False},
+            "credentials": {
+                "openai_api_key_configured": status == "warn",
+                "model_api_key_configured": False,
+            },
+            "raw_prompt_storage_enabled": status == "warn",
+        },
+        "summary": summary_by_status[status],
+        "checks": [],
+    }
 
 
 def _copy_linux_templates(tmp_path: Path) -> Path:

@@ -686,6 +686,44 @@ def check_tushare_anns_d_beat_enablement(
     )
 
 
+def check_model_provider_readiness(
+    root: Path,
+    *,
+    json_output: Path | None = None,
+) -> CheckResult:
+    try:
+        report = _build_model_provider_readiness_report(root)
+        if json_output is not None:
+            _write_model_provider_readiness_report(json_output, report)
+    except Exception as exc:
+        return CheckResult(
+            "model provider readiness",
+            "fail",
+            f"readiness check could not run: {exc.__class__.__name__}: "
+            f"{_truncate(str(exc), limit=250)}",
+        )
+
+    status = str(report.get("status", "fail"))
+    if status == "fail":
+        result_status = "fail"
+    elif status == "warn":
+        result_status = "warn"
+    elif status == "ok":
+        result_status = "ok"
+    else:
+        return CheckResult(
+            "model provider readiness",
+            "fail",
+            f"unexpected readiness status: {_truncate(status, limit=120)}",
+        )
+
+    detail = _format_model_provider_readiness_summary(report)
+    if json_output is not None:
+        detail = f"{detail}; evidence written: {json_output}"
+
+    return CheckResult("model provider readiness", result_status, detail)
+
+
 def check_systemd_units(root: Path) -> list[CheckResult]:
     linux_dir = root / "infra" / "linux"
     texts: dict[str, str] = {}
@@ -861,6 +899,23 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--check-model-provider-readiness",
+        action="store_true",
+        help=(
+            "Run the read-only/no-call model provider readiness preflight. "
+            "Warnings are non-fatal; only readiness fail status fails this preflight."
+        ),
+    )
+    parser.add_argument(
+        "--model-provider-readiness-json-output",
+        type=Path,
+        default=None,
+        help=(
+            "Write the raw model provider readiness evidence JSON to this path. "
+            "Requires --check-model-provider-readiness."
+        ),
+    )
+    parser.add_argument(
         "--check-containers",
         action="store_true",
         help="Run docker compose ps for the server overlay.",
@@ -936,6 +991,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--tushare-anns-d-beat-enablement-json-output requires "
             "--check-tushare-anns-d-beat-enablement"
+        )
+    if args.model_provider_readiness_json_output and not args.check_model_provider_readiness:
+        parser.error(
+            "--model-provider-readiness-json-output requires "
+            "--check-model-provider-readiness"
         )
     if args.require_radar_signal_analysis_sample and not args.check_m5_smoke:
         parser.error("--require-radar-signal-analysis-sample requires --check-m5-smoke")
@@ -1028,6 +1088,14 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(
             check_tushare_anns_d_beat_enablement(
                 json_output=args.tushare_anns_d_beat_enablement_json_output,
+            )
+        )
+
+    if args.check_model_provider_readiness:
+        checks.append(
+            check_model_provider_readiness(
+                root,
+                json_output=args.model_provider_readiness_json_output,
             )
         )
 
@@ -1566,6 +1634,25 @@ def _write_tushare_anns_d_beat_enablement_report(
     write_report(path, encode_report(report))
 
 
+def _build_model_provider_readiness_report(root: Path) -> dict[str, object]:
+    from app.audit.model_provider_readiness import evaluate_model_provider_readiness
+    from app.core.config import Settings
+
+    return evaluate_model_provider_readiness(Settings(_env_file=root / ".env"))
+
+
+def _write_model_provider_readiness_report(
+    path: Path,
+    report: dict[str, object],
+) -> None:
+    try:
+        from infra.scripts.model_provider_readiness import write_report
+    except ModuleNotFoundError:
+        from model_provider_readiness import write_report
+
+    write_report(path, report)
+
+
 def _load_postgres_backup_helper():
     try:
         from infra.scripts import postgres_backup
@@ -1637,6 +1724,49 @@ def _format_tushare_anns_d_beat_enablement_gates(report: dict[str, object]) -> s
     if not attention_gates:
         return ""
     return f"attention gates={', '.join(attention_gates[:6])}"
+
+
+def _format_model_provider_readiness_summary(report: dict[str, object]) -> str:
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+
+    configuration = report.get("configuration")
+    if not isinstance(configuration, dict):
+        configuration = {}
+
+    credentials = configuration.get("credentials")
+    if not isinstance(credentials, dict):
+        credentials = {}
+
+    primary_model = configuration.get("primary_model")
+    if not isinstance(primary_model, dict):
+        primary_model = {}
+
+    fallback_model = configuration.get("fallback_model")
+    if not isinstance(fallback_model, dict):
+        fallback_model = {}
+
+    custom_base_url = configuration.get("custom_base_url")
+    if not isinstance(custom_base_url, dict):
+        custom_base_url = {}
+
+    return (
+        f"status={report.get('status', 'unknown')}; "
+        f"model_analysis_enabled={configuration.get('model_analysis_enabled', False)}; "
+        f"provider={configuration.get('model_provider', 'unknown')}; "
+        "summary "
+        f"ok={summary.get('ok_count', 0)} "
+        f"warn={summary.get('warning_count', 0)} "
+        f"fail={summary.get('failure_count', 0)}; "
+        f"primary_model_configured={primary_model.get('configured', False)}; "
+        f"fallback_model_configured={fallback_model.get('configured', False)}; "
+        f"custom_base_url_configured={custom_base_url.get('configured', False)}; "
+        "credentials "
+        f"openai_api_key_configured={credentials.get('openai_api_key_configured', False)} "
+        f"model_api_key_configured={credentials.get('model_api_key_configured', False)}; "
+        f"raw_prompt_storage_enabled={configuration.get('raw_prompt_storage_enabled', False)}"
+    )
 
 
 if __name__ == "__main__":

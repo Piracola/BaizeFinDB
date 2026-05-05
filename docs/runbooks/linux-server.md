@@ -91,6 +91,7 @@ uv run python infra/scripts/server_deploy_check.py
 uv run python infra/scripts/server_deploy_check.py --check-server-compose-contract
 uv run python infra/scripts/server_deploy_check.py --check-systemd-units
 uv run python infra/scripts/server_deploy_check.py --check-telegram-strict-binding
+uv run python infra/scripts/server_deploy_check.py --check-model-provider-readiness
 ```
 
 需要给脚本、CI 或 Windows 首次试运行流程保留结构化结果时，加
@@ -101,6 +102,7 @@ uv run python infra/scripts/server_deploy_check.py --check-telegram-strict-bindi
 uv run python infra/scripts/server_deploy_check.py --json-output evidence/server-deploy-check.json
 uv run python infra/scripts/server_deploy_check.py --check-server-compose-contract --json-output evidence/server-deploy-check-compose.json
 uv run python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
+uv run python infra/scripts/server_deploy_check.py --check-model-provider-readiness --model-provider-readiness-json-output evidence/model-provider-readiness.json --json-output evidence/server-deploy-check-model.json
 ```
 
 `--check-server-compose-contract` 会读取
@@ -148,7 +150,7 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 
 生产化交付前，推荐使用只读 production readiness preset。它会在默认交付验收
 基础上追加 server compose runtime contract、systemd 模板静态检查、Telegram 严格
-绑定 readiness、Tushare `anns_d` Beat enablement checklist、脱敏 OPS evidence、
+绑定 readiness、Tushare `anns_d` Beat enablement checklist、模型 Provider readiness、脱敏 OPS evidence、
 数据库只读清单、no-send alert payload / Telegram preview 和 Telegram alert env
 preflight，并在最终 JSON 报告里写入 `profile: "production_readiness"`：
 
@@ -215,6 +217,19 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 
 ```powershell
 uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-tushare-anns-d-beat-enablement
+```
+
+如果还想把模型 Provider readiness 纳入同一验收包，可加
+`--include-model-provider-readiness`。该选项只会让 deploy preflight 阶段追加
+`--check-model-provider-readiness` 和
+`--model-provider-readiness-json-output <evidence-dir>/model-provider-readiness.json`；
+除 `server-deploy-check.json` 汇总外，还会保存原始 readiness evidence；不会调用模型、
+不会验证 token、不会读取数据库、不生成报告、不发送 Telegram、不输出 API key。readiness
+`warn` 仍按部署预检规则作为非阻塞 warning，只有 `fail` 会阻断验收。`--production-readiness`
+默认包含该项：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-model-provider-readiness
 ```
 
 如果还想在同一个验收包里验证告警 payload 和 Telegram delivery preview，可加
