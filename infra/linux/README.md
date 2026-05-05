@@ -10,8 +10,9 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | --- | --- |
 | `../../Dockerfile` | Builds the FastAPI API image. Runtime configuration stays outside the image. |
 | `../../docker-compose.server.yml` | Compose overlay that adds `api`, `worker`, and `beat` services on top of local `postgres` and `redis`. |
-| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, ops overview, AKShare/Tushare status, Tushare readiness, and M5 read-only smoke checks. |
+| `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
+| `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
@@ -155,8 +156,12 @@ The same checks can be run through the bundled preflight:
 python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
-Check the read-only M5 endpoint contracts after the API is up, including the
-ops overview, AKShare status, Tushare status, and Tushare readiness contracts:
+Check the read-only M5 endpoint contracts after the API is up, including OPS
+overview/history/trends/readiness, AKShare status, Tushare status, Tushare
+readiness, radar overview, Telegram status, `/radar/signals`, and sampled
+`/radar/signals/{id}/analysis` when at least one signal exists. Empty radar
+signal lists are warning-only so a fresh server is not blocked before its first
+scan:
 
 ```bash
 python infra/scripts/server_deploy_check.py --check-m5-smoke
@@ -217,8 +222,20 @@ runtime sampler, then writes a bounded summary under
 python infra/scripts/server_delivery_acceptance.py
 ```
 
-Use `--evidence-dir`, `--runtime-samples`, `--runtime-interval-seconds`, and
-`--fail-fast` to adjust the evidence bundle or stop on the first failing stage.
+By default the API target is `http://127.0.0.1:8000`. Use `--base-url` when
+validating a reverse proxy, non-default port, or domain endpoint from the same
+server:
+
+```bash
+python infra/scripts/server_delivery_acceptance.py --base-url https://<your-domain>
+```
+
+Delivery acceptance reads the top-level `status` field from each helper evidence
+JSON. Warning-only evidence stays visible as non-blocking `warn`; missing,
+unreadable, invalid, failing, `error`, or `blocked` evidence marks the stage as
+`fail`. Use `--evidence-dir`, `--runtime-samples`, `--runtime-interval-seconds`,
+and `--fail-fast` to adjust the evidence bundle or stop on the first failing
+stage.
 
 Verify Tushare `stock_basic` without writing to the database:
 
