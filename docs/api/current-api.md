@@ -660,7 +660,7 @@ Invoke-RestMethod -Method Delete http://127.0.0.1:8000/portfolio/watchlist/1
 
 ## 6. Reports / 报告 API
 
-报告 API 当前是 MVP 模板生成，不调用模型，不生成 deep report。报告只用于关注、观察、风险和复盘，不构成投资建议。
+报告 API 当前是 MVP 模板生成，不调用模型。quick/standard 可从普通报告入口生成；deep 只能走专门手动入口并二次确认。报告只用于关注、观察、风险和复盘，不构成投资建议。
 
 ### `POST /reports/from-signal`
 
@@ -682,7 +682,26 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/from-signal `
 | --- | --- |
 | `user_key` | 单用户 MVP 隔离键，默认 `default` |
 
-`report_type` 当前只接受 `quick` 和 `standard`。传入 `deep` 会返回 `422`，不会创建报告；`deep` 后续只能通过专门手动入口触发并二次确认。
+`report_type` 当前只接受 `quick` 和 `standard`。传入 `deep` 会返回 `422`，不会创建报告；`deep` 只能通过专门手动入口触发并二次确认。
+
+### `POST /reports/deep/from-signal`
+
+用途：从雷达信号手动生成 deep 模板报告。必须显式确认，不自动触发，不调用模型。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/deep/from-signal `
+  -ContentType "application/json" `
+  -Body '{"signal_id":1,"confirm_deep_report":true}'
+```
+
+请求体：
+
+| 字段 | 说明 |
+| --- | --- |
+| `signal_id` | 雷达信号 ID，必须大于 0 |
+| `confirm_deep_report` | 必须为 `true`；缺失或 `false` 返回 `400` 且不创建报告 |
+
+审查行为与 quick/standard 一致：blocked 返回 `409`，missing signal 返回 `404`，needs_human_review 会生成报告但标记为 `needs_human_review`。
 
 ### `GET /reports`
 
@@ -698,7 +717,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/reports?user_key=telegram-1001&report_t
 | 参数 | 说明 |
 | --- | --- |
 | `user_key` | 单用户 MVP 隔离键，默认 `default` |
-| `report_type` | `quick` 或 `standard` |
+| `report_type` | `quick`、`standard` 或 `deep` |
 | `limit` | 1 到 100，默认 50 |
 
 ### `GET /reports/{report_id}`

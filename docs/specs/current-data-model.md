@@ -158,7 +158,7 @@ Portfolio 表不负责：
 
 Reports 表只回答：
 
-- 哪个 `user_key` 生成了哪份 quick/standard 报告。
+- 哪个 `user_key` 生成了哪份 quick/standard/deep 报告。
 - 报告来源于哪个雷达信号。
 - 报告生成前的审查状态、报告状态和建议标签是什么。
 - 模板报告正文和生成元数据是什么。
@@ -167,6 +167,7 @@ Reports 表不负责：
 
 - 覆盖雷达 P0/P1/P2。
 - 自动生成 deep report。
+- 绕过 deep report 的手动确认。
 - 发布公开分享或导出文件。
 - 保存完整模型 prompt；当前 MVP 不调用模型。
 

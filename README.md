@@ -43,7 +43,8 @@
 - `/portfolio/holdings` 手动维护持仓，成本价和仓位比例可选
 - `/portfolio/watchlist` 手动维护自选关注项
 - `/reports/from-signal` 从雷达信号生成 quick/standard 模板报告，生成前复用审查
-- `/reports` 查看当前 `user_key` 的报告列表
+- `/reports/deep/from-signal` 手动生成 deep 模板报告，需要 `confirm_deep_report=true` 二次确认，不自动触发、不调用模型
+- `/reports` 查看当前 `user_key` 的报告列表，可按 quick/standard/deep 过滤
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
 - 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘/CPU/内存摘要、运维历史、只读 OPS 趋势摘要、运行就绪自检、OPS 告警钻取、Tushare 状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情、后端单信号分析摘要，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单；Telegram 面板会读取 `/telegram/status`，展示严格绑定模式和白名单/绑定汇总计数，但不展示原始环境值、bot token 或 webhook secret；命令栏支持 `trend` / `trends` 滚动并刷新 `/ops/trends?lookback_hours=24&bucket_count=12` 的后端趋势桶计数，也支持 `warn` / `warning` 滚动并刷新 OPS 告警钻取。趋势摘要只展示后端返回的扫描、失败和 unhealthy 桶计数；告警钻取只读复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history` 的 24 小时窗口结果，展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events，不在浏览器重算 OPS 状态或触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作
@@ -90,7 +91,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成；Tushare `stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取、日志和快照查询，`anns_d` 重大风险公告可被后续雷达扫描映射为 risk P0；`anns_d` Beat 调度有默认关闭的显式开关。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、诱导交易语言正反例、否定式风险提示误报防护、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 验收项完成 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check；后续进入生产化验证和真实数据增强。 |
+| M5 | 验收项完成 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、手动 deep 报告入口、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check；后续进入生产化验证和真实数据增强。 |
 
 ## 本地启动
 

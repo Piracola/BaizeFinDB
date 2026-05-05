@@ -38,6 +38,11 @@ class SignalReportCreate(BaseModel):
     report_type: CreatableReportType = CreatableReportType.QUICK
 
 
+class ManualDeepReportCreate(BaseModel):
+    signal_id: int = Field(gt=0)
+    confirm_deep_report: bool = False
+
+
 class ReportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

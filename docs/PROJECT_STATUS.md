@@ -6,11 +6,11 @@
 
 当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
-项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、Tushare 公告完整雷达扫描 golden cases、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
+项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、Tushare 公告完整雷达扫描 golden cases、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP、手动 deep 报告入口和 Telegram 折叠推送日志。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、单信号后端分析摘要、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/analysis <id>` 只读消费 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、evidence/review summary 和 next actions，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤，`TELEGRAM_REQUIRE_BINDING=true` 可关闭无白名单且无绑定时的本地开放兜底；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态、分析摘要或评分。
 
-M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻不能单独触发主线 P0、风险事件 P0、生命周期、Review Agent 审查范围、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告预留约束、模型降级审计、Web 核心页面顺序和公开分享脱敏。
+M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻不能单独触发主线 P0、风险事件 P0、生命周期、Review Agent 审查范围、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告手动确认约束、模型降级审计、Web 核心页面顺序和公开分享脱敏。
 
 Windows 客户端已增加只读 OPS 趋势摘要：GUI `OPS 趋势` 按钮使用当前 `OPS Lookback (hours)` 请求 `/ops/trends?lookback_hours=<selected>&bucket_count=12`，只展示后端趋势桶里的扫描、失败和 Provider、数据质量、Telegram 推送、模型调用 unhealthy 计数，不本地推导 OPS readiness 或状态，也不触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作。
 
@@ -46,7 +46,7 @@ Telegram 告警 env 预检已新增：`infra/scripts/server_alert_telegram_env_c
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能查看运行状态、维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
 
-报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记；报告发布前审查不受信号候选范围限制，确保发布前安全门始终执行；诱导交易语言正反例已进入 golden cases，否定式风险提示如“不建议马上买入 / 不宜满仓 / 不应跟着买”不会误封，但带免责声明后的明确催单仍会 blocked；`deep` 已作为报告类型预留，但不会被 `/reports/from-signal` 自动或普通手动创建。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d v2 综合评分记录，已纳入 Provider 数据质量、信号时效性、评分档位和权重说明。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告、查看报告列表、生成日报/周报、查看单信号评分档位和组件明细，并维护 Telegram chat 绑定/白名单；Web 和 Windows 绑定视图会显示严格绑定模式与汇总计数，不暴露原始环境值、bot token 或 webhook secret。
+报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记；报告发布前审查不受信号候选范围限制，确保发布前安全门始终执行；诱导交易语言正反例已进入 golden cases，否定式风险提示如“不建议马上买入 / 不宜满仓 / 不应跟着买”不会误封，但带免责声明后的明确催单仍会 blocked；`/reports/deep/from-signal` 已提供手动 deep 模板报告入口，必须传 `confirm_deep_report=true`，继续复用发布前审查，不自动触发、不调用模型，`/reports/from-signal` 仍拒绝 deep。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d v2 综合评分记录，已纳入 Provider 数据质量、信号时效性、评分档位和权重说明。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成报告、查看报告列表、生成日报/周报、查看单信号评分档位和组件明细，并维护 Telegram chat 绑定/白名单；Web 和 Windows 绑定视图会显示严格绑定模式与汇总计数，不暴露原始环境值、bot token 或 webhook secret。
 
 模型审计底座已接入：`model_call_logs` 可记录模型失败后的 `degraded` 或 `fallback` 状态、调用点、模型名、错误摘要、prompt hash 和 prompt 长度；默认不保存完整 `raw_prompt`，只有显式设置 `MODEL_AUDIT_STORE_RAW_PROMPT=true` 或调用方主动开启时才保存。
 

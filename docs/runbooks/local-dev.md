@@ -233,7 +233,13 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/from-signal `
 Invoke-RestMethod http://127.0.0.1:8000/reports
 ```
 
-当前只支持 quick / standard 模板报告；deep report 后续只能手动触发并二次确认。
+当前 `/reports/from-signal` 只支持 quick / standard 模板报告。deep report 只能走专门手动入口并二次确认：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/reports/deep/from-signal `
+  -ContentType "application/json" `
+  -Body '{"signal_id":1,"confirm_deep_report":true}'
+```
 
 生成日报/周报汇总：
 

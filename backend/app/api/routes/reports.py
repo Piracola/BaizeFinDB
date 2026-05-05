@@ -7,14 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.portfolio.schemas import DEFAULT_USER_KEY
 from app.reports.schemas import (
-    CreatableReportType,
+    ManualDeepReportCreate,
     PeriodicReportRead,
     PeriodicReportType,
     ReportRead,
+    ReportType,
     SignalReportCreate,
 )
 from app.reports.service import (
     ReportBlockedError,
+    create_manual_deep_signal_report,
     create_signal_report,
     generate_periodic_report,
     get_report,
@@ -67,11 +69,52 @@ async def create_report_from_signal(
     return report
 
 
+@router.post("/deep/from-signal", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
+async def create_deep_report_from_signal(
+    payload: ManualDeepReportCreate,
+    session: SessionDep,
+    user_key: UserKeyQuery = DEFAULT_USER_KEY,
+) -> ReportRead:
+    if not payload.confirm_deep_report:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "manual deep report requires explicit confirmation",
+                "required_field": "confirm_deep_report",
+            },
+        )
+
+    try:
+        report = await create_manual_deep_signal_report(
+            session,
+            signal_id=payload.signal_id,
+            user_key=user_key,
+        )
+    except ReportBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "signal review blocked report generation",
+                "reasons": exc.reasons,
+            },
+        ) from exc
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("creating manual deep report", exc) from exc
+
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"radar signal not found: {payload.signal_id}",
+        )
+
+    return report
+
+
 @router.get("", response_model=list[ReportRead])
 async def reports(
     session: SessionDep,
     user_key: UserKeyQuery = DEFAULT_USER_KEY,
-    report_type: CreatableReportType | None = None,
+    report_type: ReportType | None = None,
     limit: LimitQuery = 50,
 ) -> list[ReportRead]:
     try:

@@ -21,6 +21,7 @@ from app.reports.schemas import (
     ReportRead,
     ReportStatus,
     ReportSuggestionLabel,
+    ReportType,
 )
 
 REPORT_DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
@@ -45,7 +46,26 @@ async def create_signal_report(
         session=session,
         user=user,
         signal_id=signal_id,
-        report_type=report_type,
+        report_type=ReportType(report_type.value),
+        commit=True,
+    )
+
+
+async def create_manual_deep_signal_report(
+    session: AsyncSession,
+    signal_id: int,
+    user_key: str = DEFAULT_USER_KEY,
+) -> ReportRead | None:
+    user = await get_or_create_user(session, user_key)
+    return await _create_signal_report_for_user(
+        session=session,
+        user=user,
+        signal_id=signal_id,
+        report_type=ReportType.DEEP,
+        details_update={
+            "manual_confirmation": True,
+            "confirmed_action": "manual_deep_report",
+        },
         commit=True,
     )
 
@@ -63,7 +83,7 @@ async def ensure_signal_report(
         session=session,
         user_id=user.id,
         signal_id=signal_id,
-        report_type=report_type,
+        report_type=ReportType(report_type.value),
     )
     if existing_report is not None:
         return _report_read(existing_report, user.user_key)
@@ -72,7 +92,7 @@ async def ensure_signal_report(
         session=session,
         user=user,
         signal_id=signal_id,
-        report_type=report_type,
+        report_type=ReportType(report_type.value),
         details_update=details_update,
         commit=commit,
     )
@@ -82,7 +102,7 @@ async def _create_signal_report_for_user(
     session: AsyncSession,
     user: UserProfile,
     signal_id: int,
-    report_type: CreatableReportType,
+    report_type: ReportType,
     details_update: dict[str, object] | None = None,
     commit: bool = True,
 ) -> ReportRead | None:
@@ -119,6 +139,7 @@ async def _create_signal_report_for_user(
         "review_reasons": review.reasons,
         "generation_mode": "deterministic_template",
         "model_status": "not_used",
+        "report_depth": report_type.value,
     }
     if details_update:
         details.update(details_update)
@@ -147,7 +168,7 @@ async def _create_signal_report_for_user(
 async def list_reports(
     session: AsyncSession,
     user_key: str = DEFAULT_USER_KEY,
-    report_type: CreatableReportType | None = None,
+    report_type: ReportType | None = None,
     limit: int = 50,
 ) -> list[ReportRead]:
     user = await get_or_create_user(session, user_key)
@@ -257,7 +278,7 @@ async def _find_existing_signal_report(
     session: AsyncSession,
     user_id: int,
     signal_id: int,
-    report_type: CreatableReportType,
+    report_type: ReportType,
 ) -> Report | None:
     statement = (
         select(Report)
@@ -426,10 +447,11 @@ def _suggestion_label(
     return ReportSuggestionLabel.CAUTIOUS
 
 
-def _report_type_label(report_type: CreatableReportType) -> str:
+def _report_type_label(report_type: ReportType) -> str:
     labels = {
-        CreatableReportType.QUICK: "Quick Report",
-        CreatableReportType.STANDARD: "Standard Report",
+        ReportType.QUICK: "Quick Report",
+        ReportType.STANDARD: "Standard Report",
+        ReportType.DEEP: "Deep Report",
     }
     return labels[report_type]
 
@@ -446,10 +468,13 @@ def _report_summary(
 
 def _report_body(
     signal: RadarSignalDetail,
-    report_type: CreatableReportType,
+    report_type: ReportType,
     suggestion_label: ReportSuggestionLabel,
     review_reasons: list[str],
 ) -> str:
+    if report_type == ReportType.DEEP:
+        return _deep_report_body(signal, suggestion_label, review_reasons)
+
     evidence_lines = [
         f"- {evidence.normalized_summary}（{evidence.evidence_type}，{evidence.freshness}）"
         for evidence in signal.evidences[:5]
@@ -478,6 +503,65 @@ def _report_body(
             "",
             "## 审查记录",
             f"- 理由：{', '.join(review_reasons) if review_reasons else '无'}",
+            "",
+            REPORT_DISCLAIMER,
+        ],
+    )
+
+
+def _deep_report_body(
+    signal: RadarSignalDetail,
+    suggestion_label: ReportSuggestionLabel,
+    review_reasons: list[str],
+) -> str:
+    evidence_lines = [
+        (
+            f"- 证据 {index}: {evidence.normalized_summary}"
+            f"（类型：{evidence.evidence_type}；时效：{evidence.freshness}）"
+        )
+        for index, evidence in enumerate(signal.evidences[:10], start=1)
+    ] or ["- 暂无可用证据摘要。"]
+    metric_lines = [
+        f"- {key}: {value}"
+        for key, value in sorted(signal.metrics.items())
+        if value is not None and not isinstance(value, (dict, list))
+    ][:8] or ["- 暂无可展示指标。"]
+    review_reason_text = ", ".join(review_reasons) if review_reasons else "无"
+
+    return "\n".join(
+        [
+            f"# Deep Report：{signal.subject_name}",
+            "",
+            "## 核心结论",
+            _report_summary(signal, suggestion_label),
+            "",
+            "## 雷达状态",
+            f"- 优先级：{signal.priority.value}",
+            f"- 生命周期：{signal.lifecycle_stage.value}",
+            f"- 审查状态：{signal.review_status.value}",
+            f"- 建议标签：{suggestion_label.value}",
+            "",
+            "## 指标观察",
+            *metric_lines,
+            "",
+            "## 证据地图",
+            *evidence_lines,
+            "",
+            "## 分歧和风险复核",
+            f"- 审查理由：{review_reason_text}",
+            "- 如果证据质量、来源时效或审查状态变化，需要重新生成或人工复核。",
+            "",
+            "## 后续观察条件",
+            "- 继续观察后续扫描中的优先级、生命周期、证据数量和数据质量变化。",
+            "- 关注同一主题是否出现连续触发、风险事件扩散或证据失效。",
+            "- 需要人工复核时，应先完成内部确认，再用于发布、分享或导出。",
+            "",
+            "## 审计边界",
+            (
+                "- 本报告由确定性模板生成，未调用模型、外部接口、Provider、扫描、"
+                "推送或 evidence 写入。"
+            ),
+            "- 本报告只使用已有雷达信号、证据摘要和治理审查结果。",
             "",
             REPORT_DISCLAIMER,
         ],

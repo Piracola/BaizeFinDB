@@ -108,6 +108,114 @@ async def test_report_api_rejects_deep_report_from_signal(
 
 
 @pytest.mark.asyncio
+async def test_report_api_creates_manual_deep_report_from_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+
+    create_response = await client.post(
+        "/reports/deep/from-signal",
+        params={"user_key": "research-user"},
+        json={"signal_id": signal_id, "confirm_deep_report": True},
+    )
+    report_id = create_response.json()["id"]
+    list_response = await client.get(
+        "/reports",
+        params={"user_key": "research-user", "report_type": "deep"},
+    )
+    other_user_response = await client.get(
+        f"/reports/{report_id}",
+        params={"user_key": "other"},
+    )
+
+    assert create_response.status_code == 201
+    payload = create_response.json()
+    assert payload["report_type"] == "deep"
+    assert payload["status"] == "generated"
+    assert payload["review_status"] == "approved"
+    assert payload["details"]["manual_confirmation"] is True
+    assert payload["details"]["confirmed_action"] == "manual_deep_report"
+    assert payload["details"]["generation_mode"] == "deterministic_template"
+    assert payload["details"]["model_status"] == "not_used"
+    assert "## 证据地图" in payload["body_markdown"]
+    assert "## 审计边界" in payload["body_markdown"]
+    assert "未调用模型" in payload["body_markdown"]
+    assert "internal raw excerpt" not in payload["body_markdown"]
+    for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
+        assert forbidden not in payload["body_markdown"]
+
+    assert list_response.status_code == 200
+    assert [report["id"] for report in list_response.json()] == [report_id]
+    assert other_user_response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "request_body",
+    [
+        {"signal_id": 1},
+        {"signal_id": 1, "confirm_deep_report": False},
+    ],
+)
+@pytest.mark.asyncio
+async def test_report_api_rejects_manual_deep_report_without_confirmation(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+    request_body: dict[str, object],
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+    body = {**request_body, "signal_id": signal_id}
+
+    response = await client.post("/reports/deep/from-signal", json=body)
+    list_response = await client.get("/reports")
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["required_field"] == "confirm_deep_report"
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_report_api_blocks_manual_deep_report_for_blocked_signal(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory, evidence_count=1, with_evidence=False)
+
+    response = await client.post(
+        "/reports/deep/from-signal",
+        json={"signal_id": signal_id, "confirm_deep_report": True},
+    )
+    list_response = await client.get("/reports")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["message"] == "signal review blocked report generation"
+    assert "missing_evidence" in response.json()["detail"]["reasons"]
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_report_api_marks_low_confidence_manual_deep_report_for_human_review(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory, confidence=0.2)
+
+    response = await client.post(
+        "/reports/deep/from-signal",
+        json={"signal_id": signal_id, "confirm_deep_report": True},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["report_type"] == "deep"
+    assert payload["status"] == "needs_human_review"
+    assert payload["suggestion_label"] == "谨慎跟踪"
+    assert "low_evidence_confidence" in payload["details"]["review_reasons"]
+
+
+@pytest.mark.asyncio
 async def test_report_api_marks_low_confidence_report_for_human_review(
     session_factory: async_sessionmaker[AsyncSession],
     client: AsyncClient,
