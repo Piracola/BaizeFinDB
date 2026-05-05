@@ -117,6 +117,50 @@ def test_invalid_interval_fails_and_returns_nonzero(monkeypatch, capsys) -> None
     assert "positive" in by_id["beat_interval"]["message"]
 
 
+def test_json_output_writes_same_report_as_stdout(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    output = tmp_path / "nested" / "tushare-beat-checklist.json"
+    token_value = "dummy-redaction-value"
+    monkeypatch.setenv("TUSHARE_TOKEN", token_value)
+
+    exit_code = check_tushare_anns_d_beat_enablement.main(
+        ["--json-output", str(output)]
+    )
+
+    captured = capsys.readouterr()
+    stdout_payload = json.loads(captured.out)
+    file_payload = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert file_payload == stdout_payload
+    assert output.read_text(encoding="utf-8") == captured.out
+    assert token_value not in captured.out
+    assert token_value not in output.read_text(encoding="utf-8")
+
+
+def test_json_output_writes_failing_report_before_nonzero_exit(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    output = tmp_path / "tushare-beat-checklist-fail.json"
+    monkeypatch.setenv("TUSHARE_ANNS_D_BEAT_INTERVAL_SECONDS", "0")
+
+    exit_code = check_tushare_anns_d_beat_enablement.main(
+        ["--json-output", str(output)]
+    )
+
+    captured = capsys.readouterr()
+    file_payload = json.loads(output.read_text(encoding="utf-8"))
+    by_id = {item["id"]: item for item in file_payload["checklist"]}
+    assert exit_code == 1
+    assert file_payload == json.loads(captured.out)
+    assert file_payload["status"] == "fail"
+    assert by_id["beat_interval"]["status"] == "fail"
+
+
 def test_missing_radar_risk_cases_file_fails_checklist(tmp_path: Path) -> None:
     payload = check_tushare_anns_d_beat_enablement.build_report(
         environ={},

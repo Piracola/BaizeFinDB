@@ -60,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=5.0,
         help="HTTP timeout used only with --check-readiness.",
     )
+    parser.add_argument(
+        "--json-output",
+        type=Path,
+        default=None,
+        help="Optional path for writing the checklist JSON evidence report.",
+    )
     return parser
 
 
@@ -117,8 +123,20 @@ def main(argv: list[str] | None = None) -> int:
         readiness_url=args.readiness_url,
         timeout_seconds=args.timeout_seconds,
     )
-    print(json.dumps(report, indent=2))
+    encoded = encode_report(report)
+    if args.json_output is not None:
+        write_report(args.json_output, encoded)
+    sys.stdout.write(encoded)
     return 1 if report["status"] == "fail" else 0
+
+
+def encode_report(report: dict[str, object]) -> str:
+    return json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+
+
+def write_report(path: Path, encoded_report: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(encoded_report, encoding="utf-8")
 
 
 def _run_offline_preflight(cases_path: Path) -> PreflightReport | Exception:
