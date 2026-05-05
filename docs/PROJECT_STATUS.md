@@ -30,6 +30,8 @@ Windows 首次试运行入口已可通过 `clients/windows/first-trial.ps1 -Star
 
 Windows 首次试运行入口已可通过 `clients/windows/first-trial.ps1 -StartDockerBackend -SeedDemoDataJsonOutput <path>` 在本机 Docker 后端健康后显式写入 synthetic demo 数据并保存 evidence；该参数只能和 `-StartDockerBackend` 同用，会在 database inventory、deploy preflight、smoke 和 GUI 前运行，失败时阻断后续启动。该路径只调用现有 `infra/scripts/seed_demo_data.py`，重复执行复用稳定 demo key，不访问真实 Provider、不写 token、不保存真实个人持仓、不发送 Telegram、不调用模型。
 
+Windows 首次试运行入口已可通过 `-DeployCheckM5Smoke -DeployCheckRequireRadarAnalysisSample` 把现有 `server_deploy_check.py --require-radar-signal-analysis-sample` 严格样本门禁纳入同一次 deploy preflight；该参数只能随 `-DeployCheckM5Smoke` 使用，会把空 `/radar/signals?limit=1` 从 warning 升级为失败，适合 demo seed 或真实扫描后确认 `/radar/signals/{id}/analysis` 和固定 `agent_assessments` scaffold 确实被抽样覆盖。该路径只读 API，不自动 seed、采集、扫描、报告、推送或调用模型。
+
 `infra/scripts/server_alert_telegram_service_verify.py` 已新增为手动 Telegram alert systemd service 的只读 evidence 验证入口：读取 `server-alert-telegram-env-check.json`、`server-alert-telegram-send.json` 和 `server-alert-telegram-dedupe-state.json`，确认 env check、显式 send 和 dedupe state 是否满足后续调度前提；`sent` / `deduped` 且 state 有效为 `ok`，`skipped` 为非阻塞 `warn`，preview、配置错误、发送失败、损坏或缺失 evidence 为 `fail`，报告不输出 token、raw chat id、raw URL、env 文件内容或 message preview。
 
 `server_delivery_acceptance.py` 已可用 `--include-alert-telegram-service-verify` 把上述手动 alert service evidence 验证纳入同一交付验收包；该阶段只调用 verifier 读取已有 JSON evidence，不启动 systemd、不发送 Telegram、不读取凭据明文。
@@ -312,7 +314,7 @@ uv run uvicorn app.main:app --reload
 建议进入 **生产化验证和真实数据增强**，范围继续保持轻量：
 
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移、只读 M5 smoke check 和短窗口 runtime check。
-- 新库迁移后如需首用演示或 analysis smoke 样本，先运行 `uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json` 写入可重复复用的合成 demo 用户、持仓/自选、雷达信号、证据、审查和 quick 报告；该路径不访问真实 Provider、不写 token、不保存真实个人持仓。
+- 新库迁移后如需首用演示或 analysis smoke 样本，先运行 `uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json` 写入可重复复用的合成 demo 用户、持仓/自选、雷达信号、证据、审查和 quick 报告；Windows 本机 Docker 首次试运行也可组合 `-SeedDemoDataJsonOutput <path> -DeployCheckM5Smoke -DeployCheckRequireRadarAnalysisSample`，在同一流程中先写 demo 数据，再严格验证单信号 analysis 样本；该路径不访问真实 Provider、不写 token、不保存真实个人持仓。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；三条 live verify 脚本均支持脱敏 JSON evidence 输出；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0；`anns_d` Beat 调度默认关闭，后续在 checklist、`verify_tushare_anns_d_preflight.py` 离线预调度校验、真实 token live evidence、字段和误报样例稳定后再显式启用。
 - 增加运行可观测性：`/ops/overview` 已汇总服务端进程运行时长、磁盘/CPU/内存资源、扫描耗时、失败率、推送结果、模型降级、数据质量状态和只读告警摘要，`/ops/history` 已返回最近扫描、Provider 异常、数据质量异常、推送异常和模型降级/失败历史，`/ops/trends` 已按固定时间桶汇总扫描、失败和 unhealthy 计数，`/ops/readiness` 已基于这些信息输出运行就绪自检；Web 状态面板、Windows 客户端和 Telegram `/ops`、`/ops_history`、`/ops_trends`、`/ops_ready` 已展示这些摘要，Web 状态面板已补充只消费后端桶计数的 OPS 趋势图，Web、Windows 客户端和 Telegram `/ops_warn` 已有只读告警钻取视图聚合三组 OPS 响应；后续再接真实监控告警。

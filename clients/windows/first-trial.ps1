@@ -11,6 +11,7 @@ param(
     [string]$SeedDemoDataJsonOutput,
     [switch]$DeployCheckServerComposeContract,
     [switch]$DeployCheckM5Smoke,
+    [switch]$DeployCheckRequireRadarAnalysisSample,
     [switch]$SmokeStrict,
     [switch]$SmokeOnly,
     [switch]$StartDockerBackend,
@@ -88,7 +89,8 @@ function Invoke-DeployCheck {
         [string]$JsonOutput,
         [string]$BackupJsonOutput,
         [switch]$IncludeServerComposeContract,
-        [switch]$IncludeM5Smoke
+        [switch]$IncludeM5Smoke,
+        [switch]$RequireRadarAnalysisSample
     )
 
     $DeployCheckArgs = @(
@@ -105,6 +107,10 @@ function Invoke-DeployCheck {
 
     if ($IncludeM5Smoke) {
         $DeployCheckArgs += "--check-m5-smoke"
+    }
+
+    if ($RequireRadarAnalysisSample) {
+        $DeployCheckArgs += "--require-radar-signal-analysis-sample"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($BackupJsonOutput)) {
@@ -176,6 +182,11 @@ if ($DeployCheckM5Smoke -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput
     exit 2
 }
 
+if ($DeployCheckRequireRadarAnalysisSample -and -not $DeployCheckM5Smoke) {
+    [Console]::Error.WriteLine("-DeployCheckRequireRadarAnalysisSample requires -DeployCheckM5Smoke")
+    exit 2
+}
+
 if ($DeployCheckServerComposeContract -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
     [Console]::Error.WriteLine("-DeployCheckServerComposeContract requires -DeployCheckJsonOutput")
     exit 2
@@ -207,7 +218,8 @@ if ($StartDockerBackend) {
             -JsonOutput $DeployCheckJsonOutput `
             -BackupJsonOutput $DeployCheckBackupJsonOutput `
             -IncludeServerComposeContract:$DeployCheckServerComposeContract `
-            -IncludeM5Smoke:$DeployCheckM5Smoke
+            -IncludeM5Smoke:$DeployCheckM5Smoke `
+            -RequireRadarAnalysisSample:$DeployCheckRequireRadarAnalysisSample
     }
 }
 

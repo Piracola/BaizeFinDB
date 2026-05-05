@@ -121,6 +121,23 @@ def test_first_trial_launcher_demo_seed_contract_is_static() -> None:
     )
 
 
+def test_first_trial_launcher_strict_analysis_sample_contract_is_static() -> None:
+    content = FIRST_TRIAL_LAUNCHER.read_text(encoding="utf-8")
+
+    assert "[switch]$DeployCheckRequireRadarAnalysisSample" in content
+    assert "--require-radar-signal-analysis-sample" in content
+    assert (
+        "-DeployCheckRequireRadarAnalysisSample requires -DeployCheckM5Smoke"
+        in content
+    )
+    assert (
+        content.index('$DeployCheckArgs += "--check-m5-smoke"')
+        < content.index(
+            '$DeployCheckArgs += "--require-radar-signal-analysis-sample"'
+        )
+    )
+
+
 def test_first_trial_launcher_start_docker_backend_runs_compose_before_delegation(
     tmp_path: Path,
 ) -> None:
@@ -390,6 +407,41 @@ def test_first_trial_launcher_deploy_check_m5_smoke_appends_server_m5_check(
     ]
 
 
+def test_first_trial_launcher_deploy_check_m5_smoke_can_require_analysis_sample(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    with _health_server() as server_url:
+        result, python_calls, _docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckM5Smoke",
+            "-DeployCheckRequireRadarAnalysisSample",
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output} --check-m5-smoke "
+            "--require-radar-signal-analysis-sample"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
 def test_first_trial_launcher_deploy_check_compose_contract_appends_server_check(
     tmp_path: Path,
 ) -> None:
@@ -529,6 +581,58 @@ def test_first_trial_launcher_deploy_check_compose_contract_composes_with_m5_and
     )
 
 
+def test_first_trial_launcher_seed_inventory_and_strict_m5_deploy_check_compose(
+    tmp_path: Path,
+) -> None:
+    seed_output = tmp_path / "evidence" / "demo-seed.json"
+    inventory_output = tmp_path / "evidence" / "database-inventory.json"
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    backup_output = tmp_path / "evidence" / "postgres-backup-check.json"
+    compact_output = tmp_path / "evidence" / "windows-smoke-compact.json"
+    with _health_server() as server_url:
+        result, python_calls, _docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-SeedDemoDataJsonOutput",
+            str(seed_output),
+            "-DatabaseInventoryJsonOutput",
+            str(inventory_output),
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckServerComposeContract",
+            "-DeployCheckM5Smoke",
+            "-DeployCheckRequireRadarAnalysisSample",
+            "-DeployCheckBackupJsonOutput",
+            str(backup_output),
+            "-SmokeCompactJsonOutput",
+            str(compact_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls == [
+        f"infra/scripts/seed_demo_data.py --json-output {seed_output}",
+        f"infra/scripts/database_inventory.py --json-output {inventory_output}",
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output} --check-server-compose-contract "
+            "--check-m5-smoke --require-radar-signal-analysis-sample "
+            f"--check-backup --backup-check-json-output {backup_output}"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24 "
+            f"--compact-json-output {compact_output}"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
 def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
     tmp_path: Path,
 ) -> None:
@@ -579,6 +683,22 @@ def test_first_trial_launcher_deploy_check_m5_smoke_requires_json_output(
     assert result.returncode == 2
     assert calls == []
     assert "-DeployCheckM5Smoke requires -DeployCheckJsonOutput" in result.stderr
+
+
+def test_first_trial_launcher_strict_analysis_sample_requires_m5_smoke(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(
+        tmp_path,
+        "-DeployCheckRequireRadarAnalysisSample",
+    )
+
+    assert result.returncode == 2
+    assert calls == []
+    assert (
+        "-DeployCheckRequireRadarAnalysisSample requires -DeployCheckM5Smoke"
+        in result.stderr
+    )
 
 
 def test_first_trial_launcher_deploy_check_compose_contract_requires_json_output(
