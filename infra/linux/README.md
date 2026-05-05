@@ -15,6 +15,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture and no-send alert payload generation before delivery adapters are implemented. |
 | `../scripts/server_alert_payload.py` | Filesystem-only no-send alert payload builder from an existing compact monitor summary. |
 | `../scripts/server_alert_telegram.py` | Telegram alert delivery adapter; preview by default, sends only with explicit `--send`. |
+| `../scripts/server_alert_telegram_env_check.py` | Read-only Telegram alert env file preflight for file permissions, required keys, and chat id format without exposing secrets. |
 | `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
@@ -254,6 +255,17 @@ Example keys for that untracked file:
 TELEGRAM_ALLOWED_CHAT_IDS=123456789
 TELEGRAM_BOT_TOKEN=<telegram-bot-token>
 ```
+
+Before starting the service, run the read-only env preflight. It reports only
+whether the token is configured, the unique chat id count, and masked chat refs:
+
+```bash
+python infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json
+python infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --strict-permissions --json-output evidence/server-alert-telegram-env-check.json
+```
+
+If the file is `root:root` with mode `0600`, run the same read-only check with
+`sudo` or change ownership to the deployment account that must read it.
 
 Then copy and start the service after monitor has produced
 `evidence/server-alert-payload.json`:

@@ -15,6 +15,7 @@
 | `infra/scripts/server_monitor_check.py` | cron/systemd 友好的 compact monitor summary 脚本，可在同一次只读采样里额外写 no-send alert payload。 |
 | `infra/scripts/server_alert_payload.py` | no-send 告警 payload 生成脚本，从已有 compact monitor summary 生成有界 JSON，不发送通知。 |
 | `infra/scripts/server_alert_telegram.py` | Telegram 告警交付适配器，默认只预览 delivery evidence，只有显式 `--send` 才调用 Telegram。 |
+| `infra/scripts/server_alert_telegram_env_check.py` | Telegram 告警本机 env 文件只读预检脚本，验证权限、token 配置和 chat id 格式，不输出 secrets。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
 | `infra/scripts/postgres_backup_retention.py` | PostgreSQL 备份保留期脚本，默认 dry-run，只扫描本地普通 `.sql` 备份；显式 `--delete` 才删除过期文件。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
@@ -257,6 +258,17 @@ sudo chmod 600 /etc/baizefindb/telegram-alert.env
 TELEGRAM_ALLOWED_CHAT_IDS=123456789
 TELEGRAM_BOT_TOKEN=<telegram-bot-token>
 ```
+
+手动启动 service 前，先运行只读 env 预检。它只读取这个本机文件，报告里只写
+`token_configured`、chat id 数量和 masked chat refs，不打印 token 或 raw chat id：
+
+```powershell
+uv run python infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json
+uv run python infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --strict-permissions --json-output evidence/server-alert-telegram-env-check.json
+```
+
+如果该文件是 `root:root` 且 `0600`，普通部署用户可能无法直接读取；这种情况下用
+`sudo` 跑同一条只读检查，或者把文件 owner 调整为实际读取它的部署账号。
 
 确认 `evidence/server-alert-payload.json` 已由 monitor 生成后，再手动试运行 service：
 

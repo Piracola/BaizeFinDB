@@ -139,6 +139,8 @@ Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evide
 
 Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，不默认启用 timer；确认手动发送和 dedupe evidence 后再考虑调度。
 
+Telegram 告警凭据文件可用 `infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json` 做只读预检；该报告只记录权限状态、token 是否配置、chat id 数量和 masked chat refs，不输出 token、raw chat id 或 env 文件内容。
+
 ## Windows 客户端 MVP
 
 Windows 客户端位于 [clients/windows/](clients/windows/)，默认是源码运行版。仓库提供可选 PyInstaller onedir 打包脚手架，用于开发者在 Windows 目标机验证 exe 形态；它不是签名安装器或生产分发包。
