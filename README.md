@@ -100,6 +100,12 @@ uv python install 3.12
 uv sync --dev
 ```
 
+迁移到新机器、Linux 服务器续开发或开始较长开发前，先运行只读开发环境自检：
+
+```powershell
+uv run python infra/scripts/dev_environment_check.py
+```
+
 复制环境变量示例：
 
 ```powershell
@@ -383,6 +389,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/portfolio/watchlist `
 ## 测试
 
 ```powershell
+uv run python infra/scripts/dev_environment_check.py
 uv run pytest
 uv run ruff check .
 uv run alembic heads

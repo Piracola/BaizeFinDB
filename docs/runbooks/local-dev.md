@@ -22,6 +22,20 @@ Server: Docker Desktop
 OS/Arch: linux/amd64
 ```
 
+在新机器、迁移后的 Linux 服务器或开始较长开发前，先运行只读开发环境自检：
+
+```powershell
+uv run python infra/scripts/dev_environment_check.py
+```
+
+它会检查 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、
+Tkinter、PowerShell 可选项和 Git 工作区。该命令不安装软件、不启动容器、
+不读取或输出 `.env` 里的密钥；需要留存结果时可加：
+
+```powershell
+uv run python infra/scripts/dev_environment_check.py --json-output evidence/dev-environment-check.json
+```
+
 ## 2. 首次启动
 
 在仓库根目录执行：
@@ -72,6 +86,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
 
 ```powershell
 docker compose up -d postgres redis
+uv run python infra/scripts/dev_environment_check.py
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
@@ -81,6 +96,7 @@ uv run uvicorn app.main:app --reload
 ```powershell
 uv run pytest
 uv run ruff check .
+uv run python infra/scripts/dev_environment_check.py
 uv run alembic heads
 uv run alembic upgrade head --sql
 ```
