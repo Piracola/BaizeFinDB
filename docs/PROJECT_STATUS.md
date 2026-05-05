@@ -6,7 +6,7 @@
 
 当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
-项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、带 `case_type` 分类的 Tushare 公告完整雷达扫描 golden cases、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API 和确定性 `agent_assessments` scaffold、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP、手动 deep 报告入口、Telegram 折叠推送日志，以及可重复执行的开发/演示数据种子脚本；部署 M5 smoke check 已校验单信号分析的固定 agent assessment 角色和基础字段形状。真正 LLM-backed 多 agent 编排仍是后续阶段，但已新增只读模型 Provider readiness preflight，用于启用前检查 provider、model、base URL、key 配置和 raw prompt storage 姿态。
+项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、带 `case_type` 分类的 Tushare 公告完整雷达扫描 golden cases、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API 和确定性 `agent_assessments` scaffold、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP、手动 deep 报告入口、Telegram 折叠推送日志，以及可重复执行的开发/演示数据种子脚本；部署 M5 smoke check 已校验单信号分析的固定 agent assessment 角色和基础字段形状。真正 LLM-backed 多 agent 编排仍是后续阶段，但已新增只读模型 Provider readiness preflight 和默认关闭的 OpenAI-compatible 模型客户端审计骨架，用于启用前检查 provider、model、base URL、key 配置和 raw prompt storage 姿态，并在未来模型调用失败时可显式记录 fallback/degraded。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、单信号后端分析摘要、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/analysis <id>` 只读消费 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤，`TELEGRAM_REQUIRE_BINDING=true` 可关闭无白名单且无绑定时的本地开放兜底；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态、分析摘要、agent 状态或评分。
 
@@ -25,6 +25,8 @@ Web 雷达终端工作台已在状态面板加入只读 OPS 趋势摘要、OPS �
 `infra/scripts/dev_environment_check.py` 已新增为开发环境只读自检入口，可在新机器迁移或继续开发前检查 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、Tkinter、PowerShell 可选项和 Git 工作区，并可写出有界 JSON evidence；它不安装软件、不启动容器、不输出 `.env` 或 secrets。
 
 `infra/scripts/model_provider_readiness.py` 已新增为未来 LLM-backed 多 agent 接入前的只读配置自检入口：默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled` 为 OK；启用 `openai` 时检查 `MODEL_PRIMARY_MODEL` 和 `OPENAI_API_KEY`，启用 `custom` 时检查 `MODEL_PRIMARY_MODEL`、`MODEL_API_BASE_URL` 和 `MODEL_API_KEY`。该 helper 不调用模型、不验证 token、不读取数据库、不生成报告、不发送 Telegram、不输出 API key；`MODEL_AUDIT_STORE_RAW_PROMPT=true` 会作为 warning。
+
+`app.ai.model_client` 已新增为未来模型调用的第一层执行/audit scaffold：启用 `MODEL_ANALYSIS_ENABLED=true` 后，可构建 `openai` 或 `custom` 的 OpenAI-compatible `/chat/completions` 客户端，发送 `model`、`messages` 和可选 `response_format`，并解析 `choices[0].message.content`。执行包装器会在默认关闭时返回 `disabled` 且不写审计；主模型成功返回 `ok` 且不写 `model_call_logs`；主模型失败且 fallback 成功返回 `fallback` 并写一条 fallback 审计；主模型和 fallback 都失败返回 `degraded` 并写一条 degraded 审计。当前该模块没有接入 `/radar/signals/{signal_id}/analysis`、报告、Telegram、Provider 或调度，不会修改雷达优先级、生命周期、审查状态或其他业务表。
 
 `server_deploy_check.py --check-model-provider-readiness` 已可把上述模型 Provider readiness 纳入 Linux 部署预检；可选 `--model-provider-readiness-json-output <path>` 会写出独立脱敏 evidence，`warn` 保持非阻塞，`fail` 会让部署预检失败。`server_delivery_acceptance.py --include-model-provider-readiness` 会把该检查纳入同一交付验收包并追踪 `<evidence-dir>/model-provider-readiness.json`；`--production-readiness` 默认包含该 evidence，plan-only 会只展示命令和路径，不调用 helper。
 
@@ -72,7 +74,7 @@ Telegram 告警 env 预检已新增：`infra/scripts/server_alert_telegram_env_c
 
 报告 MVP 已接入：`/reports/from-signal` 可从雷达信号生成 quick/standard 模板报告；生成前复用轻量规则审查，blocked 信号不会生成报告，needs_human_review 报告会显式标记；报告发布前审查不受信号候选范围限制，确保发布前安全门始终执行；诱导交易语言正反例已进入 golden cases，否定式风险提示如“不建议马上买入 / 不宜满仓 / 不应跟着买”不会误封，但带免责声明后的明确催单仍会 blocked；`/reports/deep/from-signal` 已提供手动 deep 模板报告入口，必须传 `confirm_deep_report=true`，继续复用发布前审查，不自动触发、不调用模型，`/reports/from-signal` 仍拒绝 deep。`/reports/periodic` 可按日/周生成当前 `user_key` 的雷达汇总报告。`/scores/signals/{signal_id}` 可生成 1d/3d/5d/10d v2 综合评分记录，已纳入 Provider 数据质量、信号时效性、评分档位和权重说明。静态 Web 已改为雷达终端工作台外壳，可从信号详情生成 quick/standard 报告、确认后手动生成 deep 报告、查看报告列表、生成日报/周报、查看单信号评分档位和组件明细，并维护 Telegram chat 绑定/白名单；Windows 客户端也已提供确认后手动生成 deep 报告入口，只展示后端返回摘要；Web 和 Windows 绑定视图会显示严格绑定模式与汇总计数，不暴露原始环境值、bot token 或 webhook secret。
 
-模型审计底座已接入：`model_call_logs` 可记录模型失败后的 `degraded` 或 `fallback` 状态、调用点、模型名、错误摘要、prompt hash 和 prompt 长度；默认不保存完整 `raw_prompt`，只有显式设置 `MODEL_AUDIT_STORE_RAW_PROMPT=true` 或调用方主动开启时才保存。
+模型审计底座已接入：`model_call_logs` 可记录模型失败后的 `degraded` 或 `fallback` 状态、调用点、模型名、错误摘要、prompt hash 和 prompt 长度；默认不保存完整 `raw_prompt`，只有显式设置 `MODEL_AUDIT_STORE_RAW_PROMPT=true` 或调用方主动开启时才保存。新增 `app.ai.model_client` 后，模型执行路径已有可测试客户端和 fallback/degraded 审计包装，但尚未接入真实多 agent 分析链。
 
 当前仍然是投研辅助系统，不是交易系统，不提供买卖建议。
 
@@ -81,7 +83,7 @@ Telegram 告警 env 预检已新增：`infra/scripts/server_alert_telegram_env_c
 Linux `.venv` 已重建，Windows 迁移虚拟环境已移入迁移备份目录，
 迁移产生的 CRLF 假改动已清理。
 当前服务器门禁已通过 `ruff check`、`pytest`、Alembic SQL 生成、base/server
-compose config 和基础部署预检；其中 pytest 为 `547 passed, 31 skipped`，
+compose config 和基础部署预检；当前全量 pytest 为 `625 passed, 45 skipped`，
 Windows GUI helper 测试已可运行，剩余跳过项主要是 Linux 服务器缺少
 PowerShell/Windows 打包脚本运行环境。
 

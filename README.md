@@ -57,6 +57,7 @@
 - `/radar/signals/{signal_id}` 查看候选信号和证据
 - `/radar/signals/{signal_id}/analysis` 查看后端生成的只读研究摘要：基于已有信号、证据和审查数据，输出 bounded key points、metric highlights、risk flags、evidence/review summary、agent inputs、确定性 `agent_assessments` 和 next actions；当前 agent assessments 是后端规则化多 agent scaffold，不调用 LLM、不做真实多模型编排，不改变规则定级，不输出原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令
 - `infra/scripts/model_provider_readiness.py --json-output <path>` 可做未来 LLM-backed 多 agent 接入前的只读配置自检；`server_deploy_check.py --check-model-provider-readiness --model-provider-readiness-json-output <path>` 可把同一检查纳入 Linux 部署预检；默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled`，不会调用模型、验证 token、读取数据库、生成报告、发送 Telegram 或输出 API key。启用前可配置 `MODEL_PROVIDER=openai` + `MODEL_PRIMARY_MODEL` + `OPENAI_API_KEY`，或 `MODEL_PROVIDER=custom` + `MODEL_PRIMARY_MODEL` + `MODEL_API_BASE_URL` + `MODEL_API_KEY`
+- `app.ai.model_client` 已提供默认关闭的 OpenAI-compatible 模型客户端和审计包装器：启用后可向 `openai` 或 `custom` provider 的 `/chat/completions` 发送 `model`、`messages` 和可选 `response_format`，主模型成功不写审计，主模型失败会按配置尝试 fallback，fallback/degraded 结果写入 `model_call_logs`；该模块当前尚未接入 `/radar/signals/{signal_id}/analysis`，不会修改雷达优先级、生命周期、审查状态、报告、Telegram、Provider 或其他业务表
 - `/radar/signals/{signal_id}/review` 对单个雷达信号执行轻量规则审查
 - `/radar/signals/{signal_id}/reviews` 查看单个雷达信号的审查历史
 - `/radar/signals/{signal_id}/share-preview` 内部分享预检：查看脱源脱敏预览和发布前阻断理由

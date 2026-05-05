@@ -143,6 +143,8 @@ Model audit 表不负责：
 - 保存用户完整上下文，除非显式开启 debug。
 - 代替报告、推送或审查结果。
 - 伪造 AI 结论；模型失败只能记录为 `degraded` 或 `fallback`。
+- 保存主模型成功响应；当前 `app.ai.model_client` 只在 fallback/degraded
+  路径写入该表，主模型成功不落审计行。
 
 ### Portfolio 个人数据表
 
@@ -173,7 +175,7 @@ Reports 表不负责：
 - 自动生成 deep report。
 - 绕过 deep report 的手动确认。
 - 发布公开分享或导出文件。
-- 保存完整模型 prompt；当前 MVP 不调用模型。
+- 保存完整模型 prompt；当前 report 生成路径不调用模型，模型客户端底座也尚未接入报告。
 
 ### Push logs 推送表
 
