@@ -7,6 +7,34 @@ from app.radar.service import classify_tushare_announcement_risk
 
 EXPECTED_NO_RISK_SIGNAL = "none"
 EXPECTED_RISK_P0 = "P0"
+RADAR_RISK_CASE_TYPE_TRUE_POSITIVE_MAJOR = "true_positive_major_risk"
+RADAR_RISK_CASE_TYPE_TRUE_POSITIVE_CRITICAL = "true_positive_critical_risk"
+RADAR_RISK_CASE_TYPE_FALSE_POSITIVE_GUARD = "false_positive_guard"
+RADAR_RISK_CASE_TYPE_FALSE_NEGATIVE_GUARD = "false_negative_guard"
+RADAR_RISK_CASE_TYPE_ORDINARY_NO_SIGNAL = "ordinary_no_signal"
+RADAR_RISK_CASE_TYPES = {
+    RADAR_RISK_CASE_TYPE_TRUE_POSITIVE_MAJOR,
+    RADAR_RISK_CASE_TYPE_TRUE_POSITIVE_CRITICAL,
+    RADAR_RISK_CASE_TYPE_FALSE_POSITIVE_GUARD,
+    RADAR_RISK_CASE_TYPE_FALSE_NEGATIVE_GUARD,
+    RADAR_RISK_CASE_TYPE_ORDINARY_NO_SIGNAL,
+}
+RADAR_RISK_TRUE_POSITIVE_CASE_TYPES = {
+    RADAR_RISK_CASE_TYPE_TRUE_POSITIVE_MAJOR,
+    RADAR_RISK_CASE_TYPE_TRUE_POSITIVE_CRITICAL,
+}
+RADAR_RISK_EXPECTED_SIGNAL_CASE_TYPES = {
+    *RADAR_RISK_TRUE_POSITIVE_CASE_TYPES,
+    RADAR_RISK_CASE_TYPE_FALSE_NEGATIVE_GUARD,
+}
+RADAR_RISK_NO_SIGNAL_CASE_TYPES = {
+    RADAR_RISK_CASE_TYPE_FALSE_POSITIVE_GUARD,
+    RADAR_RISK_CASE_TYPE_ORDINARY_NO_SIGNAL,
+}
+RADAR_RISK_FEEDBACK_GUARD_CASE_TYPES = {
+    RADAR_RISK_CASE_TYPE_FALSE_POSITIVE_GUARD,
+    RADAR_RISK_CASE_TYPE_FALSE_NEGATIVE_GUARD,
+}
 
 
 @dataclass(frozen=True)
@@ -92,6 +120,9 @@ class RadarRiskGoldenSignalResult:
 @dataclass(frozen=True)
 class RadarRiskGoldenCaseResult:
     case_id: str
+    case_type: str | None
+    source: str | None
+    notes: str | None
     expected_status: str
     actual_status: str
     expected_candidate_count: int | None
@@ -103,6 +134,9 @@ class RadarRiskGoldenCaseResult:
     def to_dict(self) -> dict[str, object]:
         return {
             "case_id": self.case_id,
+            "case_type": self.case_type,
+            "source": self.source,
+            "notes": self.notes,
             "expected_status": self.expected_status,
             "actual_status": self.actual_status,
             "expected_candidate_count": self.expected_candidate_count,
@@ -258,9 +292,19 @@ def validate_radar_risk_announcement_golden_cases(
     required_fields = list(TUSHARE_ENDPOINTS["anns_d"].required_fields)
     issues: list[PreflightIssue] = []
     results: list[RadarRiskGoldenCaseResult] = []
+    saw_true_positive_risk_case = False
+    saw_no_signal_guard_case = False
+    saw_feedback_guard_case = False
 
     for index, case in enumerate(cases, start=1):
         case_id = _text(case.get("name") or case.get("case_id"), f"case-{index}")
+        case_type = _radar_risk_case_type(case, case_id, issues)
+        if case_type in RADAR_RISK_TRUE_POSITIVE_CASE_TYPES:
+            saw_true_positive_risk_case = True
+        if case_type in RADAR_RISK_NO_SIGNAL_CASE_TYPES:
+            saw_no_signal_guard_case = True
+        if case_type in RADAR_RISK_FEEDBACK_GUARD_CASE_TYPES:
+            saw_feedback_guard_case = True
         rows = _case_rows(case, case_id, issues)
         expected = _case_expected(case, case_id, issues)
         expected_status = _expected_status(expected, case_id, issues)
@@ -279,6 +323,9 @@ def validate_radar_risk_announcement_golden_cases(
         results.append(
             RadarRiskGoldenCaseResult(
                 case_id=case_id,
+                case_type=case_type,
+                source=_optional_text(case.get("source")),
+                notes=_optional_text(case.get("notes")),
                 expected_status=expected_status,
                 actual_status=actual_status,
                 expected_candidate_count=expected_candidate_count,
@@ -289,6 +336,15 @@ def validate_radar_risk_announcement_golden_cases(
             )
         )
 
+        _check_radar_risk_case_type_expectation(
+            case_id=case_id,
+            case_type=case_type,
+            expected_status=expected_status,
+            expected_candidate_count=expected_candidate_count,
+            expected_priority_counts=expected_priority_counts,
+            expected_signals=expected_signals,
+            issues=issues,
+        )
         _compare_radar_case_result(
             case_id=case_id,
             expected_status=expected_status,
@@ -299,6 +355,40 @@ def validate_radar_risk_announcement_golden_cases(
             actual_signals=actual_signals,
             actual_priority_counts=actual_priority_counts,
             issues=issues,
+        )
+
+    if not saw_true_positive_risk_case:
+        issues.append(
+            PreflightIssue(
+                case_id="__suite__",
+                code="missing_true_positive_risk_case",
+                message=(
+                    "radar risk golden cases must include at least one "
+                    "true-positive major or critical risk case"
+                ),
+            )
+        )
+    if not saw_no_signal_guard_case:
+        issues.append(
+            PreflightIssue(
+                case_id="__suite__",
+                code="missing_no_signal_guard_case",
+                message=(
+                    "radar risk golden cases must include at least one no-signal "
+                    "guard case"
+                ),
+            )
+        )
+    if not saw_feedback_guard_case:
+        issues.append(
+            PreflightIssue(
+                case_id="__suite__",
+                code="missing_feedback_guard_case",
+                message=(
+                    "radar risk golden cases must include at least one "
+                    "false-positive or false-negative feedback guard case"
+                ),
+            )
         )
 
     return RadarRiskGoldenReport(
@@ -326,6 +416,38 @@ def _normalized_expected_priority(expected: str) -> str:
         return EXPECTED_RISK_P0
 
     return EXPECTED_NO_RISK_SIGNAL
+
+
+def _radar_risk_case_type(
+    case: dict[str, object],
+    case_id: str,
+    issues: list[PreflightIssue],
+) -> str | None:
+    case_type = _optional_text(case.get("case_type"))
+    if case_type is None:
+        issues.append(
+            PreflightIssue(
+                case_id=case_id,
+                code="missing_case_type",
+                message="radar risk golden case must declare case_type",
+            )
+        )
+        return None
+
+    if case_type not in RADAR_RISK_CASE_TYPES:
+        issues.append(
+            PreflightIssue(
+                case_id=case_id,
+                code="unsupported_case_type",
+                message=(
+                    "radar risk golden case_type must be one of "
+                    f"{sorted(RADAR_RISK_CASE_TYPES)}"
+                ),
+            )
+        )
+        return None
+
+    return case_type
 
 
 def _case_rows(
@@ -515,6 +637,81 @@ def _radar_risk_signals_for_rows(
             )
         )
     return signals
+
+
+def _check_radar_risk_case_type_expectation(
+    *,
+    case_id: str,
+    case_type: str | None,
+    expected_status: str,
+    expected_candidate_count: int | None,
+    expected_priority_counts: dict[str, int],
+    expected_signals: list[dict[str, object]],
+    issues: list[PreflightIssue],
+) -> None:
+    if case_type is None:
+        return
+
+    if case_type in RADAR_RISK_EXPECTED_SIGNAL_CASE_TYPES:
+        if expected_status and expected_status != "success":
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must expect status=success",
+                )
+            )
+        if expected_candidate_count is not None and expected_candidate_count < 1:
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must expect at least one signal",
+                )
+            )
+        if not expected_signals:
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must include expected signal fields",
+                )
+            )
+        return
+
+    if case_type in RADAR_RISK_NO_SIGNAL_CASE_TYPES:
+        if expected_status and expected_status != "no_data":
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must expect status=no_data",
+                )
+            )
+        if expected_candidate_count not in (None, 0):
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must expect zero signals",
+                )
+            )
+        if expected_priority_counts:
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must not expect priority counts",
+                )
+            )
+        if expected_signals:
+            issues.append(
+                PreflightIssue(
+                    case_id=case_id,
+                    code="case_type_expectation_mismatch",
+                    message=f"{case_type} cases must not expect signal fields",
+                )
+            )
 
 
 def _compare_radar_case_result(

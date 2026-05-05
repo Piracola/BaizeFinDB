@@ -181,7 +181,37 @@ def test_cli_accepts_custom_radar_risk_cases_path(tmp_path: Path, capsys) -> Non
         json.dumps(
             [
                 {
+                    "name": "major_investigation_announcement_maps_to_risk_p0",
+                    "case_type": "true_positive_major_risk",
+                    "rows": [
+                        {
+                            "ann_date": "20260503",
+                            "ts_code": "000001.SZ",
+                            "name": "风险样例",
+                            "title": "关于收到中国证监会立案调查通知书的公告",
+                        }
+                    ],
+                    "expected": {
+                        "status": "success",
+                        "candidate_count": 1,
+                        "priority_counts": {"P0": 1},
+                        "signals": [
+                            {
+                                "priority": "P0",
+                                "subject_type": "announcements",
+                                "subject_code": "000001.SZ",
+                                "subject_name": "关于收到中国证监会立案调查通知书的公告",
+                                "risk_event_type": "major_announcement",
+                                "severity": "major",
+                                "announcement_keywords": ["立案调查"],
+                                "rule_reasons": ["risk_event_type_major_announcement"],
+                            }
+                        ],
+                    },
+                },
+                {
                     "name": "ordinary_announcements_do_not_create_radar_signals",
+                    "case_type": "false_positive_guard",
                     "rows": [
                         {
                             "ann_date": "20260503",

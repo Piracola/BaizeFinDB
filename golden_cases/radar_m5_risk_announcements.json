@@ -1,6 +1,9 @@
 [
   {
     "name": "major_investigation_announcement_maps_to_risk_p0",
+    "case_type": "true_positive_major_risk",
+    "source": "synthetic",
+    "notes": "Locks a major regulatory investigation announcement to risk P0.",
     "rows": [
       {
         "ann_date": "20260503",
@@ -46,6 +49,9 @@
   },
   {
     "name": "critical_delisting_announcement_maps_to_critical_risk_p0",
+    "case_type": "true_positive_critical_risk",
+    "source": "synthetic",
+    "notes": "Locks a delisting-style announcement to critical risk P0.",
     "rows": [
       {
         "ann_date": "20260503",
@@ -84,6 +90,9 @@
   },
   {
     "name": "ordinary_announcements_do_not_create_radar_signals",
+    "case_type": "ordinary_no_signal",
+    "source": "synthetic",
+    "notes": "Baseline ordinary announcements should stay out of radar risk signals.",
     "rows": [
       {
         "ann_date": "20260503",
@@ -98,6 +107,34 @@
         "name": "普通样例二",
         "title": "年度权益分派实施公告",
         "url": "https://example.invalid/internal-only-dividend"
+      }
+    ],
+    "expected": {
+      "status": "no_data",
+      "candidate_count": 0,
+      "priority_counts": {},
+      "signals": []
+    }
+  },
+  {
+    "name": "routine_meeting_and_registration_announcements_do_not_create_risk_signals",
+    "case_type": "false_positive_guard",
+    "source": "synthetic",
+    "notes": "Realistic non-risk announcements used as a guardrail for future false-positive feedback.",
+    "rows": [
+      {
+        "ann_date": "20260503",
+        "ts_code": "000006.SZ",
+        "name": "普通样例三",
+        "title": "关于召开2025年年度股东大会的提示性公告",
+        "url": "https://example.invalid/internal-only-meeting"
+      },
+      {
+        "ann_date": "20260503",
+        "ts_code": "000007.SZ",
+        "name": "普通样例四",
+        "title": "关于完成工商变更登记并换发营业执照的公告",
+        "url": "https://example.invalid/internal-only-registration"
       }
     ],
     "expected": {

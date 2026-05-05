@@ -486,7 +486,7 @@ uv run python infra/scripts/server_runtime_check.py --samples 2 --interval-secon
 uv run python infra/scripts/server_runtime_check.py --samples 5 --interval-seconds 60 --fail-on-warning
 ```
 
-验证 Tushare `stock_basic` token 和字段稳定性，不写数据库。`anns_d` Beat 启用前先跑离线/no-token 预调度校验；它只读取本地 golden case，检查归一化必需字段、重大风险公告应映射 risk P0、普通公告不应生成风险信号，并通过 checklist 读取完整雷达风险公告 golden cases。该离线门禁不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证：
+验证 Tushare `stock_basic` token 和字段稳定性，不写数据库。`anns_d` Beat 启用前先跑离线/no-token 预调度校验；它只读取本地 golden case，检查归一化必需字段、重大风险公告应映射 risk P0、普通公告不应生成风险信号，并通过 checklist 读取带 `case_type` 分类和误报/漏报反馈守卫的完整雷达风险公告 golden cases。该离线门禁不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证：
 
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json

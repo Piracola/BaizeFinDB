@@ -373,7 +373,7 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 
 该集成仍是离线/no-token 模式，终端和 `server-deploy-check.json` 输出精简摘要；`--tushare-anns-d-beat-enablement-json-output` 会额外保存原始 checklist evidence。`warn` 不阻断部署预检，只有 checklist `fail` 会返回失败退出码。
 
-`verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。`check_tushare_anns_d_beat_enablement.py` 默认还会读取 `golden_cases/radar_m5_risk_announcements.json`，确认 Tushare 公告 risk P0 / 普通公告无信号的完整规则样例没有漂移。它们是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁和调参基线，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
+`verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。`check_tushare_anns_d_beat_enablement.py` 默认还会读取 `golden_cases/radar_m5_risk_announcements.json`，确认 Tushare 公告 risk P0 / 普通公告无信号的完整规则样例没有漂移。该完整扫描 golden case 文件要求每个 case 声明 `case_type`，取值为 `true_positive_major_risk`、`true_positive_critical_risk`、`false_positive_guard`、`false_negative_guard` 或 `ordinary_no_signal`，并可选填写 `source` / `notes`；默认套件必须同时覆盖真阳性风险、无信号守卫和误报/漏报反馈守卫。后续真实误报/漏报样例优先追加到该文件。它们是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁和调参基线，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
 
 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存 announcements live evidence；`stock_basic` 和 `stock_company` evidence 用于同步留存 token 权限、积分和字段稳定性。
 

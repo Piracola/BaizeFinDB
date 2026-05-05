@@ -20,6 +20,67 @@ sys.modules[SPEC.name] = verify_tushare_anns_d_preflight
 SPEC.loader.exec_module(verify_tushare_anns_d_preflight)
 
 
+def _radar_true_positive_case(
+    *,
+    name: str = "major_risk_case",
+    case_type: str = "true_positive_major_risk",
+) -> dict[str, object]:
+    return {
+        "name": name,
+        "case_type": case_type,
+        "rows": [
+            {
+                "ann_date": "20260503",
+                "ts_code": "000001.SZ",
+                "name": "风险样例",
+                "title": "关于收到中国证监会立案调查通知书的公告",
+            }
+        ],
+        "expected": {
+            "status": "success",
+            "candidate_count": 1,
+            "priority_counts": {"P0": 1},
+            "signals": [
+                {
+                    "priority": "P0",
+                    "subject_type": "announcements",
+                    "subject_code": "000001.SZ",
+                    "subject_name": "关于收到中国证监会立案调查通知书的公告",
+                    "risk_event_type": "major_announcement",
+                    "severity": "major",
+                    "announcement_keywords": ["立案调查"],
+                    "rule_reasons": ["risk_event_type_major_announcement"],
+                }
+            ],
+        },
+    }
+
+
+def _radar_no_signal_case(
+    *,
+    name: str = "ordinary_no_signal_case",
+    case_type: str = "false_positive_guard",
+) -> dict[str, object]:
+    return {
+        "name": name,
+        "case_type": case_type,
+        "rows": [
+            {
+                "ann_date": "20260503",
+                "ts_code": "000002.SZ",
+                "name": "普通样例",
+                "title": "关于召开2025年年度股东大会的提示性公告",
+            }
+        ],
+        "expected": {
+            "status": "no_data",
+            "candidate_count": 0,
+            "priority_counts": {},
+            "signals": [],
+        },
+    }
+
+
 def test_default_golden_cases_pass_preflight() -> None:
     cases = json.loads(CASE_PATH.read_text(encoding="utf-8"))
 
@@ -161,17 +222,80 @@ def test_default_radar_risk_golden_cases_pass_preflight() -> None:
 
     assert report.ok
     assert report.endpoint == "anns_d"
-    assert report.case_count == 3
+    assert report.case_count == 4
     by_case = {result.case_id: result for result in report.results}
     investigation = by_case["major_investigation_announcement_maps_to_risk_p0"]
+    assert investigation.case_type == "true_positive_major_risk"
+    assert investigation.source == "synthetic"
     assert investigation.actual_status == "success"
     assert investigation.actual_candidate_count == 1
     assert investigation.actual_priority_counts == {"P0": 1}
     assert investigation.signals[0].risk_event_type == "major_announcement"
     assert "立案调查" in investigation.signals[0].announcement_keywords
     ordinary = by_case["ordinary_announcements_do_not_create_radar_signals"]
+    assert ordinary.case_type == "ordinary_no_signal"
     assert ordinary.actual_status == "no_data"
     assert ordinary.actual_candidate_count == 0
+    guard = by_case[
+        "routine_meeting_and_registration_announcements_do_not_create_risk_signals"
+    ]
+    assert guard.case_type == "false_positive_guard"
+    assert guard.actual_status == "no_data"
+    assert guard.actual_candidate_count == 0
+
+
+def test_radar_risk_golden_case_missing_case_type_fails() -> None:
+    case = _radar_true_positive_case()
+    del case["case_type"]
+
+    report = validate_radar_risk_announcement_golden_cases(
+        [case, _radar_no_signal_case()]
+    )
+
+    assert not report.ok
+    assert any(issue.code == "missing_case_type" for issue in report.issues)
+
+
+def test_radar_risk_golden_case_unsupported_case_type_fails() -> None:
+    report = validate_radar_risk_announcement_golden_cases(
+        [
+            _radar_true_positive_case(case_type="unexpected_case_type"),
+            _radar_no_signal_case(),
+        ]
+    )
+
+    assert not report.ok
+    assert any(issue.code == "unsupported_case_type" for issue in report.issues)
+
+
+def test_radar_risk_golden_cases_require_true_positive_risk_case() -> None:
+    report = validate_radar_risk_announcement_golden_cases([_radar_no_signal_case()])
+
+    assert not report.ok
+    assert any(
+        issue.code == "missing_true_positive_risk_case" for issue in report.issues
+    )
+
+
+def test_radar_risk_golden_cases_require_no_signal_guard_case() -> None:
+    report = validate_radar_risk_announcement_golden_cases(
+        [_radar_true_positive_case()]
+    )
+
+    assert not report.ok
+    assert any(issue.code == "missing_no_signal_guard_case" for issue in report.issues)
+
+
+def test_radar_risk_golden_cases_require_feedback_guard_case() -> None:
+    report = validate_radar_risk_announcement_golden_cases(
+        [
+            _radar_true_positive_case(),
+            _radar_no_signal_case(case_type="ordinary_no_signal"),
+        ]
+    )
+
+    assert not report.ok
+    assert any(issue.code == "missing_feedback_guard_case" for issue in report.issues)
 
 
 def test_radar_risk_golden_case_false_positive_fails() -> None:
@@ -179,6 +303,7 @@ def test_radar_risk_golden_case_false_positive_fails() -> None:
         [
             {
                 "name": "ordinary_expected_but_risky_title",
+                "case_type": "false_positive_guard",
                 "rows": [
                     {
                         "ann_date": "20260503",
@@ -209,6 +334,7 @@ def test_radar_risk_golden_case_true_positive_drift_fails() -> None:
         [
             {
                 "name": "risk_expected_but_ordinary_title",
+                "case_type": "true_positive_major_risk",
                 "rows": [
                     {
                         "ann_date": "20260503",
