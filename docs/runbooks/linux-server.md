@@ -135,6 +135,21 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 - `postgres_backup_retention.py --json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
 
+生产化交付前，推荐使用只读 production readiness preset。它会在默认交付验收
+基础上追加 server compose runtime contract、systemd 模板静态检查、Telegram 严格
+绑定 readiness、Tushare `anns_d` Beat enablement checklist、脱敏 OPS evidence、
+no-send alert payload / Telegram preview 和 Telegram alert env preflight，并在最终
+JSON 报告里写入 `profile: "production_readiness"`：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --production-readiness
+```
+
+该 preset 不会启用手动 alert service evidence verification、严格 env 权限、
+`--fail-on-warning`、`--fail-fast`、restore preflight、Telegram 发送、backup deletion、
+`systemctl` 或 `journalctl`。生产切换需要 warning 阻断或 env 权限严格阻断时，仍需
+显式叠加 `--fail-on-warning` 或 `--telegram-alert-env-strict-permissions`。
+
 如果要把 server compose runtime contract 纳入同一交付验收包，可加
 `--include-server-compose-contract-check`。该选项只会让 deploy preflight 阶段追加
 `--check-server-compose-contract`，仍写入 `server-deploy-check.json`；不会启动容器、

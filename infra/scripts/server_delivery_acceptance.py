@@ -29,6 +29,17 @@ DEFAULT_TELEGRAM_ALERT_SERVICE_DEDUPE_STATE_JSON = Path(
     "evidence/server-alert-telegram-dedupe-state.json"
 )
 MAX_CAPTURE_LENGTH = 2000
+DEFAULT_ACCEPTANCE_PROFILE = "default"
+PRODUCTION_READINESS_PROFILE = "production_readiness"
+PRODUCTION_READINESS_PRESET_FLAGS = (
+    "include_server_compose_contract_check",
+    "include_systemd_unit_check",
+    "include_telegram_strict_binding_check",
+    "include_tushare_anns_d_beat_enablement",
+    "include_ops_evidence",
+    "include_alert_telegram_preview",
+    "include_alert_telegram_env_check",
+)
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,7 @@ class StageResult:
 
 
 def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
+    apply_production_readiness_preset(args)
     evidence_dir = args.evidence_dir
     python_executable = args.python_executable
     deploy_report = evidence_dir / "server-deploy-check.json"
@@ -339,6 +351,7 @@ def build_report(
     results: list[StageResult],
     *,
     evidence_dir: Path,
+    profile: str = DEFAULT_ACCEPTANCE_PROFILE,
 ) -> dict[str, object]:
     counts = {
         "ok": sum(1 for result in results if result.status == "ok"),
@@ -356,6 +369,7 @@ def build_report(
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "status": status,
+        "profile": profile,
         "evidence_dir": str(evidence_dir),
         "summary": {
             "total": len(results),
@@ -393,6 +407,19 @@ def find_repo_root(start: Path | None = None) -> Path:
         ).exists():
             return candidate
     raise RuntimeError("could not find repository root with pyproject.toml and docker-compose.yml")
+
+
+def apply_production_readiness_preset(args: argparse.Namespace) -> None:
+    if not getattr(args, "production_readiness", False):
+        return
+    for flag in PRODUCTION_READINESS_PRESET_FLAGS:
+        setattr(args, flag, True)
+
+
+def acceptance_profile(args: argparse.Namespace) -> str:
+    if getattr(args, "production_readiness", False):
+        return PRODUCTION_READINESS_PROFILE
+    return DEFAULT_ACCEPTANCE_PROFILE
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -471,6 +498,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Return a failing exit code for warning-only acceptance and pass the "
             "strict warning mode to server_runtime_check.py."
+        ),
+    )
+    parser.add_argument(
+        "--production-readiness",
+        action="store_true",
+        help=(
+            "Enable the non-destructive production-readiness preset: server "
+            "compose contract, systemd template check, Telegram strict binding "
+            "readiness, Tushare anns_d Beat enablement checklist, OPS evidence, "
+            "no-send alert preview, and Telegram alert env preflight."
         ),
     )
     parser.add_argument(
@@ -595,8 +632,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.json_output is None:
         args.json_output = args.evidence_dir / DEFAULT_REPORT_NAME
 
+    profile = acceptance_profile(args)
     results = run_acceptance(args)
-    report = build_report(results, evidence_dir=args.evidence_dir)
+    report = build_report(results, evidence_dir=args.evidence_dir, profile=profile)
     write_report(args.json_output, report)
     print(_format_summary(report, args.json_output))
     if report["status"] == "fail":

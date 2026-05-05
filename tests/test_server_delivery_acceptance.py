@@ -280,6 +280,132 @@ def test_build_stage_specs_tushare_beat_enablement_is_deploy_only(
     )
 
 
+def test_build_stage_specs_production_readiness_preset_expands_checks(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, production_readiness=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+        "telegram_alert_env_check",
+    ]
+    assert stages[0].command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-server-compose-contract",
+        "--check-telegram-strict-binding",
+        "--check-systemd-units",
+        "--check-tushare-anns-d-beat-enablement",
+        "--tushare-anns-d-beat-enablement-json-output",
+        str(tmp_path / "tushare-anns-d-beat-enablement.json"),
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert stages[0].evidence_files == [
+        tmp_path / "server-deploy-check.json",
+        tmp_path / "tushare-anns-d-beat-enablement.json",
+    ]
+    assert "--ops-evidence-output" in stages[3].command
+    assert str(tmp_path / "server-ops-evidence.json") in stages[3].command
+    assert stages[3].evidence_files == [
+        tmp_path / "server-runtime-check.json",
+        tmp_path / "server-ops-evidence.json",
+    ]
+    assert stages[4].command == [
+        "python",
+        "infra/scripts/server_monitor_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--include-ops-trends",
+        "--json-output",
+        str(tmp_path / "server-monitor-summary.json"),
+        "--alert-json-output",
+        str(tmp_path / "server-alert-payload.json"),
+    ]
+    assert stages[5].command == [
+        "python",
+        "infra/scripts/server_alert_telegram.py",
+        str(tmp_path / "server-alert-payload.json"),
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-preview.json"),
+    ]
+    assert stages[6].command == [
+        "python",
+        "infra/scripts/server_alert_telegram_env_check.py",
+        "--env-file",
+        "/etc/baizefindb/telegram-alert.env",
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-env-check.json"),
+    ]
+
+
+def test_build_stage_specs_production_readiness_preset_is_non_destructive(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, production_readiness=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+    stage_names = [stage.name for stage in stages]
+    all_command_args = [item for stage in stages for item in stage.command]
+
+    assert "telegram_alert_service_verify" not in stage_names
+    forbidden_args = {
+        "--send",
+        "--telegram-alert-env-strict-permissions",
+        "--fail-on-warning",
+        "--fail-fast",
+        "--confirm-restore",
+        "--delete",
+        "systemctl",
+        "journalctl",
+    }
+    assert forbidden_args.isdisjoint(all_command_args)
+    assert not any("postgres_restore.py" in item for item in all_command_args)
+
+
+def test_build_stage_specs_production_readiness_composes_with_strict_options(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        production_readiness=True,
+        fail_on_warning=True,
+        include_alert_telegram_service_verify=True,
+        telegram_alert_env_strict_permissions=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+        "telegram_alert_env_check",
+        "telegram_alert_service_verify",
+    ]
+    assert "--fail-on-warning" not in stages[0].command
+    assert "--fail-on-warning" not in stages[1].command
+    assert "--fail-on-warning" not in stages[2].command
+    assert "--fail-on-warning" in stages[3].command
+    assert "--strict-permissions" in stages[6].command
+    assert stages[7].command[1] == "infra/scripts/server_alert_telegram_service_verify.py"
+
+
 def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path) -> None:
     args = _args(tmp_path, fail_on_warning=True)
 
@@ -891,6 +1017,7 @@ def test_build_report_summarizes_stage_results(tmp_path: Path) -> None:
     )
 
     assert report["status"] == "fail"
+    assert report["profile"] == "default"
     assert report["evidence_dir"] == str(tmp_path)
     assert report["summary"] == {
         "total": 4,
@@ -913,6 +1040,7 @@ def test_build_report_warns_without_failure(tmp_path: Path) -> None:
     )
 
     assert report["status"] == "warn"
+    assert report["profile"] == "default"
     assert report["summary"] == {
         "total": 2,
         "ok": 1,
@@ -928,6 +1056,17 @@ def test_write_report_creates_parent_directory(tmp_path: Path) -> None:
     server_delivery_acceptance.write_report(output, {"status": "ok"})
 
     assert json.loads(output.read_text(encoding="utf-8")) == {"status": "ok"}
+
+
+def test_build_report_accepts_production_readiness_profile(tmp_path: Path) -> None:
+    report = server_delivery_acceptance.build_report(
+        [_result("deploy_preflight", "ok", 0)],
+        evidence_dir=tmp_path,
+        profile="production_readiness",
+    )
+
+    assert report["profile"] == "production_readiness"
+    assert report["status"] == "ok"
 
 
 def test_main_writes_report_and_returns_nonzero_on_failure(
@@ -970,6 +1109,7 @@ def test_main_writes_report_and_returns_nonzero_on_failure(
     report = json.loads(output.read_text(encoding="utf-8"))
     assert exit_code == 1
     assert report["status"] == "fail"
+    assert report["profile"] == "default"
     assert report["summary"]["fail"] == 1
     assert "[FAIL] runtime_check exit=4" in captured.out
 
@@ -1011,6 +1151,7 @@ def test_main_returns_zero_and_reports_warning(monkeypatch, tmp_path: Path, caps
     report = json.loads(output.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert report["status"] == "warn"
+    assert report["profile"] == "default"
     assert report["summary"]["warn"] == 1
     assert "[WARN] deploy_preflight exit=0" in captured.out
     assert "evidence_statuses=" in captured.out
@@ -1058,6 +1199,7 @@ def test_main_fail_on_warning_returns_nonzero_for_warning_report(
     report = json.loads(output.read_text(encoding="utf-8"))
     assert exit_code == 1
     assert report["status"] == "warn"
+    assert report["profile"] == "default"
     assert report["summary"]["warn"] == 1
     assert "[WARN] deploy_preflight exit=0" in captured.out
 
@@ -1074,6 +1216,53 @@ def test_main_rejects_invalid_runtime_interval() -> None:
         server_delivery_acceptance.main(["--runtime-interval-seconds", "0"])
 
     assert exc_info.value.code == 2
+
+
+def test_main_production_readiness_writes_profile(monkeypatch, tmp_path: Path) -> None:
+    output = tmp_path / "acceptance.json"
+
+    monkeypatch.setattr(server_delivery_acceptance, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_delivery_acceptance,
+        "run_stage",
+        lambda stage, *, repo_root: server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status="ok",
+            command=stage.command,
+            exit_code=0,
+            evidence_files=stage.evidence_files,
+            evidence_statuses={str(path): "ok" for path in stage.evidence_files},
+        ),
+    )
+
+    exit_code = server_delivery_acceptance.main(
+        [
+            "--production-readiness",
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--json-output",
+            str(output),
+            "--python-executable",
+            "python",
+            "--runtime-samples",
+            "1",
+            "--runtime-interval-seconds",
+            "1",
+        ]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["profile"] == "production_readiness"
+    assert [stage["name"] for stage in report["stages"]] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+        "telegram_alert_env_check",
+    ]
 
 
 def _args(tmp_path: Path, **overrides):
