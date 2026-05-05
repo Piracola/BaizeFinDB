@@ -137,6 +137,15 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 默认 backup retention 阶段只做 dry-run，不传 `--delete`。如果某次验收不需要这份
 保留期 evidence，可加 `--skip-backup-retention`。
 
+如果要把某个具体备份文件的恢复前检查也放进同一验收包，可传
+`--restore-check-input backups/<file>.sql`。该阶段只调用
+`postgres_restore.py --check-only --check-json-output ...`，不会传
+`--confirm-restore`，不会恢复数据：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --restore-check-input backups/pre-upgrade.sql
+```
+
 预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
 
 ```powershell

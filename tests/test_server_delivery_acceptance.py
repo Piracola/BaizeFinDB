@@ -101,7 +101,7 @@ def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path
 def test_build_stage_specs_includes_optional_ops_evidence(tmp_path: Path) -> None:
     args = _args(tmp_path, include_ops_evidence=True)
 
-    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[3]
+    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[-1]
 
     assert "--ops-evidence-output" in runtime_stage.command
     assert str(tmp_path / "server-ops-evidence.json") in runtime_stage.command
@@ -114,7 +114,7 @@ def test_build_stage_specs_includes_optional_ops_evidence(tmp_path: Path) -> Non
 def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
     args = _args(tmp_path, runtime_samples=5, runtime_interval_seconds=7)
 
-    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[3]
+    runtime_stage = server_delivery_acceptance.build_stage_specs(args)[-1]
 
     assert "--samples" in runtime_stage.command
     assert "5" in runtime_stage.command
@@ -151,6 +151,33 @@ def test_build_stage_specs_can_skip_only_backup_retention(tmp_path: Path) -> Non
     assert stages[2].command == []
     assert stages[2].evidence_files == []
     assert stages[3].name == "runtime_check"
+
+
+def test_build_stage_specs_adds_optional_restore_check_before_runtime(
+    tmp_path: Path,
+) -> None:
+    restore_input = Path("backups/pre-upgrade.sql")
+    args = _args(tmp_path, restore_check_input=restore_input)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "restore_check",
+        "runtime_check",
+    ]
+    assert stages[3].command == [
+        "python",
+        "infra/scripts/postgres_restore.py",
+        str(restore_input),
+        "--check-only",
+        "--check-json-output",
+        str(tmp_path / "postgres-restore-check.json"),
+    ]
+    assert "--confirm-restore" not in stages[3].command
+    assert stages[3].evidence_files == [tmp_path / "postgres-restore-check.json"]
 
 
 def test_run_acceptance_runs_all_stages_by_default(monkeypatch, tmp_path: Path) -> None:

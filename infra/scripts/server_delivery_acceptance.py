@@ -116,6 +116,23 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             )
         )
 
+    if args.restore_check_input is not None:
+        restore_report = evidence_dir / "postgres-restore-check.json"
+        stages.append(
+            StageSpec(
+                name="restore_check",
+                command=[
+                    python_executable,
+                    "infra/scripts/postgres_restore.py",
+                    str(args.restore_check_input),
+                    "--check-only",
+                    "--check-json-output",
+                    str(restore_report),
+                ],
+                evidence_files=[restore_report],
+            )
+        )
+
     if args.skip_runtime_check:
         stages.append(
             StageSpec(
@@ -309,6 +326,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-backup-retention",
         action="store_true",
         help="Skip PostgreSQL backup retention dry-run evidence.",
+    )
+    parser.add_argument(
+        "--restore-check-input",
+        type=Path,
+        default=None,
+        help=(
+            "Optional .sql backup path for non-destructive postgres_restore.py "
+            "check-only evidence."
+        ),
     )
     parser.add_argument(
         "--runtime-samples",
