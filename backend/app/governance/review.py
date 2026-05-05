@@ -388,9 +388,11 @@ def _matched_forbidden_terms(
     signal: RadarSignal,
     evidences: Sequence[SignalEvidence],
 ) -> list[str]:
-    reviewable_text = _normalize_trading_language(
-        _mask_safe_trading_language(_reviewable_text(signal, evidences))
-    ).lower()
+    return matched_unsafe_trading_terms(_reviewable_text(signal, evidences))
+
+
+def matched_unsafe_trading_terms(text: str) -> list[str]:
+    reviewable_text = _normalize_trading_language(_mask_safe_trading_language(text)).lower()
     matched_terms: list[str] = []
 
     for term in FORBIDDEN_TRADING_TERMS:
