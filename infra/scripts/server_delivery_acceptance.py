@@ -57,6 +57,8 @@ class StageResult:
 def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
     evidence_dir = args.evidence_dir
     python_executable = args.python_executable
+    deploy_report = evidence_dir / "server-deploy-check.json"
+    deploy_evidence_files = [deploy_report]
     deploy_preflight_command = [
         python_executable,
         "infra/scripts/server_deploy_check.py",
@@ -69,18 +71,26 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
     if args.include_systemd_unit_check:
         deploy_preflight_command.append("--check-systemd-units")
     if args.include_tushare_anns_d_beat_enablement:
+        tushare_report = evidence_dir / "tushare-anns-d-beat-enablement.json"
         deploy_preflight_command.append("--check-tushare-anns-d-beat-enablement")
+        deploy_preflight_command.extend(
+            [
+                "--tushare-anns-d-beat-enablement-json-output",
+                str(tushare_report),
+            ]
+        )
+        deploy_evidence_files.append(tushare_report)
     deploy_preflight_command.extend(
         [
             "--json-output",
-            str(evidence_dir / "server-deploy-check.json"),
+            str(deploy_report),
         ]
     )
     stages = [
         StageSpec(
             name="deploy_preflight",
             command=deploy_preflight_command,
-            evidence_files=[evidence_dir / "server-deploy-check.json"],
+            evidence_files=deploy_evidence_files,
         ),
     ]
 

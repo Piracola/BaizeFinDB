@@ -76,6 +76,19 @@ def test_backup_check_json_output_requires_check_backup_before_checks(monkeypatc
     assert calls == []
 
 
+def test_tushare_beat_json_output_requires_check_before_checks(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: calls.append("root"))
+
+    with pytest.raises(SystemExit) as exc_info:
+        server_deploy_check.main(
+            ["--tushare-anns-d-beat-enablement-json-output", "evidence.json"]
+        )
+
+    assert exc_info.value.code == 2
+    assert calls == []
+
+
 def test_check_backup_evidence_delegates_to_check_only_without_dump(
     monkeypatch,
     tmp_path: Path,
@@ -530,14 +543,22 @@ def test_tushare_anns_d_beat_enablement_flag_defaults_off() -> None:
     args = server_deploy_check.build_parser().parse_args([])
 
     assert args.check_tushare_anns_d_beat_enablement is False
+    assert args.tushare_anns_d_beat_enablement_json_output is None
 
 
 def test_tushare_anns_d_beat_enablement_flag_can_be_enabled() -> None:
     args = server_deploy_check.build_parser().parse_args(
-        ["--check-tushare-anns-d-beat-enablement"]
+        [
+            "--check-tushare-anns-d-beat-enablement",
+            "--tushare-anns-d-beat-enablement-json-output",
+            "evidence/tushare.json",
+        ]
     )
 
     assert args.check_tushare_anns_d_beat_enablement is True
+    assert args.tushare_anns_d_beat_enablement_json_output == Path(
+        "evidence/tushare.json"
+    )
 
 
 def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
@@ -556,7 +577,8 @@ def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
     monkeypatch.setattr(
         server_deploy_check,
         "check_tushare_anns_d_beat_enablement",
-        lambda: calls.append("tushare") or server_deploy_check.CheckResult("tushare", "ok"),
+        lambda **kwargs: calls.append("tushare")
+        or server_deploy_check.CheckResult("tushare", "ok"),
     )
 
     exit_code = server_deploy_check.main([])
@@ -779,7 +801,7 @@ def test_main_tushare_anns_d_beat_enablement_warn_exits_zero(
     monkeypatch.setattr(
         server_deploy_check,
         "check_tushare_anns_d_beat_enablement",
-        lambda: server_deploy_check.CheckResult(
+        lambda **kwargs: server_deploy_check.CheckResult(
             "Tushare anns_d Beat enablement checklist",
             "warn",
             "status=warn; summary pass=3 warn=3 fail=0",
@@ -807,7 +829,7 @@ def test_main_tushare_anns_d_beat_enablement_fail_exits_nonzero(
     monkeypatch.setattr(
         server_deploy_check,
         "check_tushare_anns_d_beat_enablement",
-        lambda: server_deploy_check.CheckResult(
+        lambda **kwargs: server_deploy_check.CheckResult(
             "Tushare anns_d Beat enablement checklist",
             "fail",
             "status=fail; summary pass=2 warn=1 fail=1; attention gates=beat_interval:fail",
@@ -817,6 +839,47 @@ def test_main_tushare_anns_d_beat_enablement_fail_exits_nonzero(
     exit_code = server_deploy_check.main(["--check-tushare-anns-d-beat-enablement"])
 
     assert exit_code == 1
+
+
+def test_main_tushare_anns_d_beat_enablement_writes_standalone_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "evidence" / "tushare-beat.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_tushare_anns_d_beat_enablement_report",
+        lambda: {
+            "status": "warn",
+            "mode": "offline_no_token",
+            "generated_by": "check_tushare_anns_d_beat_enablement.py",
+            "summary": {"pass": 5, "warn": 1, "fail": 0},
+            "checklist": [
+                {"id": "tushare_token", "status": "warn", "details": {"value": None}},
+            ],
+        },
+    )
+
+    exit_code = server_deploy_check.main(
+        [
+            "--check-tushare-anns-d-beat-enablement",
+            "--tushare-anns-d-beat-enablement-json-output",
+            str(output),
+        ]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["status"] == "warn"
+    assert report["generated_by"] == "check_tushare_anns_d_beat_enablement.py"
 
 
 def test_tushare_anns_d_beat_enablement_pass_maps_to_ok(monkeypatch) -> None:
@@ -878,6 +941,31 @@ def test_tushare_anns_d_beat_enablement_fail_is_fatal(monkeypatch) -> None:
     assert result.status == "fail"
     assert not result.ok
     assert "beat_interval:fail" in result.detail
+
+
+def test_tushare_anns_d_beat_enablement_writes_failing_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "nested" / "tushare-beat-fail.json"
+    monkeypatch.setattr(
+        server_deploy_check,
+        "_build_tushare_anns_d_beat_enablement_report",
+        lambda: {
+            "status": "fail",
+            "mode": "offline_no_token",
+            "summary": {"pass": 2, "warn": 0, "fail": 1},
+            "checklist": [{"id": "beat_interval", "status": "fail"}],
+        },
+    )
+
+    result = server_deploy_check.check_tushare_anns_d_beat_enablement(
+        json_output=output,
+    )
+
+    assert result.status == "fail"
+    assert json.loads(output.read_text(encoding="utf-8"))["status"] == "fail"
+    assert "evidence written" in result.detail
 
 
 def test_tushare_anns_d_beat_enablement_summary_does_not_leak_token(monkeypatch) -> None:

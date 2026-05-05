@@ -139,7 +139,7 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 需要把这项静态 systemd 模板检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-systemd-unit-check`；该参数只会让 deploy preflight 阶段追加 `--check-systemd-units`，不新增独立 systemd 阶段、不启动服务、不读取凭据。
 
-需要把 Tushare `anns_d` Beat enablement 离线/no-token checklist 纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-tushare-anns-d-beat-enablement`；该参数只会让 deploy preflight 阶段追加 `--check-tushare-anns-d-beat-enablement`，不新增独立 Tushare 阶段、不访问 Tushare、不写数据库、不触发抓取或扫描。
+需要把 Tushare `anns_d` Beat enablement 离线/no-token checklist 纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-tushare-anns-d-beat-enablement`；该参数只会让 deploy preflight 阶段追加 `--check-tushare-anns-d-beat-enablement` 和 `--tushare-anns-d-beat-enablement-json-output <evidence-dir>/tushare-anns-d-beat-enablement.json`，不新增独立 Tushare 阶段、不访问 Tushare、不写数据库、不触发抓取或扫描。
 
 Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evidence/server-alert-telegram-dedupe-state.json`。该本地 JSON 状态按 alert payload 的 `dedupe_key` 做默认 3600 秒冷却，只在全部 Telegram 发送成功后更新，避免服务器持续 warning 时重复刷屏；preview、配置错误、失败发送和无效 state 不会写入成功状态。
 
@@ -354,10 +354,10 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --js
 部署预检需要一起检查该 checklist 时使用：
 
 ```powershell
-uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement
+uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement --tushare-anns-d-beat-enablement-json-output evidence/tushare-anns-d-beat-enablement.json
 ```
 
-该集成仍是离线/no-token 模式，输出精简摘要；`warn` 不阻断部署预检，只有 checklist `fail` 会返回失败退出码。
+该集成仍是离线/no-token 模式，终端和 `server-deploy-check.json` 输出精简摘要；`--tushare-anns-d-beat-enablement-json-output` 会额外保存原始 checklist evidence。`warn` 不阻断部署预检，只有 checklist `fail` 会返回失败退出码。
 
 `verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。`check_tushare_anns_d_beat_enablement.py` 默认还会读取 `golden_cases/radar_m5_risk_announcements.json`，确认 Tushare 公告 risk P0 / 普通公告无信号的完整规则样例没有漂移。它们是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁和调参基线，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
 

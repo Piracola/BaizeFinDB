@@ -144,10 +144,15 @@ def test_build_stage_specs_includes_optional_tushare_beat_enablement(
         "--check-api",
         "--check-m5-smoke",
         "--check-tushare-anns-d-beat-enablement",
+        "--tushare-anns-d-beat-enablement-json-output",
+        str(tmp_path / "tushare-anns-d-beat-enablement.json"),
         "--json-output",
         str(tmp_path / "server-deploy-check.json"),
     ]
-    assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
+    assert deploy_stage.evidence_files == [
+        tmp_path / "server-deploy-check.json",
+        tmp_path / "tushare-anns-d-beat-enablement.json",
+    ]
 
 
 def test_build_stage_specs_tushare_beat_enablement_is_deploy_only(
@@ -174,11 +179,21 @@ def test_build_stage_specs_tushare_beat_enablement_is_deploy_only(
         "--check-m5-smoke",
         "--check-systemd-units",
         "--check-tushare-anns-d-beat-enablement",
+        "--tushare-anns-d-beat-enablement-json-output",
+        str(tmp_path / "tushare-anns-d-beat-enablement.json"),
         "--json-output",
         str(tmp_path / "server-deploy-check.json"),
     ]
+    assert stages[0].evidence_files == [
+        tmp_path / "server-deploy-check.json",
+        tmp_path / "tushare-anns-d-beat-enablement.json",
+    ]
     assert all(
         "--check-tushare-anns-d-beat-enablement" not in stage.command
+        for stage in stages[1:]
+    )
+    assert all(
+        "--tushare-anns-d-beat-enablement-json-output" not in stage.command
         for stage in stages[1:]
     )
 

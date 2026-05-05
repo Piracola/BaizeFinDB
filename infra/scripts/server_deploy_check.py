@@ -340,9 +340,14 @@ def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[Ch
     ]
 
 
-def check_tushare_anns_d_beat_enablement() -> CheckResult:
+def check_tushare_anns_d_beat_enablement(
+    *,
+    json_output: Path | None = None,
+) -> CheckResult:
     try:
         report = _build_tushare_anns_d_beat_enablement_report()
+        if json_output is not None:
+            _write_tushare_anns_d_beat_enablement_report(json_output, report)
     except Exception as exc:
         return CheckResult(
             "Tushare anns_d Beat enablement checklist",
@@ -364,10 +369,14 @@ def check_tushare_anns_d_beat_enablement() -> CheckResult:
             f"unexpected checklist status: {_truncate(status, limit=120)}",
         )
 
+    detail = _format_tushare_anns_d_beat_enablement_summary(report)
+    if json_output is not None:
+        detail = f"{detail}; evidence written: {json_output}"
+
     return CheckResult(
         "Tushare anns_d Beat enablement checklist",
         result_status,
-        _format_tushare_anns_d_beat_enablement_summary(report),
+        detail,
     )
 
 
@@ -521,6 +530,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--tushare-anns-d-beat-enablement-json-output",
+        type=Path,
+        default=None,
+        help=(
+            "Write the raw Tushare anns_d Beat enablement checklist evidence JSON "
+            "to this path. Requires --check-tushare-anns-d-beat-enablement."
+        ),
+    )
+    parser.add_argument(
         "--check-containers",
         action="store_true",
         help="Run docker compose ps for the server overlay.",
@@ -581,6 +599,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.backup_check_json_output and not args.check_backup:
         parser.error("--backup-check-json-output requires --check-backup")
+    if (
+        args.tushare_anns_d_beat_enablement_json_output
+        and not args.check_tushare_anns_d_beat_enablement
+    ):
+        parser.error(
+            "--tushare-anns-d-beat-enablement-json-output requires "
+            "--check-tushare-anns-d-beat-enablement"
+        )
 
     root = find_repo_root()
     checks = [
@@ -648,7 +674,11 @@ def main(argv: list[str] | None = None) -> int:
         checks.extend(check_m5_smoke(args.base_url, timeout=args.timeout))
 
     if args.check_tushare_anns_d_beat_enablement:
-        checks.append(check_tushare_anns_d_beat_enablement())
+        checks.append(
+            check_tushare_anns_d_beat_enablement(
+                json_output=args.tushare_anns_d_beat_enablement_json_output,
+            )
+        )
 
     for check in checks:
         label = check.status.upper()
@@ -916,6 +946,21 @@ def _build_tushare_anns_d_beat_enablement_report() -> dict[str, object]:
         from check_tushare_anns_d_beat_enablement import build_report
 
     return build_report(check_readiness=False)
+
+
+def _write_tushare_anns_d_beat_enablement_report(
+    path: Path,
+    report: dict[str, object],
+) -> None:
+    try:
+        from infra.scripts.check_tushare_anns_d_beat_enablement import (
+            encode_report,
+            write_report,
+        )
+    except ModuleNotFoundError:
+        from check_tushare_anns_d_beat_enablement import encode_report, write_report
+
+    write_report(path, encode_report(report))
 
 
 def _load_postgres_backup_helper():

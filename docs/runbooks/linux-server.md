@@ -129,7 +129,9 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 
 如果还想把 Tushare `anns_d` Beat enablement checklist 纳入同一验收包，可加
 `--include-tushare-anns-d-beat-enablement`。该选项只会让 deploy preflight 阶段追加
-`--check-tushare-anns-d-beat-enablement`，仍写入同一份 `server-deploy-check.json`；
+`--check-tushare-anns-d-beat-enablement` 和
+`--tushare-anns-d-beat-enablement-json-output <evidence-dir>/tushare-anns-d-beat-enablement.json`；
+除 `server-deploy-check.json` 汇总外，还会保存原始 checklist evidence；
 不会访问 Tushare、不写数据库、不触发抓取、扫描、推送或模型调用；checklist
 `warn` 仍按部署预检规则作为非阻塞 warning，只有 `fail` 会阻断验收：
 
@@ -213,7 +215,7 @@ uv run python infra/scripts/server_delivery_acceptance.py --restore-check-input 
 预检脚本只用 `docker compose config --quiet` 验证配置，不输出展开后的 environment，避免真实 `.env` 中的 token 或 secret 出现在终端日志里。默认部署预检不运行 Tushare `anns_d` Beat checklist；需要把该离线/no-token checklist 纳入部署预检时，显式加：
 
 ```powershell
-uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement
+uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement --tushare-anns-d-beat-enablement-json-output evidence/tushare-anns-d-beat-enablement.json
 ```
 
 该可选检查复用 `check_tushare_anns_d_beat_enablement.py`，不访问 Tushare、不写数据库、不触发抓取、扫描、推送或模型调用；checklist `warn` 只作为预警输出，只有 `fail` 会让部署预检失败。
