@@ -504,6 +504,27 @@ def fetch_periodic_report(
     return _expect_object(payload, "/reports/periodic")
 
 
+def create_deep_report_from_signal(
+    base_url: str | None,
+    signal_id: int,
+    *,
+    user_key: str = DEFAULT_USER_KEY,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_signal_id = _positive_int(signal_id, "signal_id")
+    payload = post_json(
+        base_url,
+        "/reports/deep/from-signal",
+        query={"user_key": _user_key(user_key)},
+        json_body={
+            "signal_id": normalized_signal_id,
+            "confirm_deep_report": True,
+        },
+        opener=opener,
+    )
+    return _expect_object(payload, "/reports/deep/from-signal")
+
+
 def score_signal(
     base_url: str | None,
     signal_id: int,

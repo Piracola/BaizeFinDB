@@ -126,6 +126,7 @@ class BaizeFinDBClientApp:
         self._add_button(button_frame, "查看持仓", self.view_holdings)
         self._add_button(button_frame, "查看自选", self.view_watchlist)
         self._add_button(button_frame, "查看报告", self.view_reports)
+        self._add_button(button_frame, "生成 Deep Report", self.create_deep_report)
         self._add_button(button_frame, "查看日报", self.view_daily_report)
         self._add_button(button_frame, "查看周报", self.view_weekly_report)
         self._add_button(button_frame, "生成评分", self.view_signal_scores)
@@ -348,6 +349,31 @@ class BaizeFinDBClientApp:
             return client_api.format_reports(reports)
 
         self._run_worker("读取报告", worker)
+
+    def create_deep_report(self) -> None:
+        try:
+            signal_id = self._normalized_signal_id()
+        except ValueError as exc:
+            messagebox.showerror(WINDOW_TITLE, str(exc))
+            return
+
+        confirmed = messagebox.askyesno(
+            WINDOW_TITLE,
+            f"确认生成信号 #{signal_id} 的 Deep Report？",
+        )
+        if not confirmed:
+            self.status_text.set(f"已取消生成信号 #{signal_id} Deep Report")
+            return
+
+        def worker() -> str:
+            report = client_api.create_deep_report_from_signal(
+                self._normalized_server_url(),
+                signal_id,
+                user_key=self._normalized_user_key(),
+            )
+            return client_api.format_reports([report])
+
+        self._run_worker(f"生成信号 #{signal_id} Deep Report", worker)
 
     def view_daily_report(self) -> None:
         self._view_periodic_report("daily", "读取日报")

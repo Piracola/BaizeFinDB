@@ -1,6 +1,6 @@
 # BaizeFinDB Windows Client MVP
 
-这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要、持仓、自选、报告摘要、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史、就绪自检、告警钻取和首用诊断共用。
+这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要、持仓、自选、报告摘要、确认后手动生成 deep 报告、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史、就绪自检、告警钻取和首用诊断共用。
 
 默认仍是源码运行版，不是安装包。当前目录提供可选 PyInstaller onedir 打包脚手架，方便后续在 Windows 目标机上验证 exe 形态；它不是签名安装器，也不包含自动更新或生产分发承诺。
 
@@ -182,8 +182,9 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - GUI 的 `告警钻取` 按钮复用这三个只读 OPS API，并把同一个 `OPS Lookback (hours)` 传给每次调用；输出优先展示后端 readiness 状态和非 OK 检查、overview alerts、history failure_summary（Provider / 数据质量优先）和有界最近事件，不本地重算状态，不写 evidence。
 - GUI 的 `首用诊断` 按钮复用同一个 `clients.windows.smoke_check.run_smoke_check` 和 `format_summary`，传入当前 Server URL、User Key 和 `OPS Lookback (hours)`，只在窗口内显示摘要；默认不写 evidence 文件，也不会打开第二个 GUI 窗口。
 - smoke check 会额外用同一窗口可选读取 `/ops/trends?lookback_hours=<selected>&bucket_count=12`，该端点失败只作为 warning，不阻断首用；默认跳过当前会在 GET 时创建用户行的持仓/自选/报告/周期报告端点，并以 warning 提醒；空雷达、空信号、空 Telegram 绑定属于首用 warning，不是 blocker。
-- 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/radar/signals/{signal_id}/analysis`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/periodic`、`/scores/signals/{signal_id}`。
+- 客户端只消费后端 API：`/health/ready`、`/ops/overview`、`/ops/history`、`/ops/readiness`、`/providers/tushare/status`、`/providers/tushare/readiness`、`/radar/overview`、`/radar/signals`、`/radar/signals/{signal_id}/analysis`、`/portfolio/holdings`、`/portfolio/watchlist`、`/reports`、`/reports/deep/from-signal`、`/reports/periodic`、`/scores/signals/{signal_id}`。
 - GUI 的 `查看分析` 按钮读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，只展示后端返回的 key points、metric highlights、risk flags、evidence/review summary 和 next actions；不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。
+- GUI 的 `生成 Deep Report` 按钮读取窗口里的 Signal ID，先弹出确认，再调用 `/reports/deep/from-signal?user_key=<User Key>` 并发送 `confirm_deep_report=true`；取消确认不会调用 API。报告正文、审查状态、建议标签和生成元数据都由后端决定，客户端只展示返回报告摘要。
 - Telegram 绑定管理查看时调用 `/telegram/status` 和 `/telegram/bindings`，显示严格绑定模式和白名单/绑定汇总计数；绑定和禁用仍只调用 `/telegram/bindings`。服务器配置 `TELEGRAM_WEBHOOK_SECRET` 时，需要在 `Telegram Secret` 输入框填写同一个 secret。
 - P0/P1/P2、生命周期、生命周期分布、市场情绪摘要、运行状态、OPS readiness、Tushare 数据源状态、个股回推证据、审查状态和雷达计数均来自后端，客户端不重新计算。
 - 日报/周报和综合评分也来自后端；客户端只负责触发、读取和展示评分窗口、档位和组件明细。

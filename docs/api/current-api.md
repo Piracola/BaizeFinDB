@@ -1062,7 +1062,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
 - 单信号解释摘要：用 `GET /radar/signals/{signal_id}/analysis`，展示后端 bounded key points、metric highlights、risk flags 和 review/evidence summary；Web 信号详情、Windows `查看分析` 和 Telegram `/analysis <id>` 已接入该接口。不要在前端、Windows 客户端或 Telegram 重新生成雷达定级、分析摘要或交易建议。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
-- 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；用 `GET /reports/periodic` 展示日报/周报。
+- 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；deep 报告只能由明确用户动作调用 `POST /reports/deep/from-signal?user_key=<key>` 并发送 `confirm_deep_report=true`；用 `GET /reports/periodic` 展示日报/周报。Web 和 Windows 客户端都必须先确认再调用 deep endpoint，不能在入口层生成报告正文、审查状态或建议标签。
 - 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回的评分档位和组件明细。
 - 内部调试：用 `share-preview`。
 - 公开展示：只能用 `share-payload`。

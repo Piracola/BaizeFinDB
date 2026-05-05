@@ -20,12 +20,13 @@
 - 查看持仓：`GET /portfolio/holdings`。
 - 查看自选：`GET /portfolio/watchlist`。
 - 查看报告摘要：`GET /reports`。
+- 确认后手动生成 deep 报告：`POST /reports/deep/from-signal?user_key=<key>`，请求体必须带 `confirm_deep_report=true`。
 - 查看日报/周报汇总：`GET /reports/periodic`。
 - 生成并查看单信号 v2 综合评分明细：`POST /scores/signals/{signal_id}`。
 - 查看 Telegram 绑定状态：`GET /telegram/status` 和 `GET /telegram/bindings`；绑定和禁用 Telegram chat：`POST/PATCH /telegram/bindings`。
 - 打开现有 Web 面板：`/`。
 - P0/P1/P2、生命周期、市场情绪摘要、运行状态、OPS readiness、数据源状态、审查状态和计数都来自后端 API，客户端不重新计算。
-- 日报/周报和评分结果也来自后端，客户端不做本地评分或规则推断。
+- 日报/周报、deep 报告和评分结果也来自后端，客户端不做本地报告正文、评分或规则推断。
 - 不保存 token、secret、持仓截图或个人数据；Telegram Secret 输入框只用于本次 API header。
 - Tushare 状态视图只读取 Provider 配置状态，不触发真实抓取。
 - 不保存报告导出文件；报告正文继续在 Web/API 查看。
@@ -234,7 +235,8 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 | 查看分析 | 读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，显示后端 key points、metric highlights、risk flags、evidence/review summary 和 next actions；不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。 |
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |
 | 查看自选 | 调用 `/portfolio/watchlist`，按 User Key 显示个人自选。 |
-| 查看报告 | 调用 `/reports`，按 User Key 显示 quick/standard 报告摘要。 |
+| 查看报告 | 调用 `/reports`，按 User Key 显示 quick/standard/deep 报告摘要。 |
+| 生成 Deep Report | 读取窗口里的 Signal ID，先弹出确认；确认后调用 `/reports/deep/from-signal?user_key=<User Key>` 并发送 `confirm_deep_report=true`，再显示后端返回的 deep 报告摘要。取消确认不会调用 API。 |
 | 查看日报 | 调用 `/reports/periodic?period=daily`，按 User Key 显示周期汇总。 |
 | 查看周报 | 调用 `/reports/periodic?period=weekly`，按 User Key 显示周期汇总。 |
 | 生成评分 | 读取窗口里的 Signal ID，调用 `/scores/signals/{signal_id}` 生成并显示 1d/3d/5d/10d 综合评分、评分档位和组件明细。 |
@@ -243,7 +245,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 | 禁用 Chat | 读取 Telegram Chat ID，调用 `/telegram/bindings/{chat_id}` 禁用该 chat。 |
 | 打开 Web 面板 | 用系统浏览器打开服务器根路径。 |
 
-如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。Telegram 绑定输出只显示 `/telegram/status` 的严格绑定模式和汇总计数，不显示原始环境值、bot token 或 webhook secret。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。`OPS 趋势` 和 `告警钻取` 都是只读排障视图，不触发 Provider 采集、雷达扫描、评分、报告生成、Telegram 修改、模型调用、后端 mutation、evidence 写入或交易相关动作。
+如果服务器配置了 `TELEGRAM_WEBHOOK_SECRET`，需要在 `Telegram Secret` 输入框填写同一个值；也可以用环境变量 `BAIZEFINDB_TELEGRAM_SECRET` 启动客户端。该值不会写入本地文件。Telegram 绑定输出只显示 `/telegram/status` 的严格绑定模式和汇总计数，不显示原始环境值、bot token 或 webhook secret。`OPS Lookback (hours)` 默认 24；排查时可改成较短窗口区分最近健康状态和更早的 Provider / 数据质量 warning，客户端只把数值传给后端，不本地重算 OPS 状态。`OPS 趋势` 和 `告警钻取` 都是只读排障视图，不触发 Provider 采集、雷达扫描、评分、报告生成、Telegram 修改、模型调用、后端 mutation、evidence 写入或交易相关动作。`生成 Deep Report` 是手动确认后的 report mutation，只调用专用 deep endpoint，不走 quick/standard endpoint，不在客户端生成报告正文、审查状态、建议标签或模型内容。
 
 首次使用 smoke check 默认跳过当前会在 GET 时创建用户行的持仓、自选、报告和周期报告端点，避免自检命令改变后端状态；这些个人首用数据为空会作为 warning 提醒。空雷达、空信号、空 Telegram 绑定和可选 `/ops/trends?lookback_hours=<selected>&bucket_count=12` 读取失败也只是 warning，真正 blocker 包括 URL 非法、Tkinter 不可导入、API 连接失败、`/health/ready` 未 ready、`/ops/readiness` blocked 或核心 JSON 结构异常。推荐的 `first-trial.ps1` 默认传入 `ServerUrl=http://127.0.0.1:8000`、`UserKey=default`、`SmokeLookbackHours=24`，并委托 `run-client.ps1 -SmokeCheck`；默认不启动 Docker、不调用采集、扫描、评分、报告生成、Telegram 修改或交易相关端点。只有显式加 `-StartDockerBackend` 时，脚本才使用 compose server overlay 先重建当前源码的 `api` 镜像，确保 `/ops/trends` 等新端点来自当前代码，再启动 `postgres` / `redis`、通过 `api` 容器执行迁移、启动 `api` / `worker` / `beat` 并等待 `/health`，然后再进入同一套 smoke/GUI 委托；Docker build、启动、迁移失败或 health 超时会在 GUI 前阻断。`-DeployCheckJsonOutput <path>` 只能和 `-StartDockerBackend` 同用，会在 Docker health 后、smoke/GUI 前保存部署预检 JSON，预检失败同样阻断后续启动；`-DeployCheckM5Smoke` 只能随 deploy JSON evidence 使用，会把服务端只读 M5 smoke 契约也纳入同一报告；`-DeployCheckBackupJsonOutput <path>` 只能随 deploy JSON evidence 使用，会把 PostgreSQL backup check-only evidence 写入同一次部署预检。`run-client.ps1 -SmokeCheck` 会把同一个 `-ServerUrl` 和 `-UserKey` 传给 smoke check；`run-client.ps1 -SmokeOnly` 会隐式执行 smoke check 并在结束后退出，不打开 GUI；`first-trial.ps1 -SmokeOnly` 会透传该模式，和 `-StartDockerBackend` 同用时仍先完成镜像重建、Docker 后端启动和 `/health` 等待；`-SmokeLookbackHours <n>` 会把 OPS readiness 和可选 OPS trends 统计窗口传给 smoke check，默认 24，范围 1 到 168；`-SmokeCompactJsonOutput <path>` 会写出首次试运行推荐 compact evidence，不含 endpoint payload/raw response；`-SmokeJsonOutput <path>` 会写出详细脱敏 JSON；`-SmokeStrict` 会把 warning 作为启动 blocker，默认 warning 不阻断启动。GUI 的 `首用诊断` 按钮使用同一套 smoke check 规则和摘要格式，但默认不写 evidence 文件，适合已打开窗口后的再次诊断。
 

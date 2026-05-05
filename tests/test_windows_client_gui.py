@@ -15,6 +15,9 @@ class FakeVar:
     def get(self) -> str:
         return self.value
 
+    def set(self, value: str) -> None:
+        self.value = value
+
 
 def _app_with_lookback(value: str) -> baizefindb_client.BaizeFinDBClientApp:
     app = object.__new__(baizefindb_client.BaizeFinDBClientApp)
@@ -23,6 +26,7 @@ def _app_with_lookback(value: str) -> baizefindb_client.BaizeFinDBClientApp:
     app.signal_id = FakeVar("7")
     app.ops_lookback_hours = FakeVar(value)
     app.telegram_secret = FakeVar("hook-secret")
+    app.status_text = FakeVar("就绪")
     return app
 
 
@@ -286,6 +290,12 @@ def test_gui_declares_signal_analysis_button() -> None:
     assert "查看分析" in source
 
 
+def test_gui_declares_deep_report_button() -> None:
+    source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
+
+    assert "生成 Deep Report" in source
+
+
 def test_view_signal_analysis_blocks_invalid_signal_id_before_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -340,6 +350,95 @@ def test_view_signal_analysis_reads_backend_analysis_for_signal_id(
     assert calls["fetch"] == ("http://localhost:8000", 7)
     assert calls["format_payload"] == {"signal_id": 7, "analysis_title": "backend brief"}
     assert calls["result"] == "formatted signal analysis"
+
+
+def test_create_deep_report_blocks_invalid_signal_id_before_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    app.signal_id = FakeVar("0")
+    errors: list[tuple[str, str]] = []
+
+    def fail_confirm(*args: object, **kwargs: object) -> bool:
+        raise AssertionError("confirmation should not open for invalid signal id")
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start for invalid signal id")
+
+    def fake_showerror(title: str, message: str) -> None:
+        errors.append((title, message))
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "askyesno", fail_confirm)
+    monkeypatch.setattr(baizefindb_client.messagebox, "showerror", fake_showerror)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.create_deep_report()
+
+    assert errors == [
+        (
+            baizefindb_client.WINDOW_TITLE,
+            "Signal ID 必须是正整数。",
+        ),
+    ]
+
+
+def test_create_deep_report_cancel_blocks_api_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start when confirmation is canceled")
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "askyesno", lambda *args: False)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.create_deep_report()
+
+    assert app.status_text.get() == "已取消生成信号 #7 Deep Report"
+
+
+def test_create_deep_report_confirms_then_posts_and_formats_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    calls: dict[str, Any] = {}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_create_deep_report(
+        base_url: str,
+        signal_id: int,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        calls["create"] = (base_url, signal_id, kwargs)
+        return {"id": 11, "signal_id": signal_id, "report_type": "deep"}
+
+    def fake_format(reports: object) -> str:
+        calls["format_reports"] = reports
+        return "formatted deep report"
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "askyesno", lambda *args: True)
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(
+        baizefindb_client.client_api,
+        "create_deep_report_from_signal",
+        fake_create_deep_report,
+    )
+    monkeypatch.setattr(baizefindb_client.client_api, "format_reports", fake_format)
+
+    app.create_deep_report()
+
+    assert calls["action"] == "生成信号 #7 Deep Report"
+    assert calls["create"] == (
+        "http://localhost:8000",
+        7,
+        {"user_key": "analyst"},
+    )
+    assert calls["format_reports"] == [{"id": 11, "signal_id": 7, "report_type": "deep"}]
+    assert calls["result"] == "formatted deep report"
 
 
 def test_view_telegram_bindings_reads_status_before_formatting(

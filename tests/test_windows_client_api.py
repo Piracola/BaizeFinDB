@@ -918,6 +918,36 @@ def test_fetch_periodic_report_uses_user_key_and_period() -> None:
     }
 
 
+def test_create_deep_report_from_signal_posts_confirmation_payload() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["method"] = request.get_method()
+        calls["payload"] = json.loads(request.data.decode("utf-8"))
+        calls["content_type"] = request.get_header("Content-type")
+        calls["timeout"] = timeout
+        return FakeResponse(
+            '{"id":11,"signal_id":7,"report_type":"deep","title":"Deep Report"}',
+        )
+
+    report = client_api.create_deep_report_from_signal(
+        "http://localhost:8000",
+        7,
+        user_key="telegram-1001",
+        opener=opener,
+    )
+
+    assert report["report_type"] == "deep"
+    assert calls == {
+        "url": "http://localhost:8000/reports/deep/from-signal?user_key=telegram-1001",
+        "method": "POST",
+        "payload": {"signal_id": 7, "confirm_deep_report": True},
+        "content_type": "application/json",
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
 def test_format_periodic_report_lists_backend_summary_and_counts() -> None:
     text = client_api.format_periodic_report(
         {
