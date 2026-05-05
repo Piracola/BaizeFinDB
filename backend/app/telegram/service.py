@@ -13,6 +13,7 @@ from app.radar.service import (
     get_radar_overview,
     get_radar_signal_analysis,
     get_radar_signal_detail,
+    get_radar_signal_model_analysis_draft,
     list_radar_signals,
 )
 from app.reports.schemas import PeriodicReportType
@@ -26,6 +27,7 @@ from app.telegram.formatter import (
     format_help,
     format_holdings,
     format_invalid_analysis_signal_id,
+    format_invalid_model_draft_signal_id,
     format_invalid_score_signal_id,
     format_invalid_signal_id,
     format_no_text,
@@ -40,6 +42,7 @@ from app.telegram.formatter import (
     format_scores,
     format_signal_analysis,
     format_signal_detail,
+    format_signal_model_analysis_draft,
     format_signal_not_found,
     format_signals,
     format_tushare_readiness,
@@ -227,6 +230,9 @@ class TelegramCommandService:
             if command == "/analysis":
                 return await self._signal_analysis_response(session, arguments)
 
+            if command == "/model_draft":
+                return await self._model_draft_response(session, arguments)
+
             if command in {"/holding", "/holdings"}:
                 holdings = await list_holdings(session, user_key=_telegram_user_key(chat_id))
                 return format_holdings(holdings)
@@ -299,6 +305,29 @@ class TelegramCommandService:
             return format_signal_not_found(signal_id)
 
         return format_signal_analysis(analysis)
+
+    async def _model_draft_response(
+        self,
+        session: AsyncSession,
+        arguments: list[str],
+    ) -> str:
+        if not arguments:
+            return format_invalid_model_draft_signal_id()
+
+        try:
+            signal_id = int(arguments[0])
+        except ValueError:
+            return format_invalid_model_draft_signal_id()
+
+        draft = await get_radar_signal_model_analysis_draft(
+            session,
+            signal_id,
+            settings=self._settings,
+        )
+        if draft is None:
+            return format_signal_not_found(signal_id)
+
+        return format_signal_model_analysis_draft(draft)
 
     async def _score_response(
         self,

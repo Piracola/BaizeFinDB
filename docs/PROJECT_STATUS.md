@@ -8,7 +8,7 @@
 
 项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、带 `case_type` 分类的 Tushare 公告完整雷达扫描 golden cases、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API 和确定性 `agent_assessments` scaffold、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP、手动 deep 报告入口、Telegram 折叠推送日志，以及可重复执行的开发/演示数据种子脚本；部署 M5 smoke check 已校验单信号分析的固定 agent assessment 角色和基础字段形状。真正 LLM-backed 多 agent 编排仍是后续阶段，但已新增只读模型 Provider readiness preflight、默认关闭的 OpenAI-compatible 模型客户端审计骨架、模型分析草稿输出净化契约，以及第一个显式手动 `POST /radar/signals/{signal_id}/model-analysis-draft` 草稿 API，用于启用前检查 provider/model/key 姿态、模型调用 fallback/degraded 留痕，并保证模型文本进入产品面前先被结构化、脱源、限长和交易语言拦截。
 
-Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、单信号后端分析摘要、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/analysis <id>` 只读消费 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤，`TELEGRAM_REQUIRE_BINDING=true` 可关闭无白名单且无绑定时的本地开放兜底；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态、分析摘要、agent 状态或评分。
+Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、单信号后端分析摘要、手动模型草稿、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/analysis <id>` 只读消费 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令；`/model_draft <id>` 只在显式命令下调用 `POST /radar/signals/{signal_id}/model-analysis-draft`，展示后端净化后的 model/draft 状态、provider/model/fallback/audit 元数据、摘要字段、blocked count 和 boundary，不自动调用模型草稿、不展示 prompt、raw response、raw source、blocked phrase text、个人持仓成本/仓位或交易指令；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤，`TELEGRAM_REQUIRE_BINDING=true` 可关闭无白名单且无绑定时的本地开放兜底；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态、分析摘要、agent 状态、模型状态或评分。
 
 M5 验收测试已覆盖 5 分钟 Celery beat 调度、P0/P1/P2 规则、新闻不能单独触发主线 P0、风险事件 P0、生命周期、Review Agent 审查范围、审查阻断、Telegram 折叠推送、P0 推送后 standard report、持仓隔离、报告审查、deep 报告手动确认约束、模型降级审计、Web 核心页面顺序和公开分享脱敏。
 
@@ -32,7 +32,7 @@ Web 雷达终端工作台已在状态面板加入只读 OPS 趋势摘要、OPS �
 
 `app.ai.analysis_output` 已新增为模型分析草稿的输出净化契约：只解析 JSON 文本，允许 `advisory_summary`、`observations`、`risk_notes`、`follow_up_questions` 和固定 `suggested_attention_label`，忽略未知字段，缺失字段给默认空值；所有文本会脱源 URL/domain 并按字段限长/限条数。malformed JSON 或非对象 JSON 返回 `degraded`，直接交易语言如 `马上买入`、`满仓`、`保证收益`、`买入信号`、`卖出信号` 返回 `blocked`，安全否定风险提示如 `不建议马上买入` 不阻断。该模块不直接调用模型、不修改 radar/report/Telegram/Provider 状态，并已用于手动模型草稿 API。
 
-`POST /radar/signals/{signal_id}/model-analysis-draft` 已新增为第一个显式手动模型草稿 API。默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled` 时返回 disabled/not_available，不联网、不写审计；启用后只使用确定性 `/analysis` 的脱敏上下文调用模型客户端，再通过 `app.ai.analysis_output` 净化 JSON 草稿。主模型成功不写审计，fallback 成功写 fallback 审计，provider degraded、unsafe output 或 malformed output 写 degraded 审计，默认不保存完整 raw prompt。该接口不修改 P0/P1/P2、生命周期、审查状态、报告、Telegram、Provider 或确定性 `/analysis` 输出；Web 信号详情和 Windows 客户端已有手动 `生成模型草稿` 入口，Telegram 仍未接入。
+`POST /radar/signals/{signal_id}/model-analysis-draft` 已新增为第一个显式手动模型草稿 API。默认 `MODEL_ANALYSIS_ENABLED=false` / `MODEL_PROVIDER=disabled` 时返回 disabled/not_available，不联网、不写审计；启用后只使用确定性 `/analysis` 的脱敏上下文调用模型客户端，再通过 `app.ai.analysis_output` 净化 JSON 草稿。主模型成功不写审计，fallback 成功写 fallback 审计，provider degraded、unsafe output 或 malformed output 写 degraded 审计，默认不保存完整 raw prompt。该接口不修改 P0/P1/P2、生命周期、审查状态、报告、Telegram、Provider 或确定性 `/analysis` 输出；Web 信号详情、Windows 客户端和 Telegram `/model_draft <id>` 已有显式手动入口。
 
 `server_deploy_check.py --check-model-provider-readiness` 已可把上述模型 Provider readiness 纳入 Linux 部署预检；可选 `--model-provider-readiness-json-output <path>` 会写出独立脱敏 evidence，`warn` 保持非阻塞，`fail` 会让部署预检失败。`server_delivery_acceptance.py --include-model-provider-readiness` 会把该检查纳入同一交付验收包并追踪 `<evidence-dir>/model-provider-readiness.json`；`--production-readiness` 默认包含该 evidence，plan-only 会只展示命令和路径，不调用 helper。
 
@@ -89,7 +89,7 @@ Telegram 告警 env 预检已新增：`infra/scripts/server_alert_telegram_env_c
 Linux `.venv` 已重建，Windows 迁移虚拟环境已移入迁移备份目录，
 迁移产生的 CRLF 假改动已清理。
 当前服务器门禁已通过 `ruff check`、`pytest`、Alembic SQL 生成、base/server
-compose config 和基础部署预检；当前全量 pytest 为 `646 passed, 45 skipped`，
+compose config 和基础部署预检；当前全量 pytest 为 `647 passed, 45 skipped`，
 Windows GUI helper 测试已可运行，剩余跳过项主要是 Linux 服务器缺少
 PowerShell/Windows 打包脚本运行环境。
 
@@ -204,7 +204,7 @@ Telegram：
 - `PATCH /telegram/bindings/{chat_id}`
 - `POST /telegram/push/latest`
 - `GET /telegram/push/logs`
-- Telegram 命令：`/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/ops_trends`、`/ops_ready`、`/ops_warn`、`/tushare`、`/radar`、`/signals`、`/signal <id>`、`/analysis <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 展示只读 OPS 趋势桶摘要，`/ops_ready` 展示运行就绪自检，`/ops_warn` 展示只读 OPS 告警钻取，`/tushare` 展示 Tushare 只读配置状态，`/analysis` 展示后端单信号研究摘要，`/score` 展示后端 v2 评分档位和组件明细
+- Telegram 命令：`/help`、`/id`、`/health`、`/ops`、`/ops_history`、`/ops_trends`、`/ops_ready`、`/ops_warn`、`/tushare`、`/radar`、`/signals`、`/signal <id>`、`/analysis <id>`、`/model_draft <id>`、`/holding`、`/watchlist`、`/reports`、`/daily`、`/weekly`、`/score <id>`；`/health` 展示最近扫描状态，`/ops` 展示运行状态摘要，`/ops_history` 展示只读运维异常历史，`/ops_trends` 展示只读 OPS 趋势桶摘要，`/ops_ready` 展示运行就绪自检，`/ops_warn` 展示只读 OPS 告警钻取，`/tushare` 展示 Tushare 只读配置状态，`/analysis` 展示后端单信号研究摘要，`/model_draft` 显式手动展示后端净化后的模型草稿，`/score` 展示后端 v2 评分档位和组件明细
 
 Windows 客户端：
 

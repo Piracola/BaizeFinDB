@@ -11,6 +11,7 @@ from app.radar.schemas import (
     RadarScanStatus,
     RadarSignalAnalysisRead,
     RadarSignalDetail,
+    RadarSignalModelAnalysisDraftRead,
     RadarSignalRead,
 )
 from app.reports.schemas import PeriodicReportRead, ReportRead
@@ -28,6 +29,7 @@ ANALYSIS_LIST_PREVIEW_LIMIT = 5
 ANALYSIS_METRIC_PREVIEW_LIMIT = 4
 ANALYSIS_AGENT_PREVIEW_LIMIT = 5
 ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT = 3
+MODEL_DRAFT_LIST_PREVIEW_LIMIT = 5
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 ANALYSIS_FORBIDDEN_TEXT_MARKERS = (
     "source_ref",
@@ -113,6 +115,18 @@ SCORE_COMPONENT_ORDER = (
     "data_quality",
     "timeliness",
 )
+MODEL_STATUS_LABELS = {
+    "disabled": "未启用",
+    "ok": "正常",
+    "fallback": "已使用备用模型",
+    "degraded": "降级",
+}
+MODEL_DRAFT_STATUS_LABELS = {
+    "not_available": "不可用",
+    "ok": "已生成",
+    "blocked": "已阻断",
+    "degraded": "降级",
+}
 
 
 def format_help() -> str:
@@ -136,6 +150,7 @@ def format_help() -> str:
                 "/signals - 查看最近信号折叠摘要",
                 "/signal <id> - 查看单个信号复盘",
                 "/analysis <id> - 查看单个信号后端分析摘要",
+                "/model_draft <id> - 手动生成单个信号模型草稿",
                 "/holding - 查看当前聊天绑定的手动持仓",
                 "/watchlist - 查看当前聊天绑定的自选关注",
                 "/reports - 查看当前聊天绑定的报告列表",
@@ -583,6 +598,93 @@ def format_signal_analysis(analysis: RadarSignalAnalysisRead) -> str:
         ],
     )
     return _trim_message("\n".join(lines))
+
+
+def format_signal_model_analysis_draft(draft: RadarSignalModelAnalysisDraftRead) -> str:
+    model_status = _value(_field(draft, "model_status", "-"))
+    draft_status = _value(_field(draft, "draft_status", "-"))
+    blocked_count = len(_analysis_sequence(_field(draft, "blocked_terms", [])))
+    lines = [
+        f"信号 #{_field(draft, 'signal_id', '-')} 模型草稿",
+        (
+            f"模型状态：{MODEL_STATUS_LABELS.get(model_status, model_status)} "
+            f"({model_status})"
+        ),
+        (
+            f"草稿状态：{MODEL_DRAFT_STATUS_LABELS.get(draft_status, draft_status)} "
+            f"({draft_status})"
+        ),
+    ]
+
+    metadata = _model_draft_metadata_lines(draft)
+    if metadata:
+        lines.extend(metadata)
+
+    lines.append("")
+    if draft_status == "not_available":
+        lines.append("模型分析未启用或 Provider 未配置，当前没有模型草稿。")
+    elif draft_status == "blocked":
+        lines.append("模型输出被安全规则阻断，未展示草稿正文。")
+    elif draft_status == "degraded":
+        lines.append("模型草稿不可用，保留后端降级状态。")
+    else:
+        summary = _analysis_text(_field(draft, "advisory_summary", ""))
+        lines.append(f"摘要：{summary or '后端未返回该项。'}")
+
+    lines.extend(["", f"阻断词数量：{blocked_count}", ""])
+    lines.extend(_model_draft_list_lines("观察", _field(draft, "observations", [])))
+    lines.extend(_model_draft_list_lines("风险提示", _field(draft, "risk_notes", [])))
+    lines.extend(_model_draft_list_lines("后续问题", _field(draft, "follow_up_questions", [])))
+
+    attention_label = _analysis_text(_field(draft, "suggested_attention_label", ""))
+    if attention_label:
+        lines.extend(["建议标签：", f"- {attention_label}", ""])
+
+    boundary = _analysis_text(_field(draft, "boundary", ""))
+    if boundary:
+        lines.extend(["边界：", f"- {boundary}", ""])
+
+    lines.extend(
+        [
+            (
+                "该视图只展示后端净化后的模型草稿，不在 Telegram 层计算模型状态、"
+                "雷达定级、生命周期、审查状态、评分或操作建议。"
+            ),
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_message("\n".join(lines))
+
+
+def _model_draft_list_lines(title: str, value: object) -> list[str]:
+    items = _analysis_values(value, MODEL_DRAFT_LIST_PREVIEW_LIMIT)
+    lines = [f"{title}："]
+    if not items:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    lines.extend(f"- {item}" for item in items)
+    lines.append("")
+    return lines
+
+
+def _model_draft_metadata_lines(draft: RadarSignalModelAnalysisDraftRead) -> list[str]:
+    metadata = []
+    provider = _analysis_text(_field(draft, "provider", ""))
+    model = _analysis_text(_field(draft, "model", ""))
+    fallback_model = _analysis_text(_field(draft, "fallback_model", ""))
+    audit_log_id = _field(draft, "audit_log_id", None)
+    if provider:
+        metadata.append(f"Provider：{provider}")
+    if model:
+        metadata.append(f"Model：{model}")
+    if fallback_model:
+        metadata.append(f"Fallback Model：{fallback_model}")
+    if audit_log_id is not None:
+        metadata.append(f"Audit Log：#{_value(audit_log_id)}")
+
+    return metadata
 
 
 def _analysis_list_lines(title: str, value: object) -> list[str]:
@@ -1237,6 +1339,10 @@ def format_invalid_signal_id() -> str:
 
 def format_invalid_analysis_signal_id() -> str:
     return "请使用 /analysis <id> 查看单个信号后端分析摘要。"
+
+
+def format_invalid_model_draft_signal_id() -> str:
+    return "请使用 /model_draft <id> 生成模型草稿。"
 
 
 def format_invalid_score_signal_id() -> str:

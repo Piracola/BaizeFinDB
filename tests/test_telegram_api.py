@@ -13,6 +13,7 @@ from app.db.base import Base
 from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
 from app.db.session import get_db_session
 from app.main import create_app
+from app.radar.schemas import RadarSignalModelAnalysisDraftRead
 from app.telegram.formatter import (
     format_holdings,
     format_ops_trends,
@@ -21,6 +22,7 @@ from app.telegram.formatter import (
     format_reports,
     format_signal_analysis,
     format_signal_detail,
+    format_signal_model_analysis_draft,
     format_signals,
     format_watchlist_items,
 )
@@ -125,6 +127,7 @@ async def test_telegram_help_command_returns_chinese_preview(client: AsyncClient
     assert "/daily" in data["preview"]
     assert "/weekly" in data["preview"]
     assert "/analysis <id>" in data["preview"]
+    assert "/model_draft <id>" in data["preview"]
     assert "/score <id>" in data["preview"]
     assert "不构成投资建议" in data["preview"]
     for forbidden in ("买入", "卖出", "满仓", "稳赚", "保证收益"):
@@ -877,6 +880,55 @@ async def test_telegram_signals_and_signal_detail_commands(
 
 
 @pytest.mark.asyncio
+async def test_telegram_model_draft_command_is_manual_and_default_disabled(
+    session_factory: async_sessionmaker[AsyncSession],
+    client: AsyncClient,
+) -> None:
+    signal_id = await _seed_signal(session_factory)
+
+    model_draft_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update(f"/model_draft {signal_id}"),
+    )
+    invalid_model_draft_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/model_draft not-a-number"),
+    )
+    missing_argument_model_draft_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/model_draft"),
+    )
+    missing_model_draft_response = await client.post(
+        "/telegram/webhook",
+        json=_telegram_update("/model_draft 999999"),
+    )
+
+    assert model_draft_response.status_code == 200
+    preview = model_draft_response.json()["preview"]
+    assert f"信号 #{signal_id} 模型草稿" in preview
+    assert "模型状态：未启用 (disabled)" in preview
+    assert "草稿状态：不可用 (not_available)" in preview
+    assert "模型分析未启用或 Provider 未配置" in preview
+    assert "阻断词数量：0" in preview
+    assert "不在 Telegram 层计算模型状态" in preview
+    assert "raw_prompt" not in preview
+    assert "response_excerpt" not in preview
+    assert "source_ref" not in preview
+    assert "raw_excerpt" not in preview
+
+    assert invalid_model_draft_response.status_code == 200
+    assert "请使用 /model_draft <id>" in invalid_model_draft_response.json()["preview"]
+
+    assert missing_argument_model_draft_response.status_code == 200
+    assert (
+        "请使用 /model_draft <id>" in missing_argument_model_draft_response.json()["preview"]
+    )
+
+    assert missing_model_draft_response.status_code == 200
+    assert "未找到 #999999 信号" in missing_model_draft_response.json()["preview"]
+
+
+@pytest.mark.asyncio
 async def test_telegram_portfolio_commands_use_chat_user_key(client: AsyncClient) -> None:
     await client.post(
         "/portfolio/holdings",
@@ -1123,6 +1175,27 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
             raw_excerpt="sell immediately",
         ),
     )
+    model_draft_preview = format_signal_model_analysis_draft(
+        RadarSignalModelAnalysisDraftRead(
+            signal_id=7,
+            model_status="fallback",
+            draft_status="ok",
+            provider="openai",
+            model="fallback-model",
+            fallback_model="fallback-model",
+            audit_log_id=12,
+            advisory_summary="模型草稿摘要，参考 [source omitted]。",
+            observations=[
+                "Backend model draft uses sanitized deterministic analysis.",
+                "source_ref: https://example.com/raw",
+            ],
+            risk_notes=["Raw note says buy now."],
+            follow_up_questions=["Check whether provider quality recovered."],
+            suggested_attention_label="继续观察",
+            blocked_terms=["马上买入", "sell"],
+            boundary="Manual opt-in model draft; does not change backend state.",
+        ),
+    )
     overview_preview = format_radar_overview(overview)
     holdings_preview = format_holdings([])
     watchlist_preview = format_watchlist_items([])
@@ -1153,6 +1226,28 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     assert "sell" not in analysis_preview.lower()
     assert "买入" not in analysis_preview
     assert "卖出" not in analysis_preview
+    assert "信号 #7 模型草稿" in model_draft_preview
+    assert "模型状态：已使用备用模型 (fallback)" in model_draft_preview
+    assert "草稿状态：已生成 (ok)" in model_draft_preview
+    assert "Provider：openai" in model_draft_preview
+    assert "Fallback Model：fallback-model" in model_draft_preview
+    assert "Audit Log：#12" in model_draft_preview
+    assert "模型草稿摘要" in model_draft_preview
+    assert "Backend model draft uses sanitized deterministic analysis." in model_draft_preview
+    assert "Check whether provider quality recovered." in model_draft_preview
+    assert "继续观察" in model_draft_preview
+    assert "阻断词数量：2" in model_draft_preview
+    assert "不在 Telegram 层计算模型状态" in model_draft_preview
+    assert "source_ref" not in model_draft_preview
+    assert "raw_excerpt" not in model_draft_preview
+    assert "https://example.com" not in model_draft_preview
+    assert "cost_price" not in model_draft_preview
+    assert "position_ratio" not in model_draft_preview
+    assert "buy" not in model_draft_preview.lower()
+    assert "sell" not in model_draft_preview.lower()
+    assert "马上买入" not in model_draft_preview
+    assert "买入" not in model_draft_preview
+    assert "卖出" not in model_draft_preview
     assert "最新扫描：#3 完成" in overview_preview
     assert "生命周期：发展观察 1" in overview_preview
     assert "市场情绪：涨停 12 / 跌停 2 / 炸板 3 / 净压力 7 / 偏向：偏强" in overview_preview
