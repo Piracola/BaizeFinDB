@@ -16,6 +16,7 @@ from app.radar.schemas import (
     RadarOverviewRead,
     RadarPriority,
     RadarScanRead,
+    RadarSignalAnalysisRead,
     RadarSignalDetail,
     RadarSignalPublicShareRead,
     RadarSignalRead,
@@ -27,6 +28,7 @@ from app.radar.service import (
     get_latest_radar_scan,
     get_radar_overview,
     get_radar_scan,
+    get_radar_signal_analysis,
     get_radar_signal_detail,
     list_radar_signals,
     run_radar_scan,
@@ -120,6 +122,25 @@ async def signal_detail(session: SessionDep, signal_id: int) -> RadarSignalDetai
         )
 
     return signal
+
+
+@router.get("/signals/{signal_id}/analysis", response_model=RadarSignalAnalysisRead)
+async def signal_analysis(
+    session: SessionDep,
+    signal_id: int,
+) -> RadarSignalAnalysisRead:
+    try:
+        analysis = await get_radar_signal_analysis(session, signal_id)
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("building radar signal analysis", exc) from exc
+
+    if analysis is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"radar signal not found: {signal_id}",
+        )
+
+    return analysis
 
 
 @router.post("/signals/{signal_id}/review", response_model=RadarSignalReviewRead)

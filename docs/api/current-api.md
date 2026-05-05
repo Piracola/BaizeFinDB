@@ -28,6 +28,7 @@ GET  /radar/scans/latest
 GET  /radar/overview
 GET  /radar/signals
 GET  /radar/signals/{signal_id}
+GET  /radar/signals/{signal_id}/analysis
 GET  /portfolio/holdings
 POST /portfolio/holdings
 GET  /portfolio/watchlist
@@ -544,6 +545,33 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1
 - `metrics`
 - `evidences`
 
+### `GET /radar/signals/{signal_id}/analysis`
+
+用途：查看后端生成的单信号只读研究摘要。该接口只使用已有
+signal/evidence/review 数据，不调用 LLM，不改变规则定级、生命周期或审查状态。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/analysis
+```
+
+重点字段：
+
+- `analysis_title`
+- `key_points`
+- `metric_highlights`
+- `risk_flags`
+- `evidence_summary`
+- `review_summary`
+- `agent_inputs`
+- `next_actions`
+
+安全边界：
+
+- 不返回原始 URL、source domain、`source_ref`、`raw_excerpt` 或原始 evidence details。
+- 不返回精确 confidence，只返回 `high` / `medium` / `low` 桶。
+- 不返回个人持仓、成本价、仓位比例。
+- 不输出交易指令；所有 `next_actions` 只用于研究关注、审查和复盘流程。
+
 ## 5. Portfolio / 持仓自选 API
 
 Portfolio API 是单用户 MVP 能力，当前通过 `user_key` 查询参数做个人数据隔离，默认值为 `default`。它不接券商、不保存交易密码、不导入持仓截图。
@@ -1008,6 +1036,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。
+- 单信号解释摘要：用 `GET /radar/signals/{signal_id}/analysis`，展示后端 bounded key points、metric highlights、risk flags 和 review/evidence summary；不要在前端或 Telegram 重新生成雷达定级或交易建议。
 - 持仓/自选：用 `GET /portfolio/holdings` 和 `GET /portfolio/watchlist`，只作为个人上下文。
 - 报告：用 `POST /reports/from-signal` 从已审查的雷达信号生成 quick/standard 模板报告；用 `GET /reports/periodic` 展示日报/周报。
 - 评分：用 `POST /scores/signals/{signal_id}` 生成单信号 1d/3d/5d/10d 综合评分，再展示后端返回的评分档位和组件明细。

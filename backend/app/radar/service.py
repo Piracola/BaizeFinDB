@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.provider_models import DataQualityCheck, MarketSnapshot
-from app.db.radar_models import RadarScanBatch, RadarSignal, SignalEvidence
+from app.db.radar_models import RadarScanBatch, RadarSignal, RadarSignalReview, SignalEvidence
+from app.governance.sanitization import redact_source_locators, truncate_text
 from app.radar.rules import (
     RadarRuleResult,
     classify_risk_event,
@@ -21,8 +22,13 @@ from app.radar.schemas import (
     RadarReviewStatus,
     RadarScanRead,
     RadarScanStatus,
+    RadarSignalAgentInputsRead,
+    RadarSignalAnalysisRead,
     RadarSignalDetail,
+    RadarSignalEvidenceSummaryRead,
+    RadarSignalMetricHighlightRead,
     RadarSignalRead,
+    RadarSignalReviewSummaryRead,
     RadarStockBacktraceEvidenceRead,
     RadarSubjectOverviewRead,
     SignalEvidenceRead,
@@ -54,6 +60,11 @@ RADAR_SOURCE_PROVIDER_NAMES = ("akshare", "manual")
 MAX_SIGNALS_PER_SCAN = 20
 P2_OBSERVATION_WINDOW_DAYS = 7
 MAX_ERROR_MESSAGE_LENGTH = 300
+MAX_ANALYSIS_TEXT_LENGTH = 180
+MAX_ANALYSIS_KEY_POINTS = 5
+MAX_ANALYSIS_METRIC_HIGHLIGHTS = 6
+MAX_ANALYSIS_RISK_FLAGS = 8
+MAX_ANALYSIS_EVIDENCE_SUMMARIES = 3
 MAJOR_RISK_ANNOUNCEMENT_KEYWORDS = (
     "立案调查",
     "行政处罚事先告知",
@@ -297,6 +308,353 @@ async def get_radar_signal_detail(
         **signal_data,
         evidences=[SignalEvidenceRead.model_validate(evidence) for evidence in evidences],
     )
+
+
+async def get_radar_signal_analysis(
+    session: AsyncSession,
+    signal_id: int,
+) -> RadarSignalAnalysisRead | None:
+    signal = await session.get(RadarSignal, signal_id)
+    if signal is None:
+        return None
+
+    evidence_statement = (
+        select(SignalEvidence)
+        .where(SignalEvidence.signal_id == signal_id)
+        .order_by(desc(SignalEvidence.created_at), desc(SignalEvidence.id))
+    )
+    evidences = list((await session.scalars(evidence_statement)).all())
+    latest_review = await _latest_signal_review(session, signal_id)
+
+    return _build_signal_analysis(signal, evidences, latest_review)
+
+
+async def _latest_signal_review(
+    session: AsyncSession,
+    signal_id: int,
+) -> RadarSignalReview | None:
+    statement = (
+        select(RadarSignalReview)
+        .where(RadarSignalReview.signal_id == signal_id)
+        .order_by(desc(RadarSignalReview.created_at), desc(RadarSignalReview.id))
+        .limit(1)
+    )
+    return await session.scalar(statement)
+
+
+def _build_signal_analysis(
+    signal: RadarSignal,
+    evidences: list[SignalEvidence],
+    latest_review: RadarSignalReview | None,
+) -> RadarSignalAnalysisRead:
+    evidence_summary = _analysis_evidence_summary(evidences)
+    review_summary = _analysis_review_summary(signal, latest_review)
+    key_points = _analysis_key_points(signal, evidence_summary, review_summary)
+
+    return RadarSignalAnalysisRead(
+        signal_id=signal.id,
+        subject_type=signal.subject_type,
+        subject_code=signal.subject_code,
+        subject_name=_analysis_text(signal.subject_name),
+        priority=signal.priority,
+        lifecycle_stage=signal.lifecycle_stage,
+        review_status=signal.review_status,
+        analysis_title=_analysis_title(signal),
+        key_points=key_points,
+        metric_highlights=_analysis_metric_highlights(signal),
+        risk_flags=_analysis_risk_flags(signal, evidences, latest_review),
+        evidence_summary=evidence_summary,
+        review_summary=review_summary,
+        agent_inputs=_analysis_agent_inputs(signal, evidence_summary, key_points),
+        next_actions=_analysis_next_actions(signal, review_summary),
+    )
+
+
+def _analysis_title(signal: RadarSignal) -> str:
+    return _analysis_text(f"{signal.priority} research brief: {signal.subject_name}")
+
+
+def _analysis_key_points(
+    signal: RadarSignal,
+    evidence_summary: RadarSignalEvidenceSummaryRead,
+    review_summary: RadarSignalReviewSummaryRead,
+) -> list[str]:
+    points = [
+        (
+            f"{_analysis_text(signal.subject_name)} is a {signal.priority} "
+            f"research-attention signal in {signal.lifecycle_stage} stage."
+        ),
+        _analysis_text(signal.summary),
+        (
+            f"Backend rule priority and lifecycle remain unchanged: "
+            f"{signal.priority} / {signal.lifecycle_stage}."
+        ),
+        (
+            f"Review status is {review_summary.status}; "
+            f"{evidence_summary.evidence_count} evidence item(s) are summarized."
+        ),
+    ]
+    if review_summary.human_review_required:
+        points.append("Human review is required before report, push, or public sharing.")
+
+    return _bounded_unique(points, MAX_ANALYSIS_KEY_POINTS)
+
+
+def _analysis_metric_highlights(signal: RadarSignal) -> list[RadarSignalMetricHighlightRead]:
+    metrics = signal.metrics
+    highlights: list[RadarSignalMetricHighlightRead] = []
+
+    if "pct_change" in metrics:
+        highlights.append(
+            RadarSignalMetricHighlightRead(
+                label="movement",
+                value=f"{_float(metrics.get('pct_change')):g}%",
+                interpretation="Subject movement strength from provider snapshot.",
+            )
+        )
+
+    if "breadth" in metrics:
+        breadth = _float(metrics.get("breadth"))
+        highlights.append(
+            RadarSignalMetricHighlightRead(
+                label="breadth",
+                value=f"{breadth * 100:.1f}%",
+                interpretation="Share of rising constituents in the snapshot.",
+            )
+        )
+
+    if "rising_count" in metrics or "falling_count" in metrics:
+        rising_count = _int(metrics.get("rising_count"))
+        falling_count = _int(metrics.get("falling_count"))
+        highlights.append(
+            RadarSignalMetricHighlightRead(
+                label="constituent_balance",
+                value=f"{rising_count} rising / {falling_count} falling",
+                interpretation="Breadth context; not a standalone rule override.",
+            )
+        )
+
+    leading_stock = _optional_text(metrics.get("leading_stock"))
+    if leading_stock is not None:
+        pct = _float(metrics.get("leading_stock_pct_change"))
+        value = (
+            _analysis_text(f"{leading_stock} +{pct:g}%")
+            if pct
+            else _analysis_text(leading_stock)
+        )
+        highlights.append(
+            RadarSignalMetricHighlightRead(
+                label="leading_stock_context",
+                value=value,
+                interpretation="Single-stock move is supporting context, not the priority source.",
+            )
+        )
+
+    continuity = metrics.get("continuity")
+    if isinstance(continuity, dict) and continuity.get("quick_report_candidate") is True:
+        highlights.append(
+            RadarSignalMetricHighlightRead(
+                label="continuity",
+                value="quick-report candidate",
+                interpretation="Repeated P1 behavior needs review before any publishing flow.",
+            )
+        )
+
+    risk_event_type = _optional_text(metrics.get("risk_event_type"))
+    severity = _optional_text(metrics.get("severity"))
+    if risk_event_type or severity:
+        risk_context = " / ".join(part for part in (risk_event_type, severity) if part)
+        highlights.append(
+            RadarSignalMetricHighlightRead(
+                label="risk_context",
+                value=_analysis_text(risk_context),
+                interpretation=(
+                    "Risk-event context is treated separately from market mainline signals."
+                ),
+            )
+        )
+
+    return highlights[:MAX_ANALYSIS_METRIC_HIGHLIGHTS]
+
+
+def _analysis_risk_flags(
+    signal: RadarSignal,
+    evidences: list[SignalEvidence],
+    latest_review: RadarSignalReview | None,
+) -> list[str]:
+    flags: list[str] = []
+
+    if not evidences or signal.evidence_count == 0:
+        flags.append("missing_evidence")
+
+    if signal.review_status == RadarReviewStatus.BLOCKED.value:
+        flags.append("review_blocked")
+    elif signal.review_status == RadarReviewStatus.NEEDS_HUMAN_REVIEW.value:
+        flags.append("review_needs_human_review")
+
+    provider_quality = signal.metrics.get("provider_quality")
+    if isinstance(provider_quality, dict):
+        status = _optional_text(provider_quality.get("status"))
+        if status and status != "ok":
+            flags.append(f"provider_quality_{status}")
+
+    if _optional_text(signal.metrics.get("risk_event_type")):
+        flags.append("risk_event_candidate")
+
+    for evidence in evidences:
+        freshness = evidence.freshness.strip().lower()
+        if any(marker in freshness for marker in ("stale", "expired", "outdated", "too_old")):
+            flags.append("stale_evidence")
+
+    if latest_review is not None:
+        flags.extend(str(reason) for reason in latest_review.reasons)
+
+    return _bounded_unique(flags, MAX_ANALYSIS_RISK_FLAGS)
+
+
+def _analysis_evidence_summary(
+    evidences: list[SignalEvidence],
+) -> RadarSignalEvidenceSummaryRead:
+    return RadarSignalEvidenceSummaryRead(
+        evidence_count=len(evidences),
+        evidence_types=_bounded_unique(
+            [_evidence_type_label(evidence.evidence_type) for evidence in evidences],
+            6,
+        ),
+        summaries=[
+            _analysis_text(evidence.normalized_summary)
+            for evidence in evidences[:MAX_ANALYSIS_EVIDENCE_SUMMARIES]
+        ],
+        freshness_labels=_bounded_unique(
+            [_freshness_label(evidence.freshness) for evidence in evidences],
+            MAX_ANALYSIS_EVIDENCE_SUMMARIES,
+        ),
+        confidence_labels=_bounded_unique(
+            [_confidence_label(evidence.confidence) for evidence in evidences],
+            MAX_ANALYSIS_EVIDENCE_SUMMARIES,
+        ),
+    )
+
+
+def _analysis_review_summary(
+    signal: RadarSignal,
+    latest_review: RadarSignalReview | None,
+) -> RadarSignalReviewSummaryRead:
+    status = (
+        RadarReviewStatus(latest_review.review_status)
+        if latest_review is not None
+        else RadarReviewStatus(signal.review_status)
+    )
+    reasons = [str(reason) for reason in latest_review.reasons] if latest_review is not None else []
+    return RadarSignalReviewSummaryRead(
+        status=status,
+        latest_review_id=latest_review.id if latest_review is not None else None,
+        reasons=_bounded_unique(reasons, 8),
+        human_review_required=status
+        in {
+            RadarReviewStatus.BLOCKED,
+            RadarReviewStatus.NEEDS_HUMAN_REVIEW,
+            RadarReviewStatus.CANDIDATE,
+        },
+    )
+
+
+def _analysis_agent_inputs(
+    signal: RadarSignal,
+    evidence_summary: RadarSignalEvidenceSummaryRead,
+    key_points: list[str],
+) -> RadarSignalAgentInputsRead:
+    return RadarSignalAgentInputsRead(
+        signal_context=[
+            _analysis_text(signal.title),
+            f"priority={signal.priority}",
+            f"lifecycle_stage={signal.lifecycle_stage}",
+            f"review_status={signal.review_status}",
+        ],
+        evidence_summaries=evidence_summary.summaries,
+        guardrails=[
+            "Use these fields for research explanation only.",
+            "Do not override backend rule priority, lifecycle, or review status.",
+            "Do not produce trading instructions.",
+            "Do not request or reveal raw source locators.",
+            "Treat key points as bounded context, not a full evidence archive.",
+        ],
+    )
+
+
+def _analysis_next_actions(
+    signal: RadarSignal,
+    review_summary: RadarSignalReviewSummaryRead,
+) -> list[str]:
+    actions: list[str] = []
+
+    if review_summary.status == RadarReviewStatus.BLOCKED:
+        actions.append("Resolve review blockers before any report, push, or public sharing.")
+    elif review_summary.status == RadarReviewStatus.NEEDS_HUMAN_REVIEW:
+        actions.append("Run manual research review before publishing or pushing this signal.")
+    elif review_summary.status == RadarReviewStatus.CANDIDATE:
+        actions.append("Run the lightweight review step before report, push, or public sharing.")
+    else:
+        actions.append("Use the approved review state as the publication gate.")
+
+    continuity = signal.metrics.get("continuity")
+    if isinstance(continuity, dict) and continuity.get("quick_report_candidate") is True:
+        actions.append("Compare the next scan with the current continuity context.")
+
+    if signal.priority == RadarPriority.P2.value:
+        actions.append("Keep the signal in the observation window for delayed fermentation review.")
+    else:
+        actions.append("Refresh provider snapshots before escalating the research workflow.")
+
+    actions.append("Keep output framed as personal research and risk review.")
+    return _bounded_unique(actions, 5)
+
+
+def _analysis_text(text: object, max_length: int = MAX_ANALYSIS_TEXT_LENGTH) -> str:
+    redacted = redact_source_locators(_text(text, ""))
+    return truncate_text(redacted, max_length)
+
+
+def _bounded_unique(items: list[str], limit: int) -> list[str]:
+    values: list[str] = []
+    for item in items:
+        cleaned = _analysis_text(item)
+        if not cleaned or cleaned in values:
+            continue
+        values.append(cleaned)
+        if len(values) >= limit:
+            break
+    return values
+
+
+def _evidence_type_label(evidence_type: str) -> str:
+    labels = {
+        "market_snapshot": "market snapshot",
+        "sector_snapshot": "sector snapshot",
+        "concept_snapshot": "concept snapshot",
+        "news": "event summary",
+        "announcement": "announcement summary",
+    }
+    return labels.get(evidence_type, "evidence summary")
+
+
+def _confidence_label(confidence: float) -> str:
+    if confidence >= 0.8:
+        return "high"
+    if confidence >= 0.5:
+        return "medium"
+    return "low"
+
+
+def _freshness_label(freshness: str) -> str:
+    normalized = freshness.strip().lower()
+    if any(marker in normalized for marker in ("stale", "expired", "outdated", "too_old")):
+        return "possibly stale"
+    if any(marker in normalized for marker in ("latest", "fresh", "current", "realtime")):
+        return "fresh"
+    if "unknown" in normalized or "no_source_time" in normalized:
+        return "unknown"
+    return "needs confirmation"
 
 
 async def _load_latest_source_snapshots(session: AsyncSession) -> list[MarketSnapshot]:

@@ -9,9 +9,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.provider_models import MarketSnapshot
-from app.db.radar_models import RadarScanBatch, RadarSignal
+from app.db.radar_models import RadarScanBatch, RadarSignal, RadarSignalReview, SignalEvidence
 from app.db.session import get_db_session
 from app.main import create_app
+from app.radar.service import get_radar_signal_analysis
 
 
 @pytest_asyncio.fixture
@@ -185,6 +186,88 @@ async def test_radar_signals_api_can_include_expired_p2(
     }
 
 
+@pytest.mark.asyncio
+async def test_radar_signal_analysis_service_builds_safe_research_brief(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _analysis_signal(session)
+
+        analysis = await get_radar_signal_analysis(session, signal_id)
+
+    assert analysis is not None
+    assert analysis.signal_id == signal_id
+    assert analysis.subject_name == "AI Applications"
+    assert analysis.priority == "P1"
+    assert analysis.lifecycle_stage == "developing"
+    assert analysis.analysis_title == "P1 research brief: AI Applications"
+    assert len(analysis.key_points) <= 5
+    assert len(analysis.metric_highlights) <= 6
+    assert "provider_quality_degraded" in analysis.risk_flags
+    assert "low_evidence_confidence" in analysis.risk_flags
+    assert analysis.evidence_summary.evidence_count == 1
+    assert analysis.evidence_summary.summaries == [
+        "Provider snapshot summary from [source omitted] with sector movement."
+    ]
+    assert analysis.evidence_summary.confidence_labels == ["low"]
+    assert analysis.review_summary.status == "needs_human_review"
+    assert analysis.review_summary.human_review_required is True
+    assert "Do not override backend rule priority" in " ".join(
+        analysis.agent_inputs.guardrails
+    )
+
+    serialized = analysis.model_dump_json()
+    assert "https://example.com" not in serialized
+    assert "market.example.hk" not in serialized
+    assert "source_ref" not in serialized
+    assert "raw_excerpt" not in serialized
+    assert "Raw source says" not in serialized
+    assert '"confidence":' not in serialized
+    assert "0.123" not in serialized
+    assert "position_ratio" not in serialized
+    assert "cost_price" not in serialized
+    assert "buy" not in serialized.lower()
+    assert "sell" not in serialized.lower()
+    assert "买入" not in serialized
+    assert "卖出" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_radar_signal_analysis_api_reads_signal_and_returns_404(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _analysis_signal(session)
+
+    app = create_app()
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(f"/radar/signals/{signal_id}/analysis")
+            missing_response = await client.get("/radar/signals/999999/analysis")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["signal_id"] == signal_id
+    assert payload["subject_name"] == "AI Applications"
+    assert payload["analysis_title"] == "P1 research brief: AI Applications"
+    assert payload["review_summary"]["status"] == "needs_human_review"
+    assert "https://example.com" not in response.text
+    assert "market.example.hk" not in response.text
+    assert "raw_excerpt" not in response.text
+    assert '"confidence":' not in response.text
+    assert missing_response.status_code == 404
+
+
 def _signal(
     *,
     batch_id: int,
@@ -207,3 +290,83 @@ def _signal(
         evidence_count=0,
         created_at=created_at,
     )
+
+
+async def _analysis_signal(session: AsyncSession) -> int:
+    now = datetime.now(UTC)
+    scan = RadarScanBatch(
+        status="success",
+        started_at=now,
+        finished_at=now,
+        source_snapshot_ids=[],
+        summary={},
+    )
+    session.add(scan)
+    await session.flush()
+
+    signal = RadarSignal(
+        batch_id=scan.id,
+        signal_key=f"analysis:test:{now.timestamp()}",
+        subject_type="sector_concept",
+        subject_code="GN001",
+        subject_name="AI Applications",
+        priority="P1",
+        lifecycle_stage="developing",
+        review_status="needs_human_review",
+        title="P1 radar candidate: AI Applications",
+        summary="Research attention signal from provider data, no trading instruction.",
+        metrics={
+            "pct_change": 3.4,
+            "breadth": 0.6923,
+            "rising_count": 18,
+            "falling_count": 8,
+            "leading_stock": "Example AI",
+            "leading_stock_pct_change": 7.5,
+            "continuity": {"quick_report_candidate": True},
+            "provider_quality": {
+                "status": "degraded",
+                "confidence": 0.123,
+                "missing_fields": ["turnover_rate"],
+            },
+        },
+        evidence_count=1,
+        created_at=now,
+    )
+    session.add(signal)
+    await session.flush()
+
+    session.add(
+        SignalEvidence(
+            signal_id=signal.id,
+            evidence_type="market_snapshot",
+            source_name="market.example.hk",
+            source_ref="https://example.com/raw/source",
+            source_time=now,
+            collected_at=now,
+            raw_excerpt="Raw source says visit https://example.com/raw/source",
+            normalized_summary=(
+                "Provider snapshot summary from market.example.hk with sector movement."
+            ),
+            confidence=0.45,
+            freshness="snapshot_latest",
+            details={
+                "source_url": "https://example.com/raw/source",
+                "position_ratio": 0.2,
+                "cost_price": 10.5,
+            },
+            public_share_policy="internal_summary_only",
+        )
+    )
+    session.add(
+        RadarSignalReview(
+            signal_id=signal.id,
+            review_status="needs_human_review",
+            reviewer="test",
+            rule_version="test",
+            reasons=["low_evidence_confidence", "provider_quality_needs_review"],
+            details={"min_evidence_confidence": 0.45},
+        )
+    )
+
+    await session.commit()
+    return signal.id

@@ -1,10 +1,10 @@
-import re
 from collections.abc import Sequence
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.radar_models import RadarSignal, RadarSignalReview, SignalEvidence
+from app.governance.sanitization import redact_source_locators, truncate_text
 from app.radar.schemas import (
     RadarSignalPublicShareRead,
     RadarSignalShareEvidenceRead,
@@ -15,11 +15,6 @@ from app.radar.schemas import (
 MAX_SHARE_SUMMARY_LENGTH = 180
 SAFE_SHARE_POLICIES = {"internal_summary_only", "public_summary"}
 SHARE_DISCLAIMER = "仅供个人研究和复盘，不构成投资建议，不保证收益，用户需要自行决策并承担风险。"
-URL_PATTERN = re.compile(r"https?://[^\s，。；;、)）]+|www\.[^\s，。；;、)）]+", re.IGNORECASE)
-DOMAIN_PATTERN = re.compile(
-    r"\b(?:[a-z0-9-]+\.)+[a-z]{2,24}\b",
-    re.IGNORECASE,
-)
 
 
 async def get_radar_signal_share_preview(
@@ -171,24 +166,11 @@ def _share_text(
     max_length: int,
     sanitization_notes: list[str],
 ) -> str:
-    redacted = _redact_source_locators(text)
+    redacted = redact_source_locators(text)
     if redacted != text:
         sanitization_notes.append("source_locator_redacted")
 
-    return _truncate_text(redacted, max_length)
-
-
-def _redact_source_locators(text: str) -> str:
-    without_urls = URL_PATTERN.sub("[source omitted]", text)
-    return DOMAIN_PATTERN.sub("[source omitted]", without_urls)
-
-
-def _truncate_text(text: str, max_length: int) -> str:
-    stripped = text.strip()
-    if len(stripped) <= max_length:
-        return stripped
-
-    return f"{stripped[: max_length - 3].rstrip()}..."
+    return truncate_text(redacted, max_length)
 
 
 def _public_share_payload(

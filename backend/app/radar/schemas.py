@@ -81,6 +81,54 @@ class RadarSignalDetail(RadarSignalRead):
     evidences: list[SignalEvidenceRead] = Field(default_factory=list)
 
 
+class RadarSignalMetricHighlightRead(BaseModel):
+    label: str
+    value: str
+    interpretation: str
+
+
+class RadarSignalEvidenceSummaryRead(BaseModel):
+    evidence_count: int
+    evidence_types: list[str] = Field(default_factory=list, max_length=6)
+    summaries: list[str] = Field(default_factory=list, max_length=3)
+    freshness_labels: list[str] = Field(default_factory=list, max_length=3)
+    confidence_labels: list[str] = Field(default_factory=list, max_length=3)
+
+
+class RadarSignalReviewSummaryRead(BaseModel):
+    status: RadarReviewStatus
+    latest_review_id: int | None = None
+    reasons: list[str] = Field(default_factory=list, max_length=8)
+    human_review_required: bool
+
+
+class RadarSignalAgentInputsRead(BaseModel):
+    signal_context: list[str] = Field(default_factory=list, max_length=6)
+    evidence_summaries: list[str] = Field(default_factory=list, max_length=3)
+    guardrails: list[str] = Field(default_factory=list, max_length=6)
+
+
+class RadarSignalAnalysisRead(BaseModel):
+    signal_id: int
+    subject_type: str
+    subject_code: str | None = None
+    subject_name: str
+    priority: RadarPriority
+    lifecycle_stage: RadarLifecycleStage
+    review_status: RadarReviewStatus
+    analysis_title: str
+    key_points: list[str] = Field(default_factory=list, max_length=5)
+    metric_highlights: list[RadarSignalMetricHighlightRead] = Field(
+        default_factory=list,
+        max_length=6,
+    )
+    risk_flags: list[str] = Field(default_factory=list, max_length=8)
+    evidence_summary: RadarSignalEvidenceSummaryRead
+    review_summary: RadarSignalReviewSummaryRead
+    agent_inputs: RadarSignalAgentInputsRead
+    next_actions: list[str] = Field(default_factory=list, max_length=5)
+
+
 class RadarSignalReviewRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

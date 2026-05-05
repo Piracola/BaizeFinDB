@@ -6,7 +6,7 @@
 
 当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
-项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
+项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤，`TELEGRAM_REQUIRE_BINDING=true` 可关闭无白名单且无绑定时的本地开放兜底；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态或评分。
 
@@ -136,6 +136,7 @@ Radar：
 - `GET /radar/overview`
 - `GET /radar/signals`
 - `GET /radar/signals/{signal_id}`
+- `GET /radar/signals/{signal_id}/analysis`
 - `POST /radar/signals/{signal_id}/review`
 - `GET /radar/signals/{signal_id}/reviews`
 - `GET /radar/signals/{signal_id}/share-preview`
