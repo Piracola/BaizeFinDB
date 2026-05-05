@@ -68,6 +68,8 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
     ]
     if args.include_systemd_unit_check:
         deploy_preflight_command.append("--check-systemd-units")
+    if args.include_tushare_anns_d_beat_enablement:
+        deploy_preflight_command.append("--check-tushare-anns-d-beat-enablement")
     deploy_preflight_command.extend(
         [
             "--json-output",
@@ -471,6 +473,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Ask the deploy preflight stage to statically validate tracked "
             "infra/linux systemd service/timer templates."
+        ),
+    )
+    parser.add_argument(
+        "--include-tushare-anns-d-beat-enablement",
+        action="store_true",
+        help=(
+            "Ask the deploy preflight stage to run the offline/no-token Tushare "
+            "anns_d Beat enablement checklist."
         ),
     )
     parser.add_argument(

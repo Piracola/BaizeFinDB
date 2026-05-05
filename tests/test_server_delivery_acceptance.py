@@ -128,6 +128,61 @@ def test_build_stage_specs_systemd_unit_check_is_deploy_only(
     assert all("journalctl" not in stage.command for stage in stages)
 
 
+def test_build_stage_specs_includes_optional_tushare_beat_enablement(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_tushare_anns_d_beat_enablement=True)
+
+    deploy_stage = server_delivery_acceptance.build_stage_specs(args)[0]
+
+    assert deploy_stage.command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-tushare-anns-d-beat-enablement",
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert deploy_stage.evidence_files == [tmp_path / "server-deploy-check.json"]
+
+
+def test_build_stage_specs_tushare_beat_enablement_is_deploy_only(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_systemd_unit_check=True,
+        include_tushare_anns_d_beat_enablement=True,
+        include_alert_telegram_preview=True,
+        include_alert_telegram_env_check=True,
+        include_alert_telegram_service_verify=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert stages[0].command == [
+        "python",
+        "infra/scripts/server_deploy_check.py",
+        "--base-url",
+        "http://127.0.0.1:8000",
+        "--check-containers",
+        "--check-api",
+        "--check-m5-smoke",
+        "--check-systemd-units",
+        "--check-tushare-anns-d-beat-enablement",
+        "--json-output",
+        str(tmp_path / "server-deploy-check.json"),
+    ]
+    assert all(
+        "--check-tushare-anns-d-beat-enablement" not in stage.command
+        for stage in stages[1:]
+    )
+
+
 def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path) -> None:
     args = _args(tmp_path, fail_on_warning=True)
 

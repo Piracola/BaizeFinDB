@@ -139,6 +139,8 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 需要把这项静态 systemd 模板检查纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-systemd-unit-check`；该参数只会让 deploy preflight 阶段追加 `--check-systemd-units`，不新增独立 systemd 阶段、不启动服务、不读取凭据。
 
+需要把 Tushare `anns_d` Beat enablement 离线/no-token checklist 纳入同一交付验收包时，可用 `server_delivery_acceptance.py --include-tushare-anns-d-beat-enablement`；该参数只会让 deploy preflight 阶段追加 `--check-tushare-anns-d-beat-enablement`，不新增独立 Tushare 阶段、不访问 Tushare、不写数据库、不触发抓取或扫描。
+
 Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evidence/server-alert-telegram-dedupe-state.json`。该本地 JSON 状态按 alert payload 的 `dedupe_key` 做默认 3600 秒冷却，只在全部 Telegram 发送成功后更新，避免服务器持续 warning 时重复刷屏；preview、配置错误、失败发送和无效 state 不会写入成功状态。
 
 Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，发送前会先运行 env 预检并写 `evidence/server-alert-telegram-env-check.json`；timer 需要在手动发送、env check 和 dedupe evidence 通过后单独复制启用。

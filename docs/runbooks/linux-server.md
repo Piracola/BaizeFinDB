@@ -127,6 +127,16 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-systemd-unit-check
 ```
 
+如果还想把 Tushare `anns_d` Beat enablement checklist 纳入同一验收包，可加
+`--include-tushare-anns-d-beat-enablement`。该选项只会让 deploy preflight 阶段追加
+`--check-tushare-anns-d-beat-enablement`，仍写入同一份 `server-deploy-check.json`；
+不会访问 Tushare、不写数据库、不触发抓取、扫描、推送或模型调用；checklist
+`warn` 仍按部署预检规则作为非阻塞 warning，只有 `fail` 会阻断验收：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-tushare-anns-d-beat-enablement
+```
+
 如果还想在同一个验收包里验证告警 payload 和 Telegram delivery preview，可加
 `--include-alert-telegram-preview`。该选项会额外运行一次 compact monitor summary，
 写出 no-send alert payload，再调用 `server_alert_telegram.py` 的 preview 模式；不会传
