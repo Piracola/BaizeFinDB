@@ -118,6 +118,18 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-alert-telegram-preview
 ```
 
+如果还想把 Telegram 告警本机凭据文件预检也放进同一验收包，可加
+`--include-alert-telegram-env-check`。该阶段只调用
+`server_alert_telegram_env_check.py`，读取 `/etc/baizefindb/telegram-alert.env`
+或 `--telegram-alert-env-file <path>` 指定的路径，并写
+`server-alert-telegram-env-check.json`；不会发送 Telegram、不会传 token 或 raw chat id。
+权限过宽默认是 warning；生产交付时可加 `--telegram-alert-env-strict-permissions`
+让权限 warning 变成失败：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-alert-telegram-preview --include-alert-telegram-env-check --telegram-alert-env-strict-permissions
+```
+
 汇总报告会读取每个 helper 生成的 evidence JSON 顶层 `status`：任一 evidence
 为 `warn` / `warning` 时，阶段和总报告标为 `warn` 但仍零退出；任一 evidence
 为 `fail` / `error` / `blocked`，或预期 evidence 文件缺失、不可读、JSON 损坏时，

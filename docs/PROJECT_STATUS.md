@@ -26,6 +26,8 @@ Linux 服务端部署骨架已完成：包含 API Dockerfile、server compose ov
 
 Telegram 告警 env 预检已新增：`infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json` 只读验证本机凭据文件存在、非 symlink、权限、`TELEGRAM_BOT_TOKEN` 配置和 `TELEGRAM_ALLOWED_CHAT_IDS` 格式；默认 group/world 权限只记 warning，`--strict-permissions` 可升级为失败，输出不包含 token、raw chat id、raw URL 或 env 文件内容。
 
+交付验收编排已支持可选 Telegram env 预检阶段：`server_delivery_acceptance.py --include-alert-telegram-env-check` 会在同一 evidence bundle 中调用上述只读 helper，默认输出 `server-alert-telegram-env-check.json` 并纳入 warning/fail 汇总；`--telegram-alert-env-file <path>` 可指定非默认凭据文件，`--telegram-alert-env-strict-permissions` 可把权限 warning 升级为阻断验收。
+
 5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。Tushare `anns_d` 公告 Beat 调度已具备独立开关，但默认关闭，只有显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会额外加入调度；启用前应先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，再运行 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，用本地样例验证字段漂移和风险 P0/普通公告映射边界，然后用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存真实 token 下的脱敏 live evidence。`stock_basic`、`anns_d` 和 `stock_company` 三条 live verify 脚本均可输出同类脱敏 evidence；默认 checklist 和离线门禁不替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 readiness 验证。
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能查看运行状态、维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
@@ -250,6 +252,7 @@ uv run python infra/scripts/server_deploy_check.py --json-output evidence/server
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --json-output runtime-check.json
 uv run python infra/scripts/server_runtime_check.py --samples 3 --interval-seconds 30 --ops-evidence-output evidence/ops-evidence.json
 uv run python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-preview
+uv run python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-preview --include-alert-telegram-env-check --telegram-alert-env-strict-permissions
 uv run python infra/scripts/server_monitor_check.py --json-output evidence/server-monitor-summary.json --alert-json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json
 uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json

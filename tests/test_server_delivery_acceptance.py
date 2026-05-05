@@ -156,6 +156,98 @@ def test_build_stage_specs_includes_optional_alert_telegram_preview(
     ]
 
 
+def test_build_stage_specs_includes_optional_alert_telegram_env_check(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_alert_telegram_env_check=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "telegram_alert_env_check",
+    ]
+    assert stages[4].command == [
+        "python",
+        "infra/scripts/server_alert_telegram_env_check.py",
+        "--env-file",
+        "/etc/baizefindb/telegram-alert.env",
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-env-check.json"),
+    ]
+    assert stages[4].evidence_files == [
+        tmp_path / "server-alert-telegram-env-check.json"
+    ]
+
+
+def test_build_stage_specs_places_alert_env_check_after_preview(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_alert_telegram_preview=True,
+        include_alert_telegram_env_check=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+        "telegram_alert_env_check",
+    ]
+
+
+def test_build_stage_specs_passes_alert_env_file_and_strict_permissions(
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / "telegram-alert.env"
+    args = _args(
+        tmp_path,
+        include_alert_telegram_env_check=True,
+        telegram_alert_env_file=env_file,
+        telegram_alert_env_strict_permissions=True,
+    )
+
+    env_stage = server_delivery_acceptance.build_stage_specs(args)[-1]
+
+    assert env_stage.command == [
+        "python",
+        "infra/scripts/server_alert_telegram_env_check.py",
+        "--env-file",
+        str(env_file),
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-env-check.json"),
+        "--strict-permissions",
+    ]
+
+
+def test_build_stage_specs_alert_env_check_does_not_send_or_pass_secret_args(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_alert_telegram_env_check=True)
+
+    env_stage = server_delivery_acceptance.build_stage_specs(args)[-1]
+
+    forbidden_args = {
+        "--send",
+        "--dedupe-state",
+        "--dedupe-ttl-seconds",
+        "--ignore-dedupe",
+        "--chat-id",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_CHAT_IDS",
+    }
+    assert forbidden_args.isdisjoint(env_stage.command)
+
+
 def test_build_stage_specs_passes_base_url_to_alert_preview_monitor(
     tmp_path: Path,
 ) -> None:

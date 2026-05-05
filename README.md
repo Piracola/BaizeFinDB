@@ -141,6 +141,8 @@ Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用�
 
 Telegram 告警凭据文件可用 `infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json` 做只读预检；该报告只记录权限状态、token 是否配置、chat id 数量和 masked chat refs，不输出 token、raw chat id 或 env 文件内容。
 
+同一预检也可以纳入交付验收包：`infra/scripts/server_delivery_acceptance.py --include-alert-telegram-env-check` 会额外生成 `evidence/server-delivery-acceptance/server-alert-telegram-env-check.json`；生产交付时可加 `--telegram-alert-env-strict-permissions`，让凭据文件权限过宽直接阻断验收。
+
 ## Windows 客户端 MVP
 
 Windows 客户端位于 [clients/windows/](clients/windows/)，默认是源码运行版。仓库提供可选 PyInstaller onedir 打包脚手架，用于开发者在 Windows 目标机验证 exe 形态；它不是签名安装器或生产分发包。

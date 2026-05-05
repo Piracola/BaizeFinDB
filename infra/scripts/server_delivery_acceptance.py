@@ -18,6 +18,7 @@ from pathlib import Path
 DEFAULT_EVIDENCE_DIR = Path("evidence/server-delivery-acceptance")
 DEFAULT_REPORT_NAME = "server-delivery-acceptance.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+DEFAULT_TELEGRAM_ALERT_ENV_FILE = Path("/etc/baizefindb/telegram-alert.env")
 MAX_CAPTURE_LENGTH = 2000
 
 
@@ -205,6 +206,26 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
                     str(telegram_preview_report),
                 ],
                 evidence_files=[telegram_preview_report],
+            )
+        )
+
+    if args.include_alert_telegram_env_check:
+        telegram_env_report = evidence_dir / "server-alert-telegram-env-check.json"
+        telegram_env_command = [
+            python_executable,
+            "infra/scripts/server_alert_telegram_env_check.py",
+            "--env-file",
+            str(args.telegram_alert_env_file),
+            "--json-output",
+            str(telegram_env_report),
+        ]
+        if args.telegram_alert_env_strict_permissions:
+            telegram_env_command.append("--strict-permissions")
+        stages.append(
+            StageSpec(
+                name="telegram_alert_env_check",
+                command=telegram_env_command,
+                evidence_files=[telegram_env_report],
             )
         )
 
@@ -411,6 +432,31 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Run a no-send monitor alert payload stage and Telegram delivery preview "
             "stage inside the acceptance evidence directory."
+        ),
+    )
+    parser.add_argument(
+        "--include-alert-telegram-env-check",
+        action="store_true",
+        help=(
+            "Run the read-only Telegram alert env file preflight inside the "
+            "acceptance evidence directory."
+        ),
+    )
+    parser.add_argument(
+        "--telegram-alert-env-file",
+        type=Path,
+        default=DEFAULT_TELEGRAM_ALERT_ENV_FILE,
+        help=(
+            "Telegram alert env file passed to server_alert_telegram_env_check.py, "
+            f"default: {DEFAULT_TELEGRAM_ALERT_ENV_FILE}"
+        ),
+    )
+    parser.add_argument(
+        "--telegram-alert-env-strict-permissions",
+        action="store_true",
+        help=(
+            "Pass --strict-permissions to server_alert_telegram_env_check.py so "
+            "group/world env file permissions fail acceptance."
         ),
     )
     return parser
