@@ -16,6 +16,7 @@
 - 查看 Tushare 数据源自检：`GET /providers/tushare/readiness`，只读取配置、最近抓取日志和数据质量记录，不触发真实抓取或调度。
 - 查看雷达总览、优先级、生命周期分布、市场情绪摘要和个股回推证据：`GET /radar/overview`。
 - 查看信号列表：`GET /radar/signals`。
+- 查看单信号后端分析摘要：`GET /radar/signals/{signal_id}/analysis`。
 - 查看持仓：`GET /portfolio/holdings`。
 - 查看自选：`GET /portfolio/watchlist`。
 - 查看报告摘要：`GET /reports`。
@@ -230,6 +231,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 | 数据源自检 | 调用 `/providers/tushare/readiness`，显示 Tushare token、端点、最近抓取和数据质量准入状态；不触发真实抓取或调度。 |
 | 刷新雷达 | 调用 `/radar/overview`，显示后端返回的优先级计数、生命周期分布、市场情绪摘要、个股回推证据、最新扫描和当前主题。 |
 | 查看信号 | 调用 `/radar/signals`，显示后端返回的信号摘要。 |
+| 查看分析 | 读取窗口里的 Signal ID，调用 `/radar/signals/{signal_id}/analysis`，显示后端 key points、metric highlights、risk flags、evidence/review summary 和 next actions；不显示原始来源定位、raw excerpt、精确信心值、个人持仓成本或交易指令。 |
 | 查看持仓 | 调用 `/portfolio/holdings`，按 User Key 显示个人持仓。 |
 | 查看自选 | 调用 `/portfolio/watchlist`，按 User Key 显示个人自选。 |
 | 查看报告 | 调用 `/reports`，按 User Key 显示 quick/standard 报告摘要。 |

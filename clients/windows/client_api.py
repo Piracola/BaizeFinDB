@@ -20,10 +20,26 @@ TELEGRAM_BINDING_PREVIEW_LIMIT = 20
 OPS_HISTORY_PREVIEW_LIMIT = 12
 OPS_TREND_BUCKET_COUNT = 12
 OPS_TREND_PREVIEW_LIMIT = 6
+ANALYSIS_LIST_PREVIEW_LIMIT = 8
+ANALYSIS_METRIC_PREVIEW_LIMIT = 6
 MAX_TEXT_LENGTH = 12000
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 TELEGRAM_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
 STOCK_BACKTRACE_PREVIEW_LIMIT = 5
+ANALYSIS_FORBIDDEN_TEXT_MARKERS = (
+    "source_ref",
+    "raw_excerpt",
+    "source_url",
+    "source domain",
+    "http://",
+    "https://",
+    "cost_price",
+    "position_ratio",
+    "buy",
+    "sell",
+    "买入",
+    "卖出",
+)
 
 JsonObject = dict[str, Any]
 JsonPayload = JsonObject | list[Any]
@@ -392,6 +408,21 @@ def fetch_signals(
         msg = "/radar/signals did not return a list"
         raise BaizeApiError(msg, payload=payload)
     return [_expect_object(item, "/radar/signals item") for item in payload]
+
+
+def fetch_signal_analysis(
+    base_url: str | None,
+    signal_id: int,
+    *,
+    opener: UrlOpener | None = None,
+) -> JsonObject:
+    normalized_signal_id = _positive_int(signal_id, "signal_id")
+    payload = get_json(
+        base_url,
+        f"/radar/signals/{normalized_signal_id}/analysis",
+        opener=opener,
+    )
+    return _expect_object(payload, "/radar/signals/{signal_id}/analysis")
 
 
 def fetch_holdings(
@@ -1037,6 +1068,150 @@ def format_signals(signals: Sequence[Mapping[str, Any]]) -> str:
 
     lines.extend(["", DISCLAIMER])
     return _trim_text("\n".join(lines))
+
+
+def format_signal_analysis(analysis: Mapping[str, Any]) -> str:
+    evidence_summary = _mapping(analysis.get("evidence_summary"))
+    review_summary = _mapping(analysis.get("review_summary"))
+    title = _analysis_text(analysis.get("analysis_title"), "信号研究摘要")
+    lines = [
+        f"信号 #{_int_text(analysis.get('signal_id'))} 分析摘要",
+        (
+            f"{_analysis_text(analysis.get('subject_name'), '未命名主题')} | "
+            f"优先级：{_text(analysis.get('priority'), '-')} | "
+            f"生命周期：{_lifecycle_label(analysis.get('lifecycle_stage'))} | "
+            f"审查：{_review_label(analysis.get('review_status'))}"
+        ),
+        title,
+        "",
+    ]
+
+    lines.extend(_analysis_list_lines("Key Points", analysis.get("key_points")))
+    lines.extend(_analysis_metric_lines(analysis.get("metric_highlights")))
+    lines.extend(_analysis_list_lines("Risk Flags", analysis.get("risk_flags")))
+    lines.extend(_analysis_evidence_summary_lines(evidence_summary))
+    lines.extend(_analysis_review_summary_lines(review_summary))
+    lines.extend(_analysis_list_lines("Next Actions", analysis.get("next_actions")))
+    lines.extend(
+        [
+            "该视图只展示后端分析摘要，不本地计算雷达定级、生命周期、审查状态、评分或操作建议。",
+            "",
+            DISCLAIMER,
+        ],
+    )
+    return _trim_text("\n".join(lines))
+
+
+def _analysis_list_lines(title: str, value: Any) -> list[str]:
+    items = _analysis_values(value, ANALYSIS_LIST_PREVIEW_LIMIT)
+    lines = [f"{title}："]
+    if not items:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    lines.extend(f"- {item}" for item in items)
+    lines.append("")
+    return lines
+
+
+def _analysis_metric_lines(value: Any) -> list[str]:
+    highlights = [_mapping(item) for item in _sequence(value)]
+    lines = ["Metric Highlights："]
+    if not highlights:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    for item in highlights[:ANALYSIS_METRIC_PREVIEW_LIMIT]:
+        label = _analysis_text(item.get("label"), "-")
+        metric_value = _analysis_text(item.get("value"), "-")
+        interpretation = _analysis_text(item.get("interpretation"), "后端未返回说明。")
+        lines.append(f"- {label}: {metric_value} | {interpretation}")
+    lines.append("")
+    return lines
+
+
+def _analysis_evidence_summary_lines(summary: Mapping[str, Any]) -> list[str]:
+    evidence_types = _analysis_values(summary.get("evidence_types"), 6)
+    freshness_labels = _analysis_values(summary.get("freshness_labels"), 3)
+    confidence_labels = [
+        label
+        for label in (
+            _analysis_confidence_label(item)
+            for item in _sequence(summary.get("confidence_labels"))
+        )
+        if label
+    ][:3]
+    lines = [
+        "Evidence Summary：",
+        f"- 证据数量：{_int_text(summary.get('evidence_count'))}",
+        f"- 类型：{_joined_or_empty(evidence_types)}",
+        f"- 新鲜度：{_joined_or_empty(freshness_labels)}",
+        f"- 信心分桶：{_joined_or_empty(confidence_labels)}",
+    ]
+    summaries = _analysis_values(summary.get("summaries"), 3)
+    if summaries:
+        lines.append("- 摘要：")
+        lines.extend(f"  - {item}" for item in summaries)
+    else:
+        lines.append("- 摘要：后端未返回该项。")
+    lines.append("")
+    return lines
+
+
+def _analysis_review_summary_lines(summary: Mapping[str, Any]) -> list[str]:
+    review_id = summary.get("latest_review_id")
+    review_id_text = _text(review_id, "暂无") if review_id is not None else "暂无"
+    lines = [
+        "Review Summary：",
+        f"- 状态：{_review_label(summary.get('status'))}",
+        f"- 最近审查：{review_id_text}",
+        f"- 人工复核：{'需要' if summary.get('human_review_required') is True else '不需要'}",
+    ]
+    reasons = _analysis_values(summary.get("reasons"), ANALYSIS_LIST_PREVIEW_LIMIT)
+    if reasons:
+        lines.append("- 原因：")
+        lines.extend(f"  - {item}" for item in reasons)
+    else:
+        lines.append("- 原因：后端未返回该项。")
+    lines.append("")
+    return lines
+
+
+def _analysis_values(value: Any, limit: int) -> list[str]:
+    return [
+        item
+        for item in (
+            _analysis_text(raw_item, "")
+            for raw_item in _sequence(value)[:limit]
+        )
+        if item
+    ]
+
+
+def _analysis_text(value: Any, fallback: str) -> str:
+    text = _text(value, fallback).strip()
+    if not text:
+        return fallback
+
+    lowered = text.lower()
+    if any(marker in lowered for marker in ANALYSIS_FORBIDDEN_TEXT_MARKERS):
+        return "已省略不适合在客户端展示的内容。"
+
+    return text
+
+
+def _analysis_confidence_label(value: Any) -> str:
+    normalized = _analysis_text(value, "").lower()
+    labels = {
+        "high": "high",
+        "medium": "medium",
+        "low": "low",
+    }
+    return labels.get(normalized, "")
+
+
+def _joined_or_empty(values: Sequence[str]) -> str:
+    return " / ".join(values) if values else "暂无"
 
 
 def format_holdings(holdings: Sequence[Mapping[str, Any]]) -> str:

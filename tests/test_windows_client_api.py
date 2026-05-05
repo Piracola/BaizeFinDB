@@ -671,6 +671,112 @@ def test_format_signals_lists_backend_fields_without_calculating_priority() -> N
     assert "证据：2" in text
 
 
+def test_fetch_signal_analysis_uses_signal_analysis_endpoint() -> None:
+    calls = {}
+
+    def opener(request: object, *, timeout: int) -> FakeResponse:
+        calls["url"] = request.full_url
+        calls["timeout"] = timeout
+        return FakeResponse(
+            json.dumps(
+                {
+                    "signal_id": 7,
+                    "analysis_title": "P1 research brief: AI Applications",
+                    "evidence_summary": {"evidence_count": 1},
+                    "review_summary": {"status": "candidate"},
+                },
+            ),
+        )
+
+    analysis = client_api.fetch_signal_analysis(
+        "http://localhost:8000",
+        7,
+        opener=opener,
+    )
+
+    assert analysis["signal_id"] == 7
+    assert calls == {
+        "url": "http://localhost:8000/radar/signals/7/analysis",
+        "timeout": client_api.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+
+def test_format_signal_analysis_outputs_backend_brief_without_sensitive_terms() -> None:
+    text = client_api.format_signal_analysis(
+        {
+            "signal_id": 7,
+            "subject_name": "AI Applications",
+            "subject_code": "GN001",
+            "priority": "P1",
+            "lifecycle_stage": "developing",
+            "review_status": "needs_human_review",
+            "analysis_title": "P1 research brief: AI Applications",
+            "key_points": [
+                "Backend priority is P1; lifecycle is developing.",
+                "Review status requires human review.",
+            ],
+            "metric_highlights": [
+                {
+                    "label": "sector_pct_change",
+                    "value": "+3.4%",
+                    "interpretation": "Sector momentum is above the watch threshold.",
+                }
+            ],
+            "risk_flags": ["provider_quality_degraded", "low_evidence_confidence"],
+            "evidence_summary": {
+                "evidence_count": 1,
+                "evidence_types": ["market_snapshot"],
+                "summaries": [
+                    "Provider snapshot summary from [source omitted] with sector movement."
+                ],
+                "freshness_labels": ["fresh"],
+                "confidence_labels": ["low", "0.123"],
+                "source_ref": "https://example.com/raw",
+                "raw_excerpt": "Raw source says buy now",
+                "details": {"source_domain": "market.example.hk"},
+            },
+            "review_summary": {
+                "status": "needs_human_review",
+                "latest_review_id": 4,
+                "reasons": ["low evidence confidence"],
+                "human_review_required": True,
+                "details": {"cost_price": 10.25, "position_ratio": 0.2},
+            },
+            "agent_inputs": {
+                "guardrails": ["Do not override backend rule priority"],
+            },
+            "next_actions": ["Schedule human review before publishing."],
+            "source_ref": "https://example.com/source",
+            "raw_excerpt": "sell immediately",
+            "cost_price": 10.25,
+            "position_ratio": 0.2,
+        },
+    )
+
+    assert "信号 #7 分析摘要" in text
+    assert "AI Applications | 优先级：P1 | 生命周期：发酵 | 审查：需人工复核" in text
+    assert "P1 research brief: AI Applications" in text
+    assert "Backend priority is P1" in text
+    assert "sector_pct_change: +3.4%" in text
+    assert "provider_quality_degraded" in text
+    assert "证据数量：1" in text
+    assert "信心分桶：low" in text
+    assert "0.123" not in text
+    assert "最近审查：4" in text
+    assert "Schedule human review" in text
+    assert "不本地计算雷达定级" in text
+    assert "source_ref" not in text
+    assert "raw_excerpt" not in text
+    assert "https://example.com" not in text
+    assert "market.example.hk" not in text
+    assert "cost_price" not in text
+    assert "position_ratio" not in text
+    assert "buy" not in text.lower()
+    assert "sell" not in text.lower()
+    assert "买入" not in text
+    assert "卖出" not in text
+
+
 def test_fetch_holdings_uses_user_key_query() -> None:
     calls = {}
 

@@ -20,6 +20,7 @@ def _app_with_lookback(value: str) -> baizefindb_client.BaizeFinDBClientApp:
     app = object.__new__(baizefindb_client.BaizeFinDBClientApp)
     app.server_url = FakeVar("http://localhost:8000")
     app.user_key = FakeVar("analyst")
+    app.signal_id = FakeVar("7")
     app.ops_lookback_hours = FakeVar(value)
     app.telegram_secret = FakeVar("hook-secret")
     return app
@@ -277,6 +278,68 @@ def test_gui_declares_ops_trends_button() -> None:
     source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
 
     assert "OPS 趋势" in source
+
+
+def test_gui_declares_signal_analysis_button() -> None:
+    source = baizefindb_client.BaizeFinDBClientApp._build_ui.__code__.co_consts
+
+    assert "查看分析" in source
+
+
+def test_view_signal_analysis_blocks_invalid_signal_id_before_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    app.signal_id = FakeVar("0")
+    errors: list[tuple[str, str]] = []
+
+    def fail_run_worker(*args: object, **kwargs: object) -> None:
+        raise AssertionError("worker should not start for invalid signal id")
+
+    def fake_showerror(title: str, message: str) -> None:
+        errors.append((title, message))
+
+    monkeypatch.setattr(baizefindb_client.messagebox, "showerror", fake_showerror)
+    monkeypatch.setattr(app, "_run_worker", fail_run_worker)
+
+    app.view_signal_analysis()
+
+    assert errors == [
+        (
+            baizefindb_client.WINDOW_TITLE,
+            "Signal ID 必须是正整数。",
+        ),
+    ]
+
+
+def test_view_signal_analysis_reads_backend_analysis_for_signal_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _app_with_lookback("24")
+    calls: dict[str, Any] = {}
+
+    def fake_run_worker(action: str, worker: Callable[[], str]) -> None:
+        calls["action"] = action
+        calls["result"] = worker()
+
+    def fake_fetch(base_url: str, signal_id: int) -> dict[str, object]:
+        calls["fetch"] = (base_url, signal_id)
+        return {"signal_id": signal_id, "analysis_title": "backend brief"}
+
+    def fake_format(payload: object) -> str:
+        calls["format_payload"] = payload
+        return "formatted signal analysis"
+
+    monkeypatch.setattr(app, "_run_worker", fake_run_worker)
+    monkeypatch.setattr(baizefindb_client.client_api, "fetch_signal_analysis", fake_fetch)
+    monkeypatch.setattr(baizefindb_client.client_api, "format_signal_analysis", fake_format)
+
+    app.view_signal_analysis()
+
+    assert calls["action"] == "读取信号 #7 分析"
+    assert calls["fetch"] == ("http://localhost:8000", 7)
+    assert calls["format_payload"] == {"signal_id": 7, "analysis_title": "backend brief"}
+    assert calls["result"] == "formatted signal analysis"
 
 
 def test_view_telegram_bindings_reads_status_before_formatting(
