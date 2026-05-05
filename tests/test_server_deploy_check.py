@@ -813,9 +813,7 @@ def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) 
                 "evidence_summary": {},
                 "review_summary": {},
                 "agent_inputs": {},
-                "agent_assessments": [
-                    {"agent_id": "data_quality_agent", "status": "ok"}
-                ],
+                "agent_assessments": _agent_assessments_payload(),
                 "next_actions": [],
             }
         )
@@ -832,6 +830,61 @@ def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) 
         "/radar/signals?limit=1",
         "/radar/signals/42/analysis",
     ]
+
+
+def test_radar_signal_analysis_smoke_fails_for_invalid_agent_assessment_roles(
+    monkeypatch,
+) -> None:
+    def fake_urlopen(request, **kwargs):
+        if request.full_url.endswith("/radar/signals?limit=1"):
+            return _FakeJsonResponse([{"id": 7}])
+
+        payload = _signal_analysis_contract_payload()
+        payload["agent_assessments"] = [
+            {
+                "agent_id": "risk_agent",
+                "label": "Risk Agent",
+                "status": "warning",
+                "summary": "Risk context needs review.",
+                "findings": [],
+                "next_actions": [],
+            }
+        ]
+        return _FakeJsonResponse(payload)
+
+    monkeypatch.setattr(server_deploy_check, "urlopen", fake_urlopen)
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert [result.status for result in results] == ["ok", "fail"]
+    assert "agent_assessments roles" in results[1].detail
+    assert "data_quality_agent" in results[1].detail
+
+
+def test_radar_signal_analysis_smoke_fails_for_invalid_agent_assessment_shape(
+    monkeypatch,
+) -> None:
+    def fake_urlopen(request, **kwargs):
+        if request.full_url.endswith("/radar/signals?limit=1"):
+            return _FakeJsonResponse([{"id": 7}])
+
+        payload = _signal_analysis_contract_payload()
+        payload["agent_assessments"] = _agent_assessments_payload()
+        payload["agent_assessments"][0]["next_actions"] = "refresh"
+        return _FakeJsonResponse(payload)
+
+    monkeypatch.setattr(server_deploy_check, "urlopen", fake_urlopen)
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert [result.status for result in results] == ["ok", "fail"]
+    assert "next_actions must be an array" in results[1].detail
 
 
 def test_radar_signal_analysis_smoke_warns_when_no_signal_exists(monkeypatch) -> None:
@@ -920,6 +973,46 @@ def test_radar_signal_analysis_smoke_fails_for_missing_analysis_field(
 
     assert [result.status for result in results] == ["ok", "fail"]
     assert "next_actions" in results[1].detail
+
+
+def _signal_analysis_contract_payload() -> dict[str, object]:
+    return {
+        "signal_id": 7,
+        "subject_type": "sector",
+        "subject_name": "AI Applications",
+        "priority": "P1",
+        "lifecycle_stage": "developing",
+        "review_status": "candidate",
+        "analysis_title": "P1 research brief: AI Applications",
+        "key_points": [],
+        "metric_highlights": [],
+        "risk_flags": [],
+        "evidence_summary": {},
+        "review_summary": {},
+        "agent_inputs": {},
+        "agent_assessments": _agent_assessments_payload(),
+        "next_actions": [],
+    }
+
+
+def _agent_assessments_payload() -> list[dict[str, object]]:
+    return [
+        {
+            "agent_id": agent_id,
+            "label": label,
+            "status": "ok",
+            "summary": f"{label} summary.",
+            "findings": [],
+            "next_actions": [],
+        }
+        for agent_id, label in (
+            ("data_quality_agent", "Data Quality Agent"),
+            ("risk_agent", "Risk Agent"),
+            ("momentum_agent", "Momentum Agent"),
+            ("evidence_agent", "Evidence Agent"),
+            ("report_agent", "Report Agent"),
+        )
+    ]
 
 
 def test_tushare_anns_d_beat_enablement_flag_defaults_off() -> None:

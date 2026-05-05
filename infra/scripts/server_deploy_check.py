@@ -65,6 +65,27 @@ RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS = (
     "agent_assessments",
     "next_actions",
 )
+RADAR_SIGNAL_AGENT_ASSESSMENT_ROLE_IDS = (
+    "data_quality_agent",
+    "risk_agent",
+    "momentum_agent",
+    "evidence_agent",
+    "report_agent",
+)
+RADAR_SIGNAL_AGENT_ASSESSMENT_REQUIRED_FIELDS = (
+    "agent_id",
+    "label",
+    "status",
+    "summary",
+    "findings",
+    "next_actions",
+)
+RADAR_SIGNAL_AGENT_ASSESSMENT_STATUSES = (
+    "ok",
+    "warning",
+    "blocked",
+    "not_applicable",
+)
 TELEGRAM_STATUS_PATH = "/telegram/status"
 TELEGRAM_STRICT_BINDING_REQUIRED_FIELDS = (
     "require_binding",
@@ -361,13 +382,112 @@ def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[Ch
 
     return [
         CheckResult(name, "ok", f"sampled signal id: {signal_id}"),
-        check_http_json_fields(
+        check_radar_signal_analysis_contract(
             base_url,
-            f"/radar/signals/{signal_id}/analysis",
-            RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS,
+            signal_id,
             timeout=timeout,
         ),
     ]
+
+
+def check_radar_signal_analysis_contract(
+    base_url: str,
+    signal_id: int,
+    *,
+    timeout: int,
+) -> CheckResult:
+    path = f"/radar/signals/{signal_id}/analysis"
+    name = f"HTTP JSON {path}"
+    payload, error = _read_http_json(
+        base_url,
+        path,
+        timeout=timeout,
+        result_name=name,
+    )
+    if error is not None:
+        return error
+
+    if not isinstance(payload, dict):
+        return CheckResult(name, "fail", "JSON response is not an object")
+
+    missing_fields = [
+        field for field in RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS if field not in payload
+    ]
+    if missing_fields:
+        return CheckResult(
+            name,
+            "fail",
+            f"missing required fields: {', '.join(missing_fields)}",
+        )
+
+    agent_assessment_error = _agent_assessment_contract_error(
+        payload.get("agent_assessments"),
+    )
+    if agent_assessment_error is not None:
+        return CheckResult(name, "fail", agent_assessment_error)
+
+    return CheckResult(
+        name,
+        "ok",
+        (
+            f"fields present: {', '.join(RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS)}; "
+            f"agent roles present: {', '.join(RADAR_SIGNAL_AGENT_ASSESSMENT_ROLE_IDS)}"
+        ),
+    )
+
+
+def _agent_assessment_contract_error(value: object) -> str | None:
+    if not isinstance(value, list):
+        return "agent_assessments must be an array"
+
+    observed_role_ids: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            return f"agent_assessments[{index}] must be an object"
+
+        missing_fields = [
+            field
+            for field in RADAR_SIGNAL_AGENT_ASSESSMENT_REQUIRED_FIELDS
+            if field not in item
+        ]
+        if missing_fields:
+            return (
+                f"agent_assessments[{index}] missing required fields: "
+                f"{', '.join(missing_fields)}"
+            )
+
+        agent_id = item.get("agent_id")
+        if not isinstance(agent_id, str) or not agent_id:
+            return f"agent_assessments[{index}].agent_id must be a non-empty string"
+        observed_role_ids.append(agent_id)
+
+        status = item.get("status")
+        if status not in RADAR_SIGNAL_AGENT_ASSESSMENT_STATUSES:
+            return (
+                f"agent_assessments[{index}].status must be one of: "
+                f"{', '.join(RADAR_SIGNAL_AGENT_ASSESSMENT_STATUSES)}"
+            )
+
+        if not isinstance(item.get("label"), str) or not item.get("label"):
+            return f"agent_assessments[{index}].label must be a non-empty string"
+
+        if not isinstance(item.get("summary"), str) or not item.get("summary"):
+            return f"agent_assessments[{index}].summary must be a non-empty string"
+
+        if not isinstance(item.get("findings"), list):
+            return f"agent_assessments[{index}].findings must be an array"
+
+        if not isinstance(item.get("next_actions"), list):
+            return f"agent_assessments[{index}].next_actions must be an array"
+
+    expected_role_ids = list(RADAR_SIGNAL_AGENT_ASSESSMENT_ROLE_IDS)
+    if observed_role_ids != expected_role_ids:
+        return (
+            "agent_assessments roles must be exactly "
+            f"{', '.join(expected_role_ids)}; got {', '.join(observed_role_ids) or 'none'}"
+        )
+
+    return None
 
 
 def check_server_compose_contract(root: Path) -> list[CheckResult]:

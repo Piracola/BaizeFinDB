@@ -555,7 +555,8 @@ signal/evidence/review 数据，不调用 LLM，不改变规则定级、生命�
 LLM agent 编排的消费契约；它不是实时 LLM 多 agent 分析。
 Web 信号详情、Windows 客户端 `查看分析` 按钮和 Telegram `/analysis <id>` 都只消费该后端摘要，不在入口层重新生成分析；Web、Windows 和 Telegram 已展示后端返回的确定性 `agent_assessments`。
 部署预检 `server_deploy_check.py --check-m5-smoke` 在 `/radar/signals?limit=1` 返回
-信号时会抽样校验该接口的必需字段；如果没有任何信号，则只记录 warning。
+信号时会抽样校验该接口的必需字段，并校验固定 `agent_assessments` 角色顺序、
+状态取值和 findings/next_actions 数组形状；如果没有任何信号，则只记录 warning。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/analysis
