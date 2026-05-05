@@ -76,6 +76,11 @@ powershell -ExecutionPolicy Bypass -File clients/windows/run-client.ps1 -ServerU
 powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend -SmokeOnly
 ```
 
+如果要在 Docker 后端启动后、进入 smoke/GUI 前保存数据库只读清单 evidence，可加
+`-DatabaseInventoryJsonOutput <path>`。该选项必须和 `-StartDockerBackend` 同用，脚本会在
+Docker health 后运行 `infra/scripts/database_inventory.py --json-output <path>`，输出脱敏迁移状态、
+应用表存在情况和关键表计数；失败时不进入 deploy preflight、smoke 或 GUI。
+
 如果要在 Docker 后端启动后、进入 smoke/GUI 前保存服务端部署预检 JSON，可加
 `-DeployCheckJsonOutput <path>`。该选项必须和 `-StartDockerBackend` 同用，预检失败会在
 smoke 或 GUI 前退出。需要把服务端只读 M5 JSON 契约也纳入同一份报告时，再加
@@ -83,7 +88,7 @@ smoke 或 GUI 前退出。需要把服务端只读 M5 JSON 契约也纳入同一
 backup evidence 时，加 `-DeployCheckBackupJsonOutput <path>`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend -DeployCheckJsonOutput evidence/server-deploy-check.json -DeployCheckM5Smoke -DeployCheckBackupJsonOutput evidence/postgres-backup-check.json -SmokeCompactJsonOutput evidence/windows-client-smoke-compact.json
+powershell -ExecutionPolicy Bypass -File clients/windows/first-trial.ps1 -StartDockerBackend -DatabaseInventoryJsonOutput evidence/database-inventory.json -DeployCheckJsonOutput evidence/server-deploy-check.json -DeployCheckM5Smoke -DeployCheckBackupJsonOutput evidence/postgres-backup-check.json -SmokeCompactJsonOutput evidence/windows-client-smoke-compact.json
 ```
 
 需要留下首次试运行证据时，优先使用 compact JSON；它只保存总体状态、服务端地址元数据、脱敏 user key、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要，不包含端点 payload 或原始后端响应。详细 JSON 仍保留给深度排障：
@@ -175,6 +180,7 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 - `--compact-json-output <path>` 是首次试运行推荐 evidence：只写总体状态、服务端 URL 元数据、脱敏 `user_key`、检查数、每项检查的 name/status/message、warning/blocker 和 OPS readiness 非 OK 摘要；不写 endpoint payload、原始后端响应、环境变量、token、secret、API key、authorization、原始 provider URL、个人持仓、二进制或构建输出。
 - `--json-output <path>` 仍可写出有界脱敏详细 JSON，用于深度排障；它会隐藏 `user_key`、token、secret 和 credential-like 字段。
 - `run-client.ps1 -SmokeOnly` 会隐式执行同一套 smoke check 并在结束后退出，不打开 GUI；`first-trial.ps1 -SmokeOnly` 会透传该模式，和 `-StartDockerBackend` 同用时仍先重建 `api` 镜像、启动 Docker 后端并等待 `/health`。
+- `first-trial.ps1 -StartDockerBackend -DatabaseInventoryJsonOutput <path>` 会在 Docker 后端健康后、deploy preflight/smoke/GUI 前运行 `infra/scripts/database_inventory.py --json-output <path>`，保存脱敏数据库只读清单 evidence；该参数只能和 `-StartDockerBackend` 同用，失败时阻断后续启动。
 - `first-trial.ps1 -StartDockerBackend -DeployCheckJsonOutput <path>` 会在 Docker 后端健康后运行 `infra/scripts/server_deploy_check.py --check-containers --check-api --json-output <path>`，失败时不进入 smoke/GUI；加 `-DeployCheckM5Smoke` 会额外传入 `--check-m5-smoke`；加 `-DeployCheckBackupJsonOutput <path>` 会在同一次部署预检中额外传入 `--check-backup --backup-check-json-output <path>`，保存 PostgreSQL backup check-only evidence。
 - `run-client.ps1 -SmokeCompactJsonOutput <path>` 和 `first-trial.ps1 -SmokeCompactJsonOutput <path>` 会把 compact evidence 路径传给 smoke check；`-SmokeJsonOutput <path>` 继续转发详细 JSON 路径；`-SmokeStrict` 会把 warning 当作启动 blocker。默认不加 `-SmokeStrict` 时，warning 不阻断 GUI 启动。
 - 当 `/ops/readiness` 返回 warning 或 blocked 时，console summary 会列出非 OK 检查项名称和有界脱敏说明，例如 `provider_fetch`、`data_quality`，便于首用时区分历史数据源/数据质量 warning 和真正 blocker。

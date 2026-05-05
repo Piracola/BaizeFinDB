@@ -7,6 +7,7 @@ param(
     [string]$SmokeCompactJsonOutput,
     [string]$DeployCheckJsonOutput,
     [string]$DeployCheckBackupJsonOutput,
+    [string]$DatabaseInventoryJsonOutput,
     [switch]$DeployCheckServerComposeContract,
     [switch]$DeployCheckM5Smoke,
     [switch]$SmokeStrict,
@@ -116,8 +117,32 @@ function Invoke-DeployCheck {
     }
 }
 
+function Invoke-DatabaseInventory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$JsonOutput
+    )
+
+    $InventoryArgs = @(
+        "infra/scripts/database_inventory.py",
+        "--json-output",
+        $JsonOutput
+    )
+
+    & python @InventoryArgs
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("Database inventory failed with exit code $LASTEXITCODE")
+        exit $LASTEXITCODE
+    }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput) -and -not $StartDockerBackend) {
     [Console]::Error.WriteLine("-DeployCheckJsonOutput requires -StartDockerBackend")
+    exit 2
+}
+
+if (-not [string]::IsNullOrWhiteSpace($DatabaseInventoryJsonOutput) -and -not $StartDockerBackend) {
+    [Console]::Error.WriteLine("-DatabaseInventoryJsonOutput requires -StartDockerBackend")
     exit 2
 }
 
@@ -143,6 +168,10 @@ if ($StartDockerBackend) {
     Invoke-BackendCompose -ComposeArgs @("run", "--rm", "api", "alembic", "upgrade", "head")
     Invoke-BackendCompose -ComposeArgs @("up", "-d", "api", "worker", "beat")
     Wait-BackendHealth -HealthUrl (Join-HealthUrl -BaseUrl $ServerUrl) -TimeoutSeconds $BackendHealthTimeoutSeconds -PollIntervalSeconds $BackendHealthPollIntervalSeconds
+
+    if (-not [string]::IsNullOrWhiteSpace($DatabaseInventoryJsonOutput)) {
+        Invoke-DatabaseInventory -JsonOutput $DatabaseInventoryJsonOutput
+    }
 
     if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
         Invoke-DeployCheck `

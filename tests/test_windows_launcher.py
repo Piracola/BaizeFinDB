@@ -96,6 +96,18 @@ def test_first_trial_launcher_is_thin_run_client_delegator() -> None:
     assert "clients.windows.baizefindb_client" not in content
 
 
+def test_first_trial_launcher_database_inventory_contract_is_static() -> None:
+    content = FIRST_TRIAL_LAUNCHER.read_text(encoding="utf-8")
+
+    assert "[string]$DatabaseInventoryJsonOutput" in content
+    assert "infra/scripts/database_inventory.py" in content
+    assert "-DatabaseInventoryJsonOutput requires -StartDockerBackend" in content
+    assert (
+        content.index("Invoke-DatabaseInventory -JsonOutput $DatabaseInventoryJsonOutput")
+        < content.index("Invoke-DeployCheck `")
+    )
+
+
 def test_first_trial_launcher_start_docker_backend_runs_compose_before_delegation(
     tmp_path: Path,
 ) -> None:
@@ -159,6 +171,80 @@ def test_first_trial_launcher_start_docker_backend_can_write_deploy_check_json(
         "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
     ]
     assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output}"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_start_docker_backend_can_write_database_inventory(
+    tmp_path: Path,
+) -> None:
+    inventory_output = tmp_path / "evidence" / "database-inventory.json"
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DatabaseInventoryJsonOutput",
+            str(inventory_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        f"infra/scripts/database_inventory.py --json-output {inventory_output}",
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
+def test_first_trial_launcher_database_inventory_runs_before_deploy_check(
+    tmp_path: Path,
+) -> None:
+    inventory_output = tmp_path / "evidence" / "database-inventory.json"
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    with _health_server() as server_url:
+        result, python_calls, _docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DatabaseInventoryJsonOutput",
+            str(inventory_output),
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls == [
+        f"infra/scripts/database_inventory.py --json-output {inventory_output}",
         (
             "infra/scripts/server_deploy_check.py --check-containers --check-api "
             f"--json-output {deploy_output}"
@@ -366,6 +452,20 @@ def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
     assert "-DeployCheckJsonOutput requires -StartDockerBackend" in result.stderr
 
 
+def test_first_trial_launcher_database_inventory_requires_docker_backend(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(
+        tmp_path,
+        "-DatabaseInventoryJsonOutput",
+        str(tmp_path / "database-inventory.json"),
+    )
+
+    assert result.returncode == 2
+    assert calls == []
+    assert "-DatabaseInventoryJsonOutput requires -StartDockerBackend" in result.stderr
+
+
 def test_first_trial_launcher_deploy_check_m5_smoke_requires_json_output(
     tmp_path: Path,
 ) -> None:
@@ -438,6 +538,43 @@ def test_first_trial_launcher_deploy_check_failure_blocks_smoke_and_gui(
             f"--json-output {tmp_path / 'server-deploy-check.json'} "
             "--check-server-compose-contract"
         ),
+    ]
+
+
+def test_first_trial_launcher_database_inventory_failure_blocks_followup_checks(
+    tmp_path: Path,
+) -> None:
+    inventory_output = tmp_path / "evidence" / "database-inventory.json"
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    with _health_server() as server_url:
+        result, python_calls, docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DatabaseInventoryJsonOutput",
+            str(inventory_output),
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+            database_inventory_exit=37,
+        )
+
+    assert result.returncode == 37
+    assert docker_calls == [
+        "compose -f docker-compose.yml -f docker-compose.server.yml build api",
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d postgres redis",
+        (
+            "compose -f docker-compose.yml -f docker-compose.server.yml run --rm "
+            "api alembic upgrade head"
+        ),
+        "compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat",
+    ]
+    assert python_calls == [
+        f"infra/scripts/database_inventory.py --json-output {inventory_output}",
     ]
 
 
@@ -707,6 +844,7 @@ def _run_first_trial_launcher_with_docker(
     docker_fail_match: str = "",
     docker_exit: int = 11,
     deploy_check_exit: int = 0,
+    database_inventory_exit: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
     powershell = shutil.which("powershell") or shutil.which("pwsh")
     if powershell is None:
@@ -728,6 +866,7 @@ def _run_first_trial_launcher_with_docker(
     env["BAIZEFINDB_FAKE_DOCKER_FAIL_MATCH"] = docker_fail_match
     env["BAIZEFINDB_FAKE_DOCKER_EXIT"] = str(docker_exit)
     env["BAIZEFINDB_FAKE_DEPLOY_CHECK_EXIT"] = str(deploy_check_exit)
+    env["BAIZEFINDB_FAKE_DATABASE_INVENTORY_EXIT"] = str(database_inventory_exit)
 
     result = subprocess.run(
         [
@@ -805,6 +944,8 @@ def _write_fake_python(path: Path) -> None:
             [
                 "@echo off",
                 "echo %*>> \"%BAIZEFINDB_PYTHON_CALLS%\"",
+                "if \"%1\"==\"infra/scripts/database_inventory.py\" "
+                "exit /b %BAIZEFINDB_FAKE_DATABASE_INVENTORY_EXIT%",
                 "if \"%1\"==\"infra/scripts/server_deploy_check.py\" "
                 "exit /b %BAIZEFINDB_FAKE_DEPLOY_CHECK_EXIT%",
                 "if \"%1\"==\"-m\" if \"%2\"==\"clients.windows.smoke_check\" "
