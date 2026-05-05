@@ -315,10 +315,15 @@ timer 默认每日 03:15 执行，并带 15 分钟随机延迟。每次运行会
 从备份恢复 PostgreSQL：
 
 ```powershell
+uv run python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --check-only --check-json-output evidence/postgres-restore-check.json
 uv run python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confirm-restore
 ```
 
-恢复会覆盖目标数据库当前状态；执行前先确认当前 compose project、目标数据库和备份文件路径。
+check-only restore preflight 只验证备份文件元数据和 server compose overlay 下的
+`psql --version`，会拒绝缺失、symlink、非普通文件、空文件或非 `.sql` 输入；
+不会把备份内容流入 `psql`，也不会修改数据库。真正恢复仍必须显式加
+`--confirm-restore`，且会覆盖目标数据库当前状态；执行前先确认当前 compose
+project、目标数据库和备份文件路径。
 
 Linux 服务器上的完整步骤以 [infra/linux/README.md](../../infra/linux/README.md) 为准。Beat 默认每 300 秒触发 `baizefindb.radar.collect_and_scan`，即先采集最小 AKShare 数据，再运行雷达扫描；可用 `RADAR_SCAN_INTERVAL_SECONDS` 调整调度间隔，可用 `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` 和 `RADAR_CONTINUITY_WINDOW_MINUTES` 调整连续 P1 快报候选阈值。`.env` 中 `TELEGRAM_PUSH_ENABLED=true` 后，该任务会继续触发 Telegram 折叠推送，并写入 `push_logs`。公网部署建议同时设置 `TELEGRAM_REQUIRE_BINDING=true`，避免无环境白名单且无数据库绑定时沿用本地开放模式；`/id` 仍可用于获取 chat id 后写入 active 绑定。
 

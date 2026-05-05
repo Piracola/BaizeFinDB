@@ -434,6 +434,16 @@ or embed secrets.
 Restoring is destructive for the target database state. Verify the compose
 project, database name, and backup path before running it.
 
+Before a destructive restore, write non-destructive restore preflight evidence:
+
+```bash
+python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --check-only --check-json-output evidence/postgres-restore-check.json
+```
+
+Check-only mode validates the backup file metadata and `psql --version` through
+the server compose overlay. It rejects missing, symlink, non-regular, empty, or
+non-`.sql` input files and does not stream the backup into `psql`.
+
 ```bash
 python infra/scripts/postgres_restore.py backups/pre-upgrade.sql --confirm-restore
 ```
