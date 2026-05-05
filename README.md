@@ -137,7 +137,7 @@ Linux 服务器端部署骨架文件见 [docs/runbooks/linux-server.md](docs/run
 
 Telegram 告警交付如果用于 cron/systemd，推荐加 `--dedupe-state evidence/server-alert-telegram-dedupe-state.json`。该本地 JSON 状态按 alert payload 的 `dedupe_key` 做默认 3600 秒冷却，只在全部 Telegram 发送成功后更新，避免服务器持续 warning 时重复刷屏；preview、配置错误、失败发送和无效 state 不会写入成功状态。
 
-Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，不默认启用 timer；确认手动发送和 dedupe evidence 后再考虑调度。
+Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用于手动从 systemd 调用上述交付 adapter。它读取服务器本地 `/etc/baizefindb/telegram-alert.env`，发送前会先运行 env 预检并写 `evidence/server-alert-telegram-env-check.json`，不默认启用 timer；确认手动发送、env check 和 dedupe evidence 后再考虑调度。
 
 Telegram 告警凭据文件可用 `infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json` 做只读预检；该报告只记录权限状态、token 是否配置、chat id 数量和 masked chat refs，不输出 token、raw chat id 或 env 文件内容。
 

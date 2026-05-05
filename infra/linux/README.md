@@ -23,7 +23,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor, full runtime, and no-send alert payload JSON evidence. |
 | `baizefindb-monitor.timer` | Example systemd timer that runs the monitor unit every 5 minutes. |
-| `baizefindb-alert-telegram.service` | Optional oneshot systemd unit that explicitly sends an existing alert payload through the Telegram adapter with dedupe state. |
+| `baizefindb-alert-telegram.service` | Optional oneshot systemd unit that runs env preflight, then explicitly sends an existing alert payload through the Telegram adapter with dedupe state. |
 | `baizefindb-postgres-backup.service` | Example oneshot systemd unit that runs PostgreSQL backup check-only evidence before a timestamped `pg_dump`. |
 | `baizefindb-postgres-backup.timer` | Example systemd timer that runs the PostgreSQL backup unit daily with jitter. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
@@ -244,8 +244,10 @@ An optional systemd oneshot service is provided for a manual server-side send.
 Create a local-only credential file first:
 
 ```bash
-sudo install -d -m 700 /etc/baizefindb
+sudo install -d -o baizefindb -g baizefindb -m 700 /etc/baizefindb
+sudo install -o baizefindb -g baizefindb -m 600 /dev/null /etc/baizefindb/telegram-alert.env
 sudoedit /etc/baizefindb/telegram-alert.env
+sudo chown baizefindb:baizefindb /etc/baizefindb/telegram-alert.env
 sudo chmod 600 /etc/baizefindb/telegram-alert.env
 ```
 
@@ -264,8 +266,10 @@ python infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefin
 python infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --strict-permissions --json-output evidence/server-alert-telegram-env-check.json
 ```
 
-If the file is `root:root` with mode `0600`, run the same read-only check with
-`sudo` or change ownership to the deployment account that must read it.
+The systemd service runs the same preflight as the `baizefindb` service user
+before it sends. If the file is `root:root` with mode `0600`, the service user
+cannot read it and the service fails before delivery; change ownership to the
+deployment account that must read it.
 
 Then copy and start the service after monitor has produced
 `evidence/server-alert-payload.json`:
@@ -276,6 +280,10 @@ sudo systemctl daemon-reload
 sudo systemctl start baizefindb-alert-telegram.service
 journalctl -u baizefindb-alert-telegram.service -n 50
 ```
+
+The service writes `evidence/server-alert-telegram-env-check.json` before the
+send evidence and dedupe state. Missing, malformed, unreadable, or unsafe env
+file permissions fail the service before Telegram delivery.
 
 This module intentionally provides no timer. Add scheduling only after manual
 send and dedupe evidence are verified.

@@ -62,6 +62,9 @@ def test_monitor_timer_runs_every_five_minutes() -> None:
 
 def test_alert_telegram_service_invokes_delivery_adapter_with_dedupe() -> None:
     service = _read_unit("baizefindb-alert-telegram.service")
+    text = (LINUX_DIR / "baizefindb-alert-telegram.service").read_text(
+        encoding="utf-8"
+    )
 
     assert service["Unit"]["Requires"] == "baizefindb.service"
     assert "network-online.target" in service["Unit"]["After"]
@@ -74,7 +77,7 @@ def test_alert_telegram_service_invokes_delivery_adapter_with_dedupe() -> None:
         service["Service"]["EnvironmentFile"]
         == "-/etc/baizefindb/telegram-alert.env"
     )
-    assert service["Service"]["ExecStartPre"] == "/usr/bin/mkdir -p /opt/baizefindb/evidence"
+    assert "ExecStartPre=/usr/bin/mkdir -p /opt/baizefindb/evidence" in text
 
     command = service["Service"]["ExecStart"]
     assert "server_alert_telegram.py ${BAIZEFINDB_ALERT_PAYLOAD}" in command
@@ -96,6 +99,40 @@ def test_alert_telegram_service_invokes_delivery_adapter_with_dedupe() -> None:
         in environment
     )
     assert "BAIZEFINDB_ALERT_TELEGRAM_TTL_SECONDS=3600" in environment
+    assert (
+        "BAIZEFINDB_ALERT_TELEGRAM_ENV_CHECK_OUTPUT=evidence/"
+        "server-alert-telegram-env-check.json"
+        in environment
+    )
+
+
+def test_alert_telegram_service_runs_env_preflight_before_send() -> None:
+    text = (LINUX_DIR / "baizefindb-alert-telegram.service").read_text(
+        encoding="utf-8"
+    )
+    preflight_line = _unit_line_containing(
+        text,
+        "server_alert_telegram_env_check.py",
+    )
+
+    assert "ExecStartPre=" in preflight_line
+    assert "--env-file /etc/baizefindb/telegram-alert.env" in preflight_line
+    assert "--strict-permissions" in preflight_line
+    assert (
+        "--json-output ${BAIZEFINDB_ALERT_TELEGRAM_ENV_CHECK_OUTPUT}"
+        in preflight_line
+    )
+    assert "--send" not in preflight_line
+    assert "--dedupe-state" not in preflight_line
+    assert "--dedupe-ttl-seconds" not in preflight_line
+    assert "--ignore-dedupe" not in preflight_line
+    assert "--chat-id" not in preflight_line
+    assert "TELEGRAM_BOT_TOKEN" not in preflight_line
+    assert "TELEGRAM_ALLOWED_CHAT_IDS" not in preflight_line
+
+
+def test_alert_telegram_service_has_no_timer() -> None:
+    assert not (LINUX_DIR / "baizefindb-alert-telegram.timer").exists()
 
 
 def test_alert_telegram_service_does_not_embed_secrets_or_other_delivery() -> None:
@@ -179,3 +216,10 @@ def _read_unit(name: str) -> configparser.ConfigParser:
     parser.optionxform = str
     parser.read(path, encoding="utf-8")
     return parser
+
+
+def _unit_line_containing(text: str, needle: str) -> str:
+    for line in text.splitlines():
+        if needle in line:
+            return line
+    raise AssertionError(f"missing line containing: {needle}")
