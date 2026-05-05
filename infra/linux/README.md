@@ -157,6 +157,16 @@ Run migrations:
 docker compose -f docker-compose.yml -f docker-compose.server.yml run --rm api alembic upgrade head
 ```
 
+Optional development/demo data for first-use validation:
+
+```bash
+uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json
+```
+
+The seed command writes synthetic demo user, portfolio/watchlist, radar signals,
+evidence, reviews, and a quick report. It does not call real providers, store
+tokens, or save real personal holdings, and reruns reuse stable demo keys.
+
 Start the API, worker, and beat scheduler:
 
 ```bash

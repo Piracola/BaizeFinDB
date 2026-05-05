@@ -46,8 +46,13 @@ uv sync --dev
 Copy-Item .env.example .env
 docker compose up -d postgres redis
 uv run alembic upgrade head
+uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json
 uv run uvicorn app.main:app --reload
 ```
+
+`seed_demo_data.py` 是开发/演示数据入口。它只写合成 demo 记录，让空库在首次启动后
+立刻有 `default` 用户、持仓/自选、雷达信号、证据、审查和 quick 报告可看；
+不访问真实 Provider、不写 token、不保存真实个人持仓。重复执行会按稳定 demo key 复用记录。
 
 启动后检查：
 
@@ -88,6 +93,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
 docker compose up -d postgres redis
 uv run python infra/scripts/dev_environment_check.py
 uv run alembic upgrade head
+uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json
 uv run uvicorn app.main:app --reload
 ```
 

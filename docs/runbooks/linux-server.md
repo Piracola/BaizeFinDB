@@ -37,8 +37,13 @@
 ```powershell
 docker compose up -d postgres redis
 uv run alembic upgrade head
+uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json
 uv run uvicorn app.main:app --reload
 ```
+
+`seed_demo_data.py` 只用于开发/演示或服务器迁移后首用验证；它写入合成 demo 用户、
+持仓/自选、雷达信号、证据、审查和 quick 报告，不访问真实数据源、不写 token、
+不保存真实个人持仓，重复执行不会重复膨胀业务表。
 
 `docker-compose.server.yml` 只在服务器或部署演练时显式叠加。只启动 API：
 

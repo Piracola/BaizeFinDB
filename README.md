@@ -347,6 +347,17 @@ docker compose up -d postgres redis
 uv run alembic upgrade head
 ```
 
+新库只完成迁移后仍是空业务库。需要让 Web、Windows 客户端、Telegram 和
+M5 smoke check 立刻有样例可用时，可写入可重复执行的开发/演示数据：
+
+```powershell
+uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json
+```
+
+该命令只写合成 demo 用户、持仓/自选、雷达信号、证据、审查和报告；
+不访问真实数据源、不写 token、不包含真实个人持仓、不提供交易建议。重复执行会复用
+稳定 demo key，不重复膨胀业务表。
+
 验证 AKShare 最小接口，不写数据库：
 
 ```powershell
