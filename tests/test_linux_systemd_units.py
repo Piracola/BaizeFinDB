@@ -131,8 +131,41 @@ def test_alert_telegram_service_runs_env_preflight_before_send() -> None:
     assert "TELEGRAM_ALLOWED_CHAT_IDS" not in preflight_line
 
 
-def test_alert_telegram_service_has_no_timer() -> None:
-    assert not (LINUX_DIR / "baizefindb-alert-telegram.timer").exists()
+def test_alert_telegram_timer_runs_every_five_minutes_after_monitor_boot() -> None:
+    timer = _read_unit("baizefindb-alert-telegram.timer")
+
+    assert timer["Timer"]["Unit"] == "baizefindb-alert-telegram.service"
+    assert timer["Timer"]["OnBootSec"] == "3min"
+    assert timer["Timer"]["OnUnitActiveSec"] == "5min"
+    assert timer["Timer"]["AccuracySec"] == "30s"
+    assert timer["Timer"]["Persistent"] == "true"
+    assert timer["Install"]["WantedBy"] == "timers.target"
+
+
+def test_alert_telegram_timer_does_not_embed_secrets_or_delivery_command() -> None:
+    text = (LINUX_DIR / "baizefindb-alert-telegram.timer").read_text(
+        encoding="utf-8"
+    ).lower()
+
+    forbidden = [
+        "execstart",
+        "telegram_bot_token",
+        "telegram_webhook_secret",
+        "webhook_url",
+        "password",
+        "secret",
+        "token=",
+        "chat_id",
+        "curl ",
+        "sendmail",
+        "smtp",
+        "server_alert_telegram.py",
+        "server_monitor_check.py",
+        "postgres_backup.py",
+        "run_radar_scan",
+    ]
+    for marker in forbidden:
+        assert marker not in text
 
 
 def test_alert_telegram_service_does_not_embed_secrets_or_other_delivery() -> None:

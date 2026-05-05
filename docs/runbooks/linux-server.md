@@ -25,6 +25,7 @@
 | `infra/linux/baizefindb-monitor.service` | systemd oneshot 监控摘要示例，定时写 compact monitor JSON、完整 runtime JSON 和 no-send alert payload JSON。 |
 | `infra/linux/baizefindb-monitor.timer` | systemd timer 示例，默认每 5 分钟运行一次 monitor service。 |
 | `infra/linux/baizefindb-alert-telegram.service` | 可选 Telegram 告警交付 oneshot 示例，发送前先做 env 预检，消费已有 alert payload，显式 `--send`，并用 dedupe state 防重复。 |
+| `infra/linux/baizefindb-alert-telegram.timer` | 可选 Telegram 告警交付 timer 示例，手动 evidence 验证通过后每 5 分钟触发 alert service。 |
 | `infra/linux/baizefindb-postgres-backup.service` | systemd oneshot PostgreSQL 备份示例，先写 check-only evidence，再生成时间戳 `.sql` 备份。 |
 | `infra/linux/baizefindb-postgres-backup.timer` | systemd timer 示例，默认每日 03:15 加 15 分钟随机延迟运行备份 service。 |
 | `infra/linux/nginx-baizefindb.conf` | nginx HTTPS/domain 反代到 `127.0.0.1:8000` 示例，包含 `/telegram/webhook`。 |
@@ -331,6 +332,21 @@ delivery raw error。
 ```powershell
 uv run python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-service-verify
 ```
+
+上述验证通过后，才复制并启用可选 Telegram alert timer。它只触发
+`baizefindb-alert-telegram.service`，不包含 token/chat id，也不直接写发送命令；
+service 仍负责 strict env preflight、显式 `--send`、send evidence 和 dedupe state：
+
+```powershell
+sudo cp infra/linux/baizefindb-alert-telegram.timer /etc/systemd/system/baizefindb-alert-telegram.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now baizefindb-alert-telegram.timer
+systemctl list-timers baizefindb-alert-telegram.timer
+journalctl -u baizefindb-alert-telegram.service -n 50
+```
+
+timer 默认开机 3 分钟后第一次运行，比 monitor timer 晚 1 分钟；之后每 5 分钟运行一次，
+配合 dedupe state 避免持续 warning 时重复刷屏。
 
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、

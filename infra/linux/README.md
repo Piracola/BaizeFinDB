@@ -25,6 +25,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor, full runtime, and no-send alert payload JSON evidence. |
 | `baizefindb-monitor.timer` | Example systemd timer that runs the monitor unit every 5 minutes. |
 | `baizefindb-alert-telegram.service` | Optional oneshot systemd unit that runs env preflight, then explicitly sends an existing alert payload through the Telegram adapter with dedupe state. |
+| `baizefindb-alert-telegram.timer` | Optional systemd timer that triggers the Telegram alert delivery service every 5 minutes after manual evidence verification. |
 | `baizefindb-postgres-backup.service` | Example oneshot systemd unit that runs PostgreSQL backup check-only evidence before a timestamped `pg_dump`. |
 | `baizefindb-postgres-backup.timer` | Example systemd timer that runs the PostgreSQL backup unit daily with jitter. |
 | `nginx-baizefindb.conf` | Example nginx reverse proxy for HTTPS/domain traffic to `127.0.0.1:8000`. |
@@ -300,8 +301,23 @@ configuration errors, failed delivery, missing evidence, symlinks, invalid JSON,
 or wrong report types are `fail`. The report omits bot tokens, raw chat ids, raw
 URLs, env file contents, message previews, and delivery raw errors.
 
-This module intentionally provides no timer. Add scheduling only after manual
-send and dedupe evidence are verified.
+Scheduling is optional and still manual. Enable the alert timer only after the
+monitor timer is writing `evidence/server-alert-payload.json`, a manual alert
+service run has produced send/dedupe evidence, and the service verification
+report has been reviewed:
+
+```bash
+sudo cp infra/linux/baizefindb-alert-telegram.timer /etc/systemd/system/baizefindb-alert-telegram.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now baizefindb-alert-telegram.timer
+systemctl list-timers baizefindb-alert-telegram.timer
+journalctl -u baizefindb-alert-telegram.service -n 50
+```
+
+The timer starts one minute after the monitor timer on boot and then runs every
+5 minutes. It contains no credentials and no delivery command; it only triggers
+`baizefindb-alert-telegram.service`, which keeps strict env preflight, explicit
+`--send`, JSON evidence output, and dedupe protection.
 
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:

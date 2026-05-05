@@ -147,6 +147,8 @@ Telegram 告警凭据文件可用 `infra/scripts/server_alert_telegram_env_check
 
 如果已经手动运行过 `baizefindb-alert-telegram.service`，交付验收还可加 `--include-alert-telegram-service-verify`，把 `server_alert_telegram_service_verify.py` 的只读报告写入同一 acceptance evidence 目录；该阶段只读取已有 env-check、send 和 dedupe-state JSON，不启动 systemd、不发送 Telegram。
 
+通过手动 service verification 后，Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.timer` 示例；它每 5 分钟触发一次 alert delivery service，启动时间比 monitor timer 晚 1 分钟，便于读取最新 `server-alert-payload.json`。该 timer 不默认启用，不包含 secrets 或发送命令，复制启用前先确认 monitor timer、手动发送和 dedupe evidence 都已通过。
+
 ## Windows 客户端 MVP
 
 Windows 客户端位于 [clients/windows/](clients/windows/)，默认是源码运行版。仓库提供可选 PyInstaller onedir 打包脚手架，用于开发者在 Windows 目标机验证 exe 形态；它不是签名安装器或生产分发包。
