@@ -26,6 +26,8 @@ STOCK_BACKTRACE_PREVIEW_LIMIT = 3
 OPS_TRENDS_BUCKET_PREVIEW_LIMIT = 5
 ANALYSIS_LIST_PREVIEW_LIMIT = 5
 ANALYSIS_METRIC_PREVIEW_LIMIT = 4
+ANALYSIS_AGENT_PREVIEW_LIMIT = 5
+ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT = 3
 DISCLAIMER = "说明：仅用于关注、观察、风险和复盘，不构成投资建议。"
 ANALYSIS_FORBIDDEN_TEXT_MARKERS = (
     "source_ref",
@@ -566,6 +568,7 @@ def format_signal_analysis(analysis: RadarSignalAnalysisRead) -> str:
     lines.extend(_analysis_list_lines("要点", _field(analysis, "key_points", [])))
     lines.extend(_analysis_metric_lines(_field(analysis, "metric_highlights", [])))
     lines.extend(_analysis_list_lines("风险标记", _field(analysis, "risk_flags", [])))
+    lines.extend(_analysis_agent_assessment_lines(_field(analysis, "agent_assessments", [])))
     lines.extend(_analysis_evidence_summary_lines(evidence_summary))
     lines.extend(_analysis_review_summary_lines(review_summary))
     lines.extend(_analysis_list_lines("后续动作", _field(analysis, "next_actions", [])))
@@ -606,6 +609,38 @@ def _analysis_metric_lines(value: object) -> list[str]:
         metric_value = _analysis_text(_field(item, "value", "-"))
         interpretation = _analysis_text(_field(item, "interpretation", "后端未返回说明。"))
         lines.append(f"- {label}: {metric_value} | {interpretation}")
+    lines.append("")
+    return lines
+
+
+def _analysis_agent_assessment_lines(value: object) -> list[str]:
+    assessments = _analysis_sequence(value)[:ANALYSIS_AGENT_PREVIEW_LIMIT]
+    lines = ["Agent 评估："]
+    if not assessments:
+        lines.extend(["- 后端未返回该项。", ""])
+        return lines
+
+    for item in assessments:
+        label = _analysis_text(_field(item, "label", "Agent"))
+        agent_id = _analysis_text(_field(item, "agent_id", "-"))
+        status = _analysis_text(_field(item, "status", "not_applicable"))
+        summary = _analysis_text(_field(item, "summary", "后端未返回摘要。"))
+        lines.append(f"- {label}（{agent_id} / {status}）：{summary}")
+
+        findings = _analysis_values(
+            _field(item, "findings", []),
+            ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT,
+        )
+        if findings:
+            lines.append(f"  - 发现：{'; '.join(findings)}")
+
+        next_actions = _analysis_values(
+            _field(item, "next_actions", []),
+            ANALYSIS_AGENT_ITEM_PREVIEW_LIMIT,
+        )
+        if next_actions:
+            lines.append(f"  - 动作：{'; '.join(next_actions)}")
+
     lines.append("")
     return lines
 

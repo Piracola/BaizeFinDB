@@ -860,6 +860,7 @@ async def test_telegram_signals_and_signal_detail_commands(
     assert f"信号 #{signal_id} 分析摘要" in analysis_preview
     assert "标题：P1 research brief: AI Applications" in analysis_preview
     assert "指标摘要" in analysis_preview
+    assert "Agent 评估" in analysis_preview
     assert "证据摘要" in analysis_preview
     assert "审查摘要" in analysis_preview
     assert "后续动作" in analysis_preview
@@ -1097,6 +1098,24 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
                 human_review_required=True,
                 details={"cost_price": 10.25, "position_ratio": 0.2},
             ),
+            agent_assessments=[
+                SimpleNamespace(
+                    agent_id="data_quality_agent",
+                    label="Data Quality Agent",
+                    status="warning",
+                    summary="Confidence bucket needs review.",
+                    findings=["Confidence bucket: low.", "source_ref: https://example.com"],
+                    next_actions=["Refresh provider snapshots."],
+                ),
+                SimpleNamespace(
+                    agent_id="risk_agent",
+                    label="Risk Agent",
+                    status="warning",
+                    summary="Raw note says buy now.",
+                    findings=["position_ratio: 0.2"],
+                    next_actions=["Keep output framed as research review."],
+                ),
+            ],
             agent_inputs=SimpleNamespace(
                 guardrails=["Do not override backend rule priority"],
             ),
@@ -1119,6 +1138,10 @@ def test_telegram_formatter_accepts_enum_value_strings() -> None:
     assert "审查状态：需要人工复核" in analysis_preview
     assert "sector_pct_change: +3.4%" in analysis_preview
     assert "provider_quality_degraded" in analysis_preview
+    assert "Agent 评估" in analysis_preview
+    assert "Data Quality Agent（data_quality_agent / warning）" in analysis_preview
+    assert "Confidence bucket: low." in analysis_preview
+    assert "Refresh provider snapshots." in analysis_preview
     assert "信心分桶：low" in analysis_preview
     assert "0.123" not in analysis_preview
     assert "source_ref" not in analysis_preview
