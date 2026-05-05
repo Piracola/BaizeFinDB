@@ -237,6 +237,45 @@ async def test_governance_review_allows_negated_action_warning(
 
 
 @pytest.mark.asyncio
+async def test_governance_review_allows_expanded_negated_action_warning(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _create_signal(
+            session,
+            summary="风险提示：不建议马上买入，不宜满仓，不应跟着买。",
+        )
+
+        review = await review_radar_signal(session, signal_id)
+
+    assert review is not None
+    assert review.review_status == RadarReviewStatus.APPROVED
+    assert "forbidden_trading_language" not in review.reasons
+
+
+@pytest.mark.asyncio
+async def test_governance_review_blocks_actionable_language_after_disclaimer(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        signal_id = await _create_signal(
+            session,
+            summary="仅作研究关注，不保证收益，但建议马上买入并满仓跟着买。",
+        )
+
+        review = await review_radar_signal(session, signal_id)
+
+    assert review is not None
+    assert review.review_status == RadarReviewStatus.BLOCKED
+    assert "forbidden_trading_language" in review.reasons
+    assert review.details["matched_forbidden_terms"] == [
+        "马上买入",
+        "满仓",
+        "跟着买",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_governance_review_blocks_spaced_forbidden_language(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

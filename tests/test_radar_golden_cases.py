@@ -51,6 +51,10 @@ def test_radar_review_rule_golden_cases() -> None:
             assert reason in decision.reasons, case["name"]
         for detail_key in case.get("expected_detail_keys", []):
             assert detail_key in decision.details, case["name"]
+        if "expected_matched_terms" in case:
+            assert decision.details.get("matched_forbidden_terms") == case[
+                "expected_matched_terms"
+            ], case["name"]
 
 
 def test_radar_share_preview_golden_cases() -> None:

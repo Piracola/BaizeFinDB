@@ -104,6 +104,42 @@
     "expected_reasons": ["rule_review_passed"]
   },
   {
+    "name": "expanded_negated_action_warning_approved",
+    "signal": {
+      "priority": "P1",
+      "summary": "风险提示：不建议马上买入，不宜满仓，不应跟着买。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "approved",
+    "expected_reasons": ["rule_review_passed"]
+  },
+  {
+    "name": "actionable_language_after_disclaimer_blocked",
+    "signal": {
+      "priority": "P1",
+      "summary": "仅作研究关注，不保证收益，但建议马上买入并满仓跟着买。",
+      "evidence_count": 1,
+      "metrics": {}
+    },
+    "evidences": [
+      {
+        "confidence": 0.9,
+        "details": {}
+      }
+    ],
+    "expected_status": "blocked",
+    "expected_reasons": ["forbidden_trading_language"],
+    "expected_detail_keys": ["matched_forbidden_terms"],
+    "expected_matched_terms": ["马上买入", "满仓", "跟着买"]
+  },
+  {
     "name": "spaced_forbidden_language_blocked",
     "signal": {
       "priority": "P1",
