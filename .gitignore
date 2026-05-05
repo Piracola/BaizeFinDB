@@ -24,5 +24,6 @@ evidence/
 runtime-check*.json
 ops-evidence*.json
 server-alert-payload*.json
+server-alert-telegram*.json
 .DS_Store
 Thumbs.db

@@ -13,6 +13,8 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/server_deploy_check.py` | Standard-library deployment preflight for `.env`, compose config, optional image build, container state, API health, OPS overview/history/trends/readiness, provider status, Telegram status, radar overview, signal list, sampled signal analysis, backup check-only evidence, and M5 read-only smoke checks. |
 | `../scripts/server_runtime_check.py` | Standard-library runtime sampler for health, ops overview, ops history, ops readiness, and optional ops trends after the API is running. |
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture and no-send alert payload generation before delivery adapters are implemented. |
+| `../scripts/server_alert_payload.py` | Filesystem-only no-send alert payload builder from an existing compact monitor summary. |
+| `../scripts/server_alert_telegram.py` | Telegram alert delivery adapter; preview by default, sends only with explicit `--send`. |
 | `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
@@ -213,6 +215,22 @@ python infra/scripts/server_monitor_check.py --json-output evidence/server-monit
 python infra/scripts/server_monitor_check.py --include-ops-trends --fail-on-warning --json-output evidence/server-monitor-summary.json
 ```
 
+To build a no-send alert payload from an existing monitor summary, then preview
+the Telegram delivery evidence without sending:
+
+```bash
+python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --json-output evidence/server-alert-payload.json
+python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json
+```
+
+The Telegram adapter reads recipients from repeated `--chat-id` values or
+`TELEGRAM_ALLOWED_CHAT_IDS`, and reads the bot token from `TELEGRAM_BOT_TOKEN`.
+It sends only when `--send` is supplied:
+
+```bash
+python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --send --json-output evidence/server-alert-telegram-send.json
+```
+
 If the only runtime warning is `radar_stale`, run a scan from existing provider
 snapshots and repeat the runtime check:
 
@@ -335,8 +353,8 @@ The timer runs every 5 minutes and writes:
   summary for cron/systemd and future alert senders.
 - `evidence/server-runtime-monitor.json` full runtime report for debugging.
 - `evidence/server-alert-payload.json` no-send alert payload with severity,
-  notification intent, dedupe key, and bounded details for a future delivery
-  adapter.
+  notification intent, dedupe key, and bounded details for optional delivery
+  adapters such as `server_alert_telegram.py`.
 
 The service does not send notifications. Add `--fail-on-warning` to
 `ExecStart=` only if warning-only summaries should make the systemd run fail.

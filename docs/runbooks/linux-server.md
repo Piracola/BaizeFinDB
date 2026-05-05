@@ -12,6 +12,9 @@
 | `infra/scripts/dev_environment_check.py` | 开发环境只读自检脚本，验证 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、Tkinter、PowerShell 可选项和 Git 工作区。 |
 | `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、Ops 趋势快照、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
 | `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，可选读取 Ops 趋势快照，用退出码区分阻塞状态。 |
+| `infra/scripts/server_monitor_check.py` | cron/systemd 友好的 compact monitor summary 脚本，可在同一次只读采样里额外写 no-send alert payload。 |
+| `infra/scripts/server_alert_payload.py` | no-send 告警 payload 生成脚本，从已有 compact monitor summary 生成有界 JSON，不发送通知。 |
+| `infra/scripts/server_alert_telegram.py` | Telegram 告警交付适配器，默认只预览 delivery evidence，只有显式 `--send` 才调用 Telegram。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
 | `infra/scripts/postgres_backup_retention.py` | PostgreSQL 备份保留期脚本，默认 dry-run，只扫描本地普通 `.sql` 备份；显式 `--delete` 才删除过期文件。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
@@ -209,6 +212,18 @@ uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summ
 uv run python infra/scripts/server_alert_payload.py evidence/server-monitor-summary.json --suppress-warning-notify --json-output evidence/server-alert-payload.json
 ```
 
+Telegram 告警交付适配器消费 `server-alert-payload.json`。默认是 preview/dry-run，
+可写出 `server_alert_telegram_delivery` evidence，但不会联网发送；收件人来自重复
+`--chat-id <id>` 或 `TELEGRAM_ALLOWED_CHAT_IDS`，发送 token 来自 `TELEGRAM_BOT_TOKEN`。
+只有显式加 `--send` 才会复用后端 `TelegramClient` 调用 Telegram；`should_notify=false`
+时即使加了 `--send` 也会跳过并零退出。delivery evidence 只包含 masked chat refs，
+不包含 bot token、raw webhook secret、raw authorization 值或 payload 里的 raw URL：
+
+```powershell
+uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --json-output evidence/server-alert-telegram-preview.json
+uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-payload.json --send --json-output evidence/server-alert-telegram-send.json
+```
+
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、
 `WorkingDirectory` 和 `PATH`；示例默认每 5 分钟运行一次，不发送通知：
@@ -268,7 +283,10 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --js
 
 三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 的 `--json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本；失败时也会写入脱敏 failure report。announcements evidence 步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
 
-`evidence/`、`runtime-check*.json`、`ops-evidence*.json` 和 `server-alert-payload*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。不要把真实 token 环境下生成的 evidence、runtime check、ops evidence 或 alert payload 报告提交到 git。
+`evidence/`、`runtime-check*.json`、`ops-evidence*.json`、`server-alert-payload*.json`
+和 `server-alert-telegram*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。
+不要把真实 token 环境下生成的 evidence、runtime check、ops evidence、alert payload
+或 Telegram delivery 报告提交到 git。
 
 手动写入 Tushare 股票基础信息或公告快照：
 
