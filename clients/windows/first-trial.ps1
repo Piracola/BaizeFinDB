@@ -7,6 +7,7 @@ param(
     [string]$SmokeCompactJsonOutput,
     [string]$DeployCheckJsonOutput,
     [string]$DeployCheckBackupJsonOutput,
+    [switch]$DeployCheckServerComposeContract,
     [switch]$DeployCheckM5Smoke,
     [switch]$SmokeStrict,
     [switch]$SmokeOnly,
@@ -84,6 +85,7 @@ function Invoke-DeployCheck {
         [Parameter(Mandatory = $true)]
         [string]$JsonOutput,
         [string]$BackupJsonOutput,
+        [switch]$IncludeServerComposeContract,
         [switch]$IncludeM5Smoke
     )
 
@@ -94,6 +96,10 @@ function Invoke-DeployCheck {
         "--json-output",
         $JsonOutput
     )
+
+    if ($IncludeServerComposeContract) {
+        $DeployCheckArgs += "--check-server-compose-contract"
+    }
 
     if ($IncludeM5Smoke) {
         $DeployCheckArgs += "--check-m5-smoke"
@@ -120,6 +126,11 @@ if ($DeployCheckM5Smoke -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput
     exit 2
 }
 
+if ($DeployCheckServerComposeContract -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
+    [Console]::Error.WriteLine("-DeployCheckServerComposeContract requires -DeployCheckJsonOutput")
+    exit 2
+}
+
 if (-not [string]::IsNullOrWhiteSpace($DeployCheckBackupJsonOutput) -and [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
     [Console]::Error.WriteLine("-DeployCheckBackupJsonOutput requires -DeployCheckJsonOutput")
     exit 2
@@ -134,7 +145,11 @@ if ($StartDockerBackend) {
     Wait-BackendHealth -HealthUrl (Join-HealthUrl -BaseUrl $ServerUrl) -TimeoutSeconds $BackendHealthTimeoutSeconds -PollIntervalSeconds $BackendHealthPollIntervalSeconds
 
     if (-not [string]::IsNullOrWhiteSpace($DeployCheckJsonOutput)) {
-        Invoke-DeployCheck -JsonOutput $DeployCheckJsonOutput -BackupJsonOutput $DeployCheckBackupJsonOutput -IncludeM5Smoke:$DeployCheckM5Smoke
+        Invoke-DeployCheck `
+            -JsonOutput $DeployCheckJsonOutput `
+            -BackupJsonOutput $DeployCheckBackupJsonOutput `
+            -IncludeServerComposeContract:$DeployCheckServerComposeContract `
+            -IncludeM5Smoke:$DeployCheckM5Smoke
     }
 }
 

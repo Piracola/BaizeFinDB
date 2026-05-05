@@ -213,6 +213,39 @@ def test_first_trial_launcher_deploy_check_m5_smoke_appends_server_m5_check(
     ]
 
 
+def test_first_trial_launcher_deploy_check_compose_contract_appends_server_check(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    with _health_server() as server_url:
+        result, python_calls, _docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckServerComposeContract",
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls == [
+        (
+            "infra/scripts/server_deploy_check.py --check-containers --check-api "
+            f"--json-output {deploy_output} --check-server-compose-contract"
+        ),
+        (
+            f"-m clients.windows.smoke_check --server-url {server_url} "
+            "--user-key default --ops-readiness-lookback-hours 24"
+        ),
+        "-m clients.windows.baizefindb_client",
+    ]
+
+
 def test_first_trial_launcher_deploy_check_backup_evidence_appends_backup_check(
     tmp_path: Path,
 ) -> None:
@@ -288,6 +321,37 @@ def test_first_trial_launcher_deploy_check_backup_evidence_composes_with_m5(
     )
 
 
+def test_first_trial_launcher_deploy_check_compose_contract_composes_with_m5_and_backup(
+    tmp_path: Path,
+) -> None:
+    deploy_output = tmp_path / "evidence" / "server-deploy-check.json"
+    backup_output = tmp_path / "evidence" / "postgres-backup-check.json"
+    with _health_server() as server_url:
+        result, python_calls, _docker_calls = _run_first_trial_launcher_with_docker(
+            tmp_path,
+            "-StartDockerBackend",
+            "-ServerUrl",
+            server_url,
+            "-DeployCheckJsonOutput",
+            str(deploy_output),
+            "-DeployCheckServerComposeContract",
+            "-DeployCheckM5Smoke",
+            "-DeployCheckBackupJsonOutput",
+            str(backup_output),
+            "-BackendHealthTimeoutSeconds",
+            "5",
+            "-BackendHealthPollIntervalSeconds",
+            "1",
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls[0] == (
+        "infra/scripts/server_deploy_check.py --check-containers --check-api "
+        f"--json-output {deploy_output} --check-server-compose-contract "
+        f"--check-m5-smoke --check-backup --backup-check-json-output {backup_output}"
+    )
+
+
 def test_first_trial_launcher_deploy_check_json_requires_docker_backend(
     tmp_path: Path,
 ) -> None:
@@ -310,6 +374,19 @@ def test_first_trial_launcher_deploy_check_m5_smoke_requires_json_output(
     assert result.returncode == 2
     assert calls == []
     assert "-DeployCheckM5Smoke requires -DeployCheckJsonOutput" in result.stderr
+
+
+def test_first_trial_launcher_deploy_check_compose_contract_requires_json_output(
+    tmp_path: Path,
+) -> None:
+    result, calls = _run_first_trial_launcher(
+        tmp_path,
+        "-DeployCheckServerComposeContract",
+    )
+
+    assert result.returncode == 2
+    assert calls == []
+    assert "-DeployCheckServerComposeContract requires -DeployCheckJsonOutput" in result.stderr
 
 
 def test_first_trial_launcher_deploy_check_backup_evidence_requires_json_output(
@@ -337,6 +414,7 @@ def test_first_trial_launcher_deploy_check_failure_blocks_smoke_and_gui(
             server_url,
             "-DeployCheckJsonOutput",
             str(tmp_path / "server-deploy-check.json"),
+            "-DeployCheckServerComposeContract",
             "-BackendHealthTimeoutSeconds",
             "5",
             "-BackendHealthPollIntervalSeconds",
@@ -357,7 +435,8 @@ def test_first_trial_launcher_deploy_check_failure_blocks_smoke_and_gui(
     assert python_calls == [
         (
             "infra/scripts/server_deploy_check.py --check-containers --check-api "
-            f"--json-output {tmp_path / 'server-deploy-check.json'}"
+            f"--json-output {tmp_path / 'server-deploy-check.json'} "
+            "--check-server-compose-contract"
         ),
     ]
 
