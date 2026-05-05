@@ -19,6 +19,15 @@ DEFAULT_EVIDENCE_DIR = Path("evidence/server-delivery-acceptance")
 DEFAULT_REPORT_NAME = "server-delivery-acceptance.json"
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_TELEGRAM_ALERT_ENV_FILE = Path("/etc/baizefindb/telegram-alert.env")
+DEFAULT_TELEGRAM_ALERT_SERVICE_ENV_CHECK_JSON = Path(
+    "evidence/server-alert-telegram-env-check.json"
+)
+DEFAULT_TELEGRAM_ALERT_SERVICE_DELIVERY_JSON = Path(
+    "evidence/server-alert-telegram-send.json"
+)
+DEFAULT_TELEGRAM_ALERT_SERVICE_DEDUPE_STATE_JSON = Path(
+    "evidence/server-alert-telegram-dedupe-state.json"
+)
 MAX_CAPTURE_LENGTH = 2000
 
 
@@ -226,6 +235,29 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
                 name="telegram_alert_env_check",
                 command=telegram_env_command,
                 evidence_files=[telegram_env_report],
+            )
+        )
+
+    if args.include_alert_telegram_service_verify:
+        telegram_service_verify_report = (
+            evidence_dir / "server-alert-telegram-service-verification.json"
+        )
+        stages.append(
+            StageSpec(
+                name="telegram_alert_service_verify",
+                command=[
+                    python_executable,
+                    "infra/scripts/server_alert_telegram_service_verify.py",
+                    "--env-check-json",
+                    str(args.telegram_alert_service_env_check_json),
+                    "--delivery-json",
+                    str(args.telegram_alert_service_delivery_json),
+                    "--dedupe-state-json",
+                    str(args.telegram_alert_service_dedupe_state_json),
+                    "--json-output",
+                    str(telegram_service_verify_report),
+                ],
+                evidence_files=[telegram_service_verify_report],
             )
         )
 
@@ -457,6 +489,41 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Pass --strict-permissions to server_alert_telegram_env_check.py so "
             "group/world env file permissions fail acceptance."
+        ),
+    )
+    parser.add_argument(
+        "--include-alert-telegram-service-verify",
+        action="store_true",
+        help=(
+            "Run the read-only Telegram alert service evidence verifier against "
+            "evidence from a prior manual baizefindb-alert-telegram.service run."
+        ),
+    )
+    parser.add_argument(
+        "--telegram-alert-service-env-check-json",
+        type=Path,
+        default=DEFAULT_TELEGRAM_ALERT_SERVICE_ENV_CHECK_JSON,
+        help=(
+            "Env preflight evidence passed to server_alert_telegram_service_verify.py, "
+            f"default: {DEFAULT_TELEGRAM_ALERT_SERVICE_ENV_CHECK_JSON}"
+        ),
+    )
+    parser.add_argument(
+        "--telegram-alert-service-delivery-json",
+        type=Path,
+        default=DEFAULT_TELEGRAM_ALERT_SERVICE_DELIVERY_JSON,
+        help=(
+            "Telegram send evidence passed to server_alert_telegram_service_verify.py, "
+            f"default: {DEFAULT_TELEGRAM_ALERT_SERVICE_DELIVERY_JSON}"
+        ),
+    )
+    parser.add_argument(
+        "--telegram-alert-service-dedupe-state-json",
+        type=Path,
+        default=DEFAULT_TELEGRAM_ALERT_SERVICE_DEDUPE_STATE_JSON,
+        help=(
+            "Dedupe state evidence passed to server_alert_telegram_service_verify.py, "
+            f"default: {DEFAULT_TELEGRAM_ALERT_SERVICE_DEDUPE_STATE_JSON}"
         ),
     )
     return parser

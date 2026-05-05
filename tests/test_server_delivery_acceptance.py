@@ -248,6 +248,123 @@ def test_build_stage_specs_alert_env_check_does_not_send_or_pass_secret_args(
     assert forbidden_args.isdisjoint(env_stage.command)
 
 
+def test_build_stage_specs_excludes_alert_service_verify_by_default(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert "telegram_alert_service_verify" not in [stage.name for stage in stages]
+
+
+def test_build_stage_specs_includes_optional_alert_service_verify(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_alert_telegram_service_verify=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "telegram_alert_service_verify",
+    ]
+    assert stages[4].command == [
+        "python",
+        "infra/scripts/server_alert_telegram_service_verify.py",
+        "--env-check-json",
+        "evidence/server-alert-telegram-env-check.json",
+        "--delivery-json",
+        "evidence/server-alert-telegram-send.json",
+        "--dedupe-state-json",
+        "evidence/server-alert-telegram-dedupe-state.json",
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-service-verification.json"),
+    ]
+    assert stages[4].evidence_files == [
+        tmp_path / "server-alert-telegram-service-verification.json"
+    ]
+
+
+def test_build_stage_specs_places_alert_service_verify_after_preview_and_env_check(
+    tmp_path: Path,
+) -> None:
+    args = _args(
+        tmp_path,
+        include_alert_telegram_preview=True,
+        include_alert_telegram_env_check=True,
+        include_alert_telegram_service_verify=True,
+    )
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert [stage.name for stage in stages] == [
+        "deploy_preflight",
+        "backup_check",
+        "backup_retention",
+        "runtime_check",
+        "monitor_alert_payload",
+        "telegram_alert_preview",
+        "telegram_alert_env_check",
+        "telegram_alert_service_verify",
+    ]
+
+
+def test_build_stage_specs_passes_custom_alert_service_verify_paths(
+    tmp_path: Path,
+) -> None:
+    env_check = tmp_path / "handoff" / "env-check.json"
+    delivery = tmp_path / "handoff" / "send.json"
+    dedupe_state = tmp_path / "handoff" / "dedupe-state.json"
+    args = _args(
+        tmp_path,
+        include_alert_telegram_service_verify=True,
+        telegram_alert_service_env_check_json=env_check,
+        telegram_alert_service_delivery_json=delivery,
+        telegram_alert_service_dedupe_state_json=dedupe_state,
+    )
+
+    verify_stage = server_delivery_acceptance.build_stage_specs(args)[-1]
+
+    assert verify_stage.command == [
+        "python",
+        "infra/scripts/server_alert_telegram_service_verify.py",
+        "--env-check-json",
+        str(env_check),
+        "--delivery-json",
+        str(delivery),
+        "--dedupe-state-json",
+        str(dedupe_state),
+        "--json-output",
+        str(tmp_path / "server-alert-telegram-service-verification.json"),
+    ]
+
+
+def test_build_stage_specs_alert_service_verify_is_read_only(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path, include_alert_telegram_service_verify=True)
+
+    verify_stage = server_delivery_acceptance.build_stage_specs(args)[-1]
+
+    forbidden_args = {
+        "--send",
+        "--chat-id",
+        "--env-file",
+        "--ignore-dedupe",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_CHAT_IDS",
+        "systemctl",
+        "journalctl",
+        "server_alert_telegram.py",
+        "server_alert_telegram_env_check.py",
+    }
+    assert forbidden_args.isdisjoint(verify_stage.command)
+
+
 def test_build_stage_specs_passes_base_url_to_alert_preview_monitor(
     tmp_path: Path,
 ) -> None:
@@ -423,6 +540,33 @@ def test_run_stage_promotes_warning_evidence_status(monkeypatch, tmp_path: Path)
         server_delivery_acceptance.StageSpec(
             name="deploy_preflight",
             command=["python", "helper.py"],
+            evidence_files=[evidence],
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert result.status == "warn"
+    assert result.ok
+    assert result.evidence_statuses == {str(evidence): "warn"}
+
+
+def test_run_stage_promotes_alert_service_verify_warning(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "server-alert-telegram-service-verification.json"
+    evidence.write_text(json.dumps({"status": "warn"}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        server_delivery_acceptance.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0),
+    )
+
+    result = server_delivery_acceptance.run_stage(
+        server_delivery_acceptance.StageSpec(
+            name="telegram_alert_service_verify",
+            command=["python", "infra/scripts/server_alert_telegram_service_verify.py"],
             evidence_files=[evidence],
         ),
         repo_root=tmp_path,

@@ -131,6 +131,16 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-alert-telegram-preview --include-alert-telegram-env-check --telegram-alert-env-strict-permissions
 ```
 
+如果已经手动运行过 `baizefindb-alert-telegram.service`，可加
+`--include-alert-telegram-service-verify`，把已有 env-check、send 和 dedupe-state
+evidence 的只读验证结果写入同一验收包。该阶段只调用
+`server_alert_telegram_service_verify.py`，不会启动 systemd、不会发送 Telegram、
+不会读取 env 文件明文：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --include-alert-telegram-service-verify
+```
+
 汇总报告会读取每个 helper 生成的 evidence JSON 顶层 `status`：任一 evidence
 为 `warn` / `warning` 时，阶段和总报告标为 `warn` 但仍零退出；任一 evidence
 为 `fail` / `error` / `blocked`，或预期 evidence 文件缺失、不可读、JSON 损坏时，
@@ -315,6 +325,12 @@ state 有效才是 `ok`；`skipped` 只说明本次 payload 不需要通知，�
 非阻塞 `warn`；preview、配置错误、发送失败、损坏或缺失 evidence 都是 `fail`。
 报告不会输出 bot token、raw chat id、raw URL、env 文件内容、message preview 或
 delivery raw error。
+
+也可以把这一步纳入交付验收：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-service-verify
+```
 
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、

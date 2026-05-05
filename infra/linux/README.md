@@ -17,7 +17,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/server_alert_telegram.py` | Telegram alert delivery adapter; preview by default, sends only with explicit `--send`. |
 | `../scripts/server_alert_telegram_env_check.py` | Read-only Telegram alert env file preflight for file permissions, required keys, and chat id format without exposing secrets. |
 | `../scripts/server_alert_telegram_service_verify.py` | Read-only verifier for manual alert service env-check, send, and dedupe-state evidence before adding any schedule. |
-| `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, and runtime sampling into one bounded evidence bundle. |
+| `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, runtime sampling, and optional alert evidence verification into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
@@ -360,6 +360,16 @@ When a specific backup file should be checked for a restore drill without
 restoring data, add `--restore-check-input backups/<file>.sql`; the orchestrator
 will add `postgres_restore.py --check-only --check-json-output ...` and will not
 pass `--confirm-restore`.
+
+After a manual `baizefindb-alert-telegram.service` run, add
+`--include-alert-telegram-service-verify` to put the read-only service evidence
+verification report in the same acceptance bundle. The stage reads existing
+env-check, send, and dedupe-state JSON evidence and does not start systemd or
+send Telegram:
+
+```bash
+python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-service-verify
+```
 
 Verify Tushare `stock_basic` without writing to the database:
 
