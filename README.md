@@ -141,6 +141,8 @@ Linux 骨架提供可选 `infra/linux/baizefindb-alert-telegram.service`，用�
 
 Telegram 告警凭据文件可用 `infra/scripts/server_alert_telegram_env_check.py --env-file /etc/baizefindb/telegram-alert.env --json-output evidence/server-alert-telegram-env-check.json` 做只读预检；该报告只记录权限状态、token 是否配置、chat id 数量和 masked chat refs，不输出 token、raw chat id 或 env 文件内容。
 
+手动启动 `baizefindb-alert-telegram.service` 后，可用 `infra/scripts/server_alert_telegram_service_verify.py --json-output evidence/server-alert-telegram-service-verification.json` 验证 env check、send evidence 和 dedupe state 是否足以进入后续调度设计；`sent` / `deduped` 且 dedupe state 有效为 `ok`，`skipped` 为非阻塞 `warn`，preview、配置错误、发送失败、损坏或缺失 evidence 为 `fail`。
+
 同一预检也可以纳入交付验收包：`infra/scripts/server_delivery_acceptance.py --include-alert-telegram-env-check` 会额外生成 `evidence/server-delivery-acceptance/server-alert-telegram-env-check.json`；生产交付时可加 `--telegram-alert-env-strict-permissions`，让凭据文件权限过宽直接阻断验收。
 
 ## Windows 客户端 MVP

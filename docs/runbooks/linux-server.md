@@ -16,6 +16,7 @@
 | `infra/scripts/server_alert_payload.py` | no-send 告警 payload 生成脚本，从已有 compact monitor summary 生成有界 JSON，不发送通知。 |
 | `infra/scripts/server_alert_telegram.py` | Telegram 告警交付适配器，默认只预览 delivery evidence，只有显式 `--send` 才调用 Telegram。 |
 | `infra/scripts/server_alert_telegram_env_check.py` | Telegram 告警本机 env 文件只读预检脚本，验证权限、token 配置和 chat id 格式，不输出 secrets。 |
+| `infra/scripts/server_alert_telegram_service_verify.py` | 手动 alert service 运行后的只读 evidence 验证脚本，检查 env check、send evidence 和 dedupe state 是否足够进入调度设计。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
 | `infra/scripts/postgres_backup_retention.py` | PostgreSQL 备份保留期脚本，默认 dry-run，只扫描本地普通 `.sql` 备份；显式 `--delete` 才删除过期文件。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
@@ -300,6 +301,20 @@ journalctl -u baizefindb-alert-telegram.service -n 50
 `evidence/server-alert-telegram-env-check.json`。env 文件缺失、格式错误、服务账号不可读
 或权限过宽时，service 会先失败而不会发送 Telegram；它不会读取数据库绑定、写 push logs、
 采集 Provider、跑雷达扫描、调用模型、生成报告、备份或清理。
+
+手动 service 跑完后，用只读 verifier 检查三份 evidence 是否满足后续调度前提：
+
+```powershell
+uv run python infra/scripts/server_alert_telegram_service_verify.py --json-output evidence/server-alert-telegram-service-verification.json
+```
+
+验证器只读取 `server-alert-telegram-env-check.json`、
+`server-alert-telegram-send.json` 和 `server-alert-telegram-dedupe-state.json`。
+env check 必须为 `ok`；delivery 必须是 `mode=send`，`sent` / `deduped` 且 dedupe
+state 有效才是 `ok`；`skipped` 只说明本次 payload 不需要通知，因此总状态为
+非阻塞 `warn`；preview、配置错误、发送失败、损坏或缺失 evidence 都是 `fail`。
+报告不会输出 bot token、raw chat id、raw URL、env 文件内容、message preview 或
+delivery raw error。
 
 如果要让服务器自己定时写监控摘要，可复制 systemd timer 示例。复制前先根据实际
 部署账号调整 `infra/linux/baizefindb-monitor.service` 里的 `User`、`Group`、

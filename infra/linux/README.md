@@ -16,6 +16,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/server_alert_payload.py` | Filesystem-only no-send alert payload builder from an existing compact monitor summary. |
 | `../scripts/server_alert_telegram.py` | Telegram alert delivery adapter; preview by default, sends only with explicit `--send`. |
 | `../scripts/server_alert_telegram_env_check.py` | Read-only Telegram alert env file preflight for file permissions, required keys, and chat id format without exposing secrets. |
+| `../scripts/server_alert_telegram_service_verify.py` | Read-only verifier for manual alert service env-check, send, and dedupe-state evidence before adding any schedule. |
 | `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, backup retention dry-run evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
 | `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
@@ -284,6 +285,20 @@ journalctl -u baizefindb-alert-telegram.service -n 50
 The service writes `evidence/server-alert-telegram-env-check.json` before the
 send evidence and dedupe state. Missing, malformed, unreadable, or unsafe env
 file permissions fail the service before Telegram delivery.
+
+After a manual service run, verify the handoff evidence before considering any
+timer or schedule:
+
+```bash
+python infra/scripts/server_alert_telegram_service_verify.py --json-output evidence/server-alert-telegram-service-verification.json
+```
+
+The verifier reads only the env-check, delivery, and dedupe-state JSON files.
+`sent` or `deduped` delivery with valid dedupe state is `ok`; `skipped` is a
+non-blocking `warn` because no Telegram notification was due; preview,
+configuration errors, failed delivery, missing evidence, symlinks, invalid JSON,
+or wrong report types are `fail`. The report omits bot tokens, raw chat ids, raw
+URLs, env file contents, message previews, and delivery raw errors.
 
 This module intentionally provides no timer. Add scheduling only after manual
 send and dedupe evidence are verified.
