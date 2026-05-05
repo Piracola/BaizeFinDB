@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -11,6 +12,8 @@ MODULE_PATH = (
     / "scripts"
     / "server_deploy_check.py"
 )
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LINUX_DIR = REPO_ROOT / "infra" / "linux"
 SPEC = importlib.util.spec_from_file_location("server_deploy_check", MODULE_PATH)
 assert SPEC is not None
 assert SPEC.loader is not None
@@ -170,6 +173,61 @@ def test_check_env_passes_when_env_exists(tmp_path: Path) -> None:
 
     assert result.status == "ok"
     assert result.ok
+
+
+def test_check_systemd_units_passes_for_current_templates() -> None:
+    results = server_deploy_check.check_systemd_units(REPO_ROOT)
+
+    assert all(result.ok for result in results)
+    assert "systemd alert Telegram timer" in {result.name for result in results}
+
+
+def test_check_systemd_units_fails_for_missing_unit_file(tmp_path: Path) -> None:
+    root = _copy_linux_templates(tmp_path)
+    (root / "infra" / "linux" / "baizefindb-alert-telegram.timer").unlink()
+
+    results = server_deploy_check.check_systemd_units(root)
+
+    present_check = _check_result(results, "systemd unit files present")
+    assert present_check.status == "fail"
+    assert "baizefindb-alert-telegram.timer" in present_check.detail
+
+
+def test_check_systemd_units_fails_for_alert_timer_drift(tmp_path: Path) -> None:
+    root = _copy_linux_templates(tmp_path)
+    timer_path = root / "infra" / "linux" / "baizefindb-alert-telegram.timer"
+    timer_path.write_text(
+        timer_path.read_text(encoding="utf-8").replace(
+            "OnUnitActiveSec=5min",
+            "OnUnitActiveSec=10min",
+        ),
+        encoding="utf-8",
+    )
+
+    results = server_deploy_check.check_systemd_units(root)
+
+    timer_check = _check_result(results, "systemd alert Telegram timer")
+    assert timer_check.status == "fail"
+    assert "OnUnitActiveSec expected 5min" in timer_check.detail
+
+
+def test_check_systemd_units_fails_for_forbidden_secret_marker(tmp_path: Path) -> None:
+    root = _copy_linux_templates(tmp_path)
+    service_path = root / "infra" / "linux" / "baizefindb-monitor.service"
+    service_path.write_text(
+        service_path.read_text(encoding="utf-8")
+        + '\nEnvironment="TELEGRAM_BOT_TOKEN=secret-token"\n',
+        encoding="utf-8",
+    )
+
+    results = server_deploy_check.check_systemd_units(root)
+
+    secret_check = _check_result(
+        results,
+        "systemd unit files no embedded secrets or alternate delivery",
+    )
+    assert secret_check.status == "fail"
+    assert "telegram_bot_token" in secret_check.detail
 
 
 def test_build_report_summarizes_ok_warn_and_fail() -> None:
@@ -507,6 +565,58 @@ def test_main_default_does_not_run_tushare_anns_d_beat_enablement(
     assert calls == []
 
 
+def test_main_default_does_not_run_systemd_unit_check(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text("APP_ENV=server\n")
+    calls = []
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_systemd_units",
+        lambda root: calls.append(root) or [],
+    )
+
+    exit_code = server_deploy_check.main([])
+
+    assert exit_code == 0
+    assert calls == []
+
+
+def test_main_check_systemd_units_writes_results_to_json(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    root = _copy_linux_templates(tmp_path)
+    (root / ".env").write_text("APP_ENV=server\n")
+    output = tmp_path / "evidence" / "deploy-check.json"
+
+    monkeypatch.setattr(server_deploy_check, "find_repo_root", lambda: root)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "run_command",
+        lambda name, command, root: server_deploy_check.CheckResult(name, "ok"),
+    )
+
+    exit_code = server_deploy_check.main(
+        ["--check-systemd-units", "--json-output", str(output)]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    names = {check["name"] for check in report["checks"]}
+    assert exit_code == 0
+    assert report["status"] == "ok"
+    assert "systemd unit files present" in names
+    assert "systemd alert Telegram timer" in names
+
+
 def test_main_json_output_writes_report_and_keeps_console_output(
     monkeypatch,
     tmp_path: Path,
@@ -793,3 +903,19 @@ def test_tushare_anns_d_beat_enablement_summary_does_not_leak_token(monkeypatch)
 
     assert "super-secret-token" not in result.detail
     assert "token value should not be copied" not in result.detail
+
+
+def _copy_linux_templates(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    shutil.copytree(LINUX_DIR, root / "infra" / "linux")
+    return root
+
+
+def _check_result(
+    results: list[server_deploy_check.CheckResult],
+    name: str,
+) -> server_deploy_check.CheckResult:
+    for result in results:
+        if result.name == name:
+            return result
+    raise AssertionError(f"missing check result: {name}")

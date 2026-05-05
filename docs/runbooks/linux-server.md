@@ -77,6 +77,7 @@ docker build -t baizefindb-api:dev .
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py
+uv run python infra/scripts/server_deploy_check.py --check-systemd-units
 ```
 
 需要给脚本、CI 或 Windows 首次试运行流程保留结构化结果时，加
@@ -85,7 +86,13 @@ uv run python infra/scripts/server_deploy_check.py
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --json-output evidence/server-deploy-check.json
+uv run python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
 ```
+
+`--check-systemd-units` 只读验证仓库内 `infra/linux/` 模板是否仍符合当前
+service/timer contract，例如 monitor/alert/backup timer 目标、周期、evidence 输出、
+Telegram env preflight、dedupe 和 no-secret 边界。它不调用 `systemctl` 或
+`journalctl`，也不检查服务器上已经安装的 unit。
 
 服务已经启动后，要做一次面向交付/首次真实使用的整体验收，可以用一条命令串联
 部署预检、备份工具链 check-only evidence、备份保留期 dry-run evidence 和运行时采样。默认 evidence 目录是
@@ -268,7 +275,7 @@ uv run python infra/scripts/server_alert_telegram.py evidence/server-alert-paylo
 dedupe state 会在发送前返回 `2`，避免在状态不可信时继续发通知。
 
 仓库提供了可选 `infra/linux/baizefindb-alert-telegram.service` oneshot 示例，
-但不会默认启用 timer。使用前先在服务器本地创建未纳入 git 的凭据文件：
+timer 需要在手动 evidence 验证通过后单独复制启用。使用前先在服务器本地创建未纳入 git 的凭据文件：
 
 ```powershell
 sudo install -d -o baizefindb -g baizefindb -m 700 /etc/baizefindb

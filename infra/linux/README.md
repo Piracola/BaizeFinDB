@@ -103,12 +103,19 @@ Or run the bundled preflight:
 ```bash
 python infra/scripts/server_deploy_check.py --strict-env
 python infra/scripts/server_deploy_check.py --strict-env --json-output evidence/server-deploy-check.json
+python infra/scripts/server_deploy_check.py --check-systemd-units --json-output evidence/server-deploy-check-systemd.json
 ```
 
 The preflight uses `docker compose config --quiet` so real environment values
 from `.env` are validated without being printed to deployment logs. `--json-output`
 writes a structured report with generated time, overall status, summary counts,
 and each check result while preserving the terminal output.
+
+`--check-systemd-units` is a static template check for tracked files under
+`infra/linux/`. It verifies the compose, monitor, alert Telegram, and PostgreSQL
+backup service/timer contracts before copying them to `/etc/systemd/system`; it
+does not call `systemctl`, inspect installed units, start services, or print
+secrets.
 
 Build the API image:
 

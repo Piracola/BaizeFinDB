@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import json
 import subprocess
 import sys
@@ -15,6 +16,26 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 SERVER_COMPOSE_FILES = ("docker-compose.yml", "docker-compose.server.yml")
 DEFAULT_POSTGRES_SERVICE = "postgres"
+LINUX_SYSTEMD_UNIT_FILES = (
+    "baizefindb-compose.service",
+    "baizefindb-monitor.service",
+    "baizefindb-monitor.timer",
+    "baizefindb-alert-telegram.service",
+    "baizefindb-alert-telegram.timer",
+    "baizefindb-postgres-backup.service",
+    "baizefindb-postgres-backup.timer",
+)
+SYSTEMD_FORBIDDEN_MARKERS = (
+    "telegram_bot_token",
+    "telegram_webhook_secret",
+    "webhook_url",
+    "password=",
+    "secret=",
+    "token=",
+    "curl ",
+    "sendmail",
+    "smtp",
+)
 RADAR_SIGNAL_LIST_SMOKE_PATH = "/radar/signals?limit=1"
 RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS = (
     "signal_id",
@@ -350,6 +371,89 @@ def check_tushare_anns_d_beat_enablement() -> CheckResult:
     )
 
 
+def check_systemd_units(root: Path) -> list[CheckResult]:
+    linux_dir = root / "infra" / "linux"
+    texts: dict[str, str] = {}
+    parsers: dict[str, configparser.ConfigParser] = {}
+    missing: list[str] = []
+    invalid: list[str] = []
+
+    for name in LINUX_SYSTEMD_UNIT_FILES:
+        path = linux_dir / name
+        if not path.exists():
+            missing.append(name)
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+            parser = _parse_systemd_unit(text)
+        except (OSError, configparser.Error) as exc:
+            invalid.append(f"{name}: {exc.__class__.__name__}")
+            continue
+        texts[name] = text
+        parsers[name] = parser
+
+    results = [
+        CheckResult(
+            "systemd unit files present",
+            "fail" if missing else "ok",
+            (
+                f"missing unit file(s): {', '.join(missing)}"
+                if missing
+                else f"unit files present: {len(LINUX_SYSTEMD_UNIT_FILES)}"
+            ),
+        ),
+        CheckResult(
+            "systemd unit files parse",
+            "fail" if invalid else "ok",
+            (
+                f"invalid unit file(s): {', '.join(invalid)}"
+                if invalid
+                else "all available unit files parsed"
+            ),
+        ),
+    ]
+
+    if texts:
+        results.append(_check_systemd_forbidden_markers(texts))
+
+    if "baizefindb-compose.service" in parsers:
+        results.append(
+            _check_required_markers(
+                "systemd compose service",
+                texts["baizefindb-compose.service"],
+                (
+                    "docker compose -f docker-compose.yml -f docker-compose.server.yml up -d",
+                    "docker compose -f docker-compose.yml -f docker-compose.server.yml down",
+                    "RemainAfterExit=yes",
+                    "WantedBy=multi-user.target",
+                ),
+            )
+        )
+    if "baizefindb-monitor.service" in parsers:
+        results.append(_check_monitor_service(texts["baizefindb-monitor.service"]))
+    if "baizefindb-monitor.timer" in parsers:
+        results.append(_check_monitor_timer(parsers["baizefindb-monitor.timer"]))
+    if "baizefindb-alert-telegram.service" in parsers:
+        results.append(
+            _check_alert_telegram_service(texts["baizefindb-alert-telegram.service"])
+        )
+    if "baizefindb-alert-telegram.timer" in parsers:
+        results.append(
+            _check_alert_telegram_timer(
+                parsers["baizefindb-alert-telegram.timer"],
+                texts["baizefindb-alert-telegram.timer"],
+            )
+        )
+    if "baizefindb-postgres-backup.service" in parsers:
+        results.append(
+            _check_postgres_backup_service(texts["baizefindb-postgres-backup.service"])
+        )
+    if "baizefindb-postgres-backup.timer" in parsers:
+        results.append(_check_postgres_backup_timer(parsers["baizefindb-postgres-backup.timer"]))
+
+    return results
+
+
 def build_report(checks: list[CheckResult]) -> dict[str, object]:
     counts = {
         "ok": sum(1 for check in checks if check.status == "ok"),
@@ -420,6 +524,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--check-containers",
         action="store_true",
         help="Run docker compose ps for the server overlay.",
+    )
+    parser.add_argument(
+        "--check-systemd-units",
+        action="store_true",
+        help=(
+            "Statically validate tracked infra/linux systemd service/timer templates. "
+            "Does not call systemctl or inspect installed units."
+        ),
     )
     parser.add_argument(
         "--check-backup",
@@ -503,6 +615,9 @@ def main(argv: list[str] | None = None) -> int:
             ),
         )
 
+    if args.check_systemd_units:
+        checks.extend(check_systemd_units(root))
+
     if args.check_backup:
         if args.backup_check_json_output:
             checks.append(
@@ -552,6 +667,212 @@ def _truncate(text: str, *, limit: int = 700) -> str:
     if len(text) <= limit:
         return text
     return f"{text[: limit - 15]}\n... truncated"
+
+
+def _parse_systemd_unit(text: str) -> configparser.ConfigParser:
+    parser = configparser.ConfigParser(interpolation=None, strict=False)
+    parser.optionxform = str
+    parser.read_string(text)
+    return parser
+
+
+def _check_systemd_forbidden_markers(texts: dict[str, str]) -> CheckResult:
+    hits: list[str] = []
+    for name, text in texts.items():
+        lowered = text.lower()
+        for marker in SYSTEMD_FORBIDDEN_MARKERS:
+            if marker in lowered:
+                hits.append(f"{name}:{marker}")
+
+    return CheckResult(
+        "systemd unit files no embedded secrets or alternate delivery",
+        "fail" if hits else "ok",
+        (
+            f"forbidden marker(s): {', '.join(hits[:8])}"
+            if hits
+            else "no forbidden secret or alternate delivery markers found"
+        ),
+    )
+
+
+def _check_required_markers(name: str, text: str, markers: tuple[str, ...]) -> CheckResult:
+    missing = [marker for marker in markers if marker not in text]
+    return CheckResult(
+        name,
+        "fail" if missing else "ok",
+        (
+            f"missing marker(s): {', '.join(missing)}"
+            if missing
+            else "required markers present"
+        ),
+    )
+
+
+def _check_unit_values(
+    name: str,
+    parser: configparser.ConfigParser,
+    expected: tuple[tuple[str, str, str], ...],
+) -> CheckResult:
+    mismatches = []
+    for section, key, expected_value in expected:
+        actual = parser[section].get(key, "") if parser.has_section(section) else ""
+        if actual != expected_value:
+            mismatches.append(
+                f"{section}.{key} expected {expected_value}, got {actual or 'missing'}"
+            )
+
+    return CheckResult(
+        name,
+        "fail" if mismatches else "ok",
+        (
+            f"mismatch(es): {'; '.join(mismatches[:6])}"
+            if mismatches
+            else "expected values present"
+        ),
+    )
+
+
+def _check_monitor_service(text: str) -> CheckResult:
+    result = _check_required_markers(
+        "systemd monitor service",
+        text,
+        (
+            "server_monitor_check.py",
+            "--include-ops-trends",
+            "--json-output ${BAIZEFINDB_MONITOR_OUTPUT}",
+            "--runtime-json-output ${BAIZEFINDB_RUNTIME_OUTPUT}",
+            "--alert-json-output ${BAIZEFINDB_ALERT_OUTPUT}",
+            "BAIZEFINDB_ALERT_OUTPUT=evidence/server-alert-payload.json",
+        ),
+    )
+    if result.status == "fail":
+        return result
+    if "--fail-on-warning" in text:
+        return CheckResult(
+            "systemd monitor service",
+            "fail",
+            "monitor timer template must not fail warning-only summaries by default",
+        )
+    return result
+
+
+def _check_monitor_timer(parser: configparser.ConfigParser) -> CheckResult:
+    return _check_unit_values(
+        "systemd monitor timer",
+        parser,
+        (
+            ("Timer", "Unit", "baizefindb-monitor.service"),
+            ("Timer", "OnBootSec", "2min"),
+            ("Timer", "OnUnitActiveSec", "5min"),
+            ("Timer", "AccuracySec", "30s"),
+            ("Timer", "Persistent", "true"),
+            ("Install", "WantedBy", "timers.target"),
+        ),
+    )
+
+
+def _check_alert_telegram_service(text: str) -> CheckResult:
+    result = _check_required_markers(
+        "systemd alert Telegram service",
+        text,
+        (
+            "server_alert_telegram_env_check.py",
+            "--env-file /etc/baizefindb/telegram-alert.env",
+            "--strict-permissions",
+            "--json-output ${BAIZEFINDB_ALERT_TELEGRAM_ENV_CHECK_OUTPUT}",
+            "server_alert_telegram.py ${BAIZEFINDB_ALERT_PAYLOAD}",
+            "--send",
+            "--dedupe-state ${BAIZEFINDB_ALERT_TELEGRAM_DEDUPE_STATE}",
+            "--dedupe-ttl-seconds ${BAIZEFINDB_ALERT_TELEGRAM_TTL_SECONDS}",
+            "--json-output ${BAIZEFINDB_ALERT_TELEGRAM_OUTPUT}",
+            "EnvironmentFile=-/etc/baizefindb/telegram-alert.env",
+        ),
+    )
+    if result.status == "fail":
+        return result
+    if "--ignore-dedupe" in text:
+        return CheckResult(
+            "systemd alert Telegram service",
+            "fail",
+            "alert service must not bypass dedupe in the template",
+        )
+    return result
+
+
+def _check_alert_telegram_timer(
+    parser: configparser.ConfigParser,
+    text: str,
+) -> CheckResult:
+    value_check = _check_unit_values(
+        "systemd alert Telegram timer",
+        parser,
+        (
+            ("Timer", "Unit", "baizefindb-alert-telegram.service"),
+            ("Timer", "OnBootSec", "3min"),
+            ("Timer", "OnUnitActiveSec", "5min"),
+            ("Timer", "AccuracySec", "30s"),
+            ("Timer", "Persistent", "true"),
+            ("Install", "WantedBy", "timers.target"),
+        ),
+    )
+    if value_check.status == "fail":
+        return value_check
+
+    forbidden = (
+        "ExecStart",
+        "server_alert_telegram.py",
+        "server_monitor_check.py",
+        "postgres_backup.py",
+        "run_radar_scan",
+    )
+    return _check_required_absence("systemd alert Telegram timer", text, forbidden)
+
+
+def _check_postgres_backup_service(text: str) -> CheckResult:
+    result = _check_required_markers(
+        "systemd PostgreSQL backup service",
+        text,
+        (
+            "postgres_backup.py --backup-dir backups --check-only",
+            "--check-json-output ${BAIZEFINDB_BACKUP_CHECK_OUTPUT}",
+            "postgres_backup.py --backup-dir backups",
+            "BAIZEFINDB_BACKUP_CHECK_OUTPUT=evidence/postgres-backup-timer-check.json",
+        ),
+    )
+    if result.status == "fail":
+        return result
+    return _check_required_absence(
+        "systemd PostgreSQL backup service",
+        text,
+        ("postgres_restore.py", "--confirm-restore"),
+    )
+
+
+def _check_postgres_backup_timer(parser: configparser.ConfigParser) -> CheckResult:
+    return _check_unit_values(
+        "systemd PostgreSQL backup timer",
+        parser,
+        (
+            ("Timer", "Unit", "baizefindb-postgres-backup.service"),
+            ("Timer", "OnCalendar", "*-*-* 03:15:00"),
+            ("Timer", "RandomizedDelaySec", "15min"),
+            ("Timer", "Persistent", "true"),
+            ("Install", "WantedBy", "timers.target"),
+        ),
+    )
+
+
+def _check_required_absence(name: str, text: str, markers: tuple[str, ...]) -> CheckResult:
+    present = [marker for marker in markers if marker in text]
+    return CheckResult(
+        name,
+        "fail" if present else "ok",
+        (
+            f"forbidden marker(s): {', '.join(present)}"
+            if present
+            else "forbidden markers absent"
+        ),
+    )
 
 
 def _read_http_json(
