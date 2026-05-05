@@ -111,7 +111,7 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 uv run python infra/scripts/server_deploy_check.py --check-containers --check-api
 ```
 
-验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态、服务端磁盘/CPU/内存摘要、`/ops/history` 运维历史、`/ops/trends` 趋势快照、`/ops/readiness` 运行就绪自检、AKShare 状态、Tushare 状态和 Tushare 准入自检：
+验证 M5 核心只读接口 JSON 契约，包含 `/ops/overview` 的运行状态、服务端磁盘/CPU/内存摘要、`/ops/history` 运维历史、`/ops/trends` 趋势快照、`/ops/readiness` 运行就绪自检、AKShare 状态、Tushare 状态、Tushare 准入自检、`/radar/signals` 候选信号列表，以及有信号时的 `/radar/signals/{id}/analysis` 单信号分析摘要。新服务器还没有信号时，analysis 采样会记录 warning，不作为部署 blocker：
 
 ```powershell
 uv run python infra/scripts/server_deploy_check.py --check-m5-smoke

@@ -19,6 +19,20 @@ sys.modules[SPEC.name] = server_deploy_check
 SPEC.loader.exec_module(server_deploy_check)
 
 
+class _FakeJsonResponse:
+    def __init__(self, payload: object) -> None:
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode("utf-8")
+
+
 def test_server_compose_command_uses_overlay_files() -> None:
     assert server_deploy_check.server_compose_command("config", "--quiet") == [
         "docker",
@@ -279,7 +293,16 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
         calls.append((base_url, path, required_fields, timeout))
         return server_deploy_check.CheckResult(path, "ok")
 
+    def fake_signal_analysis_smoke(base_url: str, *, timeout: int):
+        calls.append((base_url, "radar signal analysis smoke", (), timeout))
+        return [server_deploy_check.CheckResult("radar signal analysis smoke", "ok")]
+
     monkeypatch.setattr(server_deploy_check, "check_http_json_fields", fake_check)
+    monkeypatch.setattr(
+        server_deploy_check,
+        "check_radar_signal_analysis_smoke",
+        fake_signal_analysis_smoke,
+    )
 
     results = server_deploy_check.check_m5_smoke("http://api.test", timeout=3)
 
@@ -296,6 +319,7 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
         "/providers/tushare/readiness",
         "/radar/overview",
         "/telegram/status",
+        "radar signal analysis smoke",
     ]
     ops_call = calls[2]
     assert "server" in ops_call[2]
@@ -315,6 +339,133 @@ def test_m5_smoke_checks_cover_read_only_core_endpoints(monkeypatch) -> None:
     ops_readiness_call = calls[5]
     assert "status" in ops_readiness_call[2]
     assert "checks" in ops_readiness_call[2]
+
+
+def test_radar_signal_analysis_smoke_samples_first_signal_analysis(monkeypatch) -> None:
+    requested_paths: list[str] = []
+
+    def fake_urlopen(request, **kwargs):
+        requested_paths.append(request.full_url.removeprefix("http://api.test"))
+        if request.full_url.endswith("/radar/signals?limit=1"):
+            return _FakeJsonResponse([{"id": 42, "priority": "P1"}])
+        return _FakeJsonResponse(
+            {
+                "signal_id": 42,
+                "subject_type": "sector",
+                "subject_name": "AI Applications",
+                "priority": "P1",
+                "lifecycle_stage": "developing",
+                "review_status": "candidate",
+                "analysis_title": "P1 research brief: AI Applications",
+                "key_points": [],
+                "metric_highlights": [],
+                "risk_flags": [],
+                "evidence_summary": {},
+                "review_summary": {},
+                "agent_inputs": {},
+                "next_actions": [],
+            }
+        )
+
+    monkeypatch.setattr(server_deploy_check, "urlopen", fake_urlopen)
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert [result.status for result in results] == ["ok", "ok"]
+    assert requested_paths == [
+        "/radar/signals?limit=1",
+        "/radar/signals/42/analysis",
+    ]
+
+
+def test_radar_signal_analysis_smoke_warns_when_no_signal_exists(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse([]),
+    )
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "warn"
+    assert results[0].ok
+    assert "skipped signal analysis" in results[0].detail
+
+
+def test_radar_signal_analysis_smoke_fails_for_malformed_signal_list(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse({"id": 1}),
+    )
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "fail"
+    assert "array" in results[0].detail
+
+
+def test_radar_signal_analysis_smoke_fails_without_integer_signal_id(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server_deploy_check,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse([{"id": "42"}]),
+    )
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "fail"
+    assert "integer id" in results[0].detail
+
+
+def test_radar_signal_analysis_smoke_fails_for_missing_analysis_field(
+    monkeypatch,
+) -> None:
+    def fake_urlopen(request, **kwargs):
+        if request.full_url.endswith("/radar/signals?limit=1"):
+            return _FakeJsonResponse([{"id": 7}])
+        return _FakeJsonResponse(
+            {
+                "signal_id": 7,
+                "subject_type": "sector",
+                "subject_name": "AI Applications",
+                "priority": "P1",
+                "lifecycle_stage": "developing",
+                "review_status": "candidate",
+                "analysis_title": "P1 research brief: AI Applications",
+                "key_points": [],
+                "metric_highlights": [],
+                "risk_flags": [],
+                "evidence_summary": {},
+                "review_summary": {},
+                "agent_inputs": {},
+            }
+        )
+
+    monkeypatch.setattr(server_deploy_check, "urlopen", fake_urlopen)
+
+    results = server_deploy_check.check_radar_signal_analysis_smoke(
+        "http://api.test",
+        timeout=2,
+    )
+
+    assert [result.status for result in results] == ["ok", "fail"]
+    assert "next_actions" in results[1].detail
 
 
 def test_tushare_anns_d_beat_enablement_flag_defaults_off() -> None:

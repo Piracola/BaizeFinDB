@@ -514,6 +514,8 @@ Invoke-RestMethod "http://127.0.0.1:8000/radar/overview?limit=50"
 ### `GET /radar/signals`
 
 用途：查看候选信号列表。
+部署预检 `server_deploy_check.py --check-m5-smoke` 会用 `limit=1` 只读采样该列表；
+空列表只产生 warning，用于提示还无法抽样验证单信号分析摘要，不阻断新服务器预检。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals
@@ -549,7 +551,9 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1
 
 用途：查看后端生成的单信号只读研究摘要。该接口只使用已有
 signal/evidence/review 数据，不调用 LLM，不改变规则定级、生命周期或审查状态。
-Web 信号详情和 Windows 客户端 `查看分析` 按钮都只消费该后端摘要，不在入口层重新生成分析。
+Web 信号详情、Windows 客户端 `查看分析` 按钮和 Telegram `/analysis <id>` 都只消费该后端摘要，不在入口层重新生成分析。
+部署预检 `server_deploy_check.py --check-m5-smoke` 在 `/radar/signals?limit=1` 返回
+信号时会抽样校验该接口的必需字段；如果没有任何信号，则只记录 warning。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/analysis

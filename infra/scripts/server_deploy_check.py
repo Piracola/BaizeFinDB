@@ -15,6 +15,23 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 SERVER_COMPOSE_FILES = ("docker-compose.yml", "docker-compose.server.yml")
 DEFAULT_POSTGRES_SERVICE = "postgres"
+RADAR_SIGNAL_LIST_SMOKE_PATH = "/radar/signals?limit=1"
+RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS = (
+    "signal_id",
+    "subject_type",
+    "subject_name",
+    "priority",
+    "lifecycle_stage",
+    "review_status",
+    "analysis_title",
+    "key_points",
+    "metric_highlights",
+    "risk_flags",
+    "evidence_summary",
+    "review_summary",
+    "agent_inputs",
+    "next_actions",
+)
 M5_SMOKE_ENDPOINTS = (
     ("/health", ("status", "service")),
     ("/health/ready", ("status", "checks")),
@@ -220,22 +237,15 @@ def check_http_json_fields(
     *,
     timeout: int,
 ) -> CheckResult:
-    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
-    request = Request(url, headers={"Accept": "application/json"}, method="GET")
     name = f"HTTP JSON {path}"
-    try:
-        with urlopen(request, timeout=timeout) as response:  # noqa: S310
-            body = response.read().decode("utf-8", errors="replace")
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        return CheckResult(name, "fail", f"HTTP {exc.code}: {_truncate(body)}")
-    except (TimeoutError, URLError, OSError) as exc:
-        return CheckResult(name, "fail", str(exc))
-
-    try:
-        payload = json.loads(body)
-    except json.JSONDecodeError as exc:
-        return CheckResult(name, "fail", f"invalid JSON: {exc.msg}")
+    payload, error = _read_http_json(
+        base_url,
+        path,
+        timeout=timeout,
+        result_name=name,
+    )
+    if error is not None:
+        return error
 
     if not isinstance(payload, dict):
         return CheckResult(name, "fail", "JSON response is not an object")
@@ -252,7 +262,7 @@ def check_http_json_fields(
 
 
 def check_m5_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
-    return [
+    results = [
         check_http_json_fields(
             base_url,
             path,
@@ -260,6 +270,52 @@ def check_m5_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
             timeout=timeout,
         )
         for path, required_fields in M5_SMOKE_ENDPOINTS
+    ]
+    results.extend(check_radar_signal_analysis_smoke(base_url, timeout=timeout))
+    return results
+
+
+def check_radar_signal_analysis_smoke(base_url: str, *, timeout: int) -> list[CheckResult]:
+    name = f"HTTP JSON {RADAR_SIGNAL_LIST_SMOKE_PATH}"
+    payload, error = _read_http_json(
+        base_url,
+        RADAR_SIGNAL_LIST_SMOKE_PATH,
+        timeout=timeout,
+        result_name=name,
+    )
+    if error is not None:
+        return [error]
+
+    if not isinstance(payload, list):
+        return [CheckResult(name, "fail", "JSON response is not an array")]
+
+    if not payload:
+        return [
+            CheckResult(
+                name,
+                "warn",
+                "no radar signals available; skipped signal analysis contract sample",
+            ),
+        ]
+
+    signal_id = _first_signal_id(payload)
+    if signal_id is None:
+        return [
+            CheckResult(
+                name,
+                "fail",
+                "no signal object with integer id found in response",
+            ),
+        ]
+
+    return [
+        CheckResult(name, "ok", f"sampled signal id: {signal_id}"),
+        check_http_json_fields(
+            base_url,
+            f"/radar/signals/{signal_id}/analysis",
+            RADAR_SIGNAL_ANALYSIS_REQUIRED_FIELDS,
+            timeout=timeout,
+        ),
     ]
 
 
@@ -496,6 +552,40 @@ def _truncate(text: str, *, limit: int = 700) -> str:
     if len(text) <= limit:
         return text
     return f"{text[: limit - 15]}\n... truncated"
+
+
+def _read_http_json(
+    base_url: str,
+    path: str,
+    *,
+    timeout: int,
+    result_name: str,
+) -> tuple[object | None, CheckResult | None]:
+    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    request = Request(url, headers={"Accept": "application/json"}, method="GET")
+    try:
+        with urlopen(request, timeout=timeout) as response:  # noqa: S310
+            body = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        return None, CheckResult(result_name, "fail", f"HTTP {exc.code}: {_truncate(body)}")
+    except (TimeoutError, URLError, OSError) as exc:
+        return None, CheckResult(result_name, "fail", str(exc))
+
+    try:
+        return json.loads(body), None
+    except json.JSONDecodeError as exc:
+        return None, CheckResult(result_name, "fail", f"invalid JSON: {exc.msg}")
+
+
+def _first_signal_id(payload: list[object]) -> int | None:
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        signal_id = item.get("id")
+        if type(signal_id) is int:
+            return signal_id
+    return None
 
 
 def _build_tushare_anns_d_beat_enablement_report() -> dict[str, object]:
