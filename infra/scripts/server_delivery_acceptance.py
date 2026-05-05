@@ -102,22 +102,26 @@ def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
             )
         )
     else:
+        runtime_command = [
+            python_executable,
+            "infra/scripts/server_runtime_check.py",
+            "--base-url",
+            args.base_url,
+            "--samples",
+            str(args.runtime_samples),
+            "--interval-seconds",
+            str(args.runtime_interval_seconds),
+            "--include-ops-trends",
+            "--json-output",
+            str(evidence_dir / "server-runtime-check.json"),
+        ]
+        if args.fail_on_warning:
+            runtime_command.append("--fail-on-warning")
+
         stages.append(
             StageSpec(
                 name="runtime_check",
-                command=[
-                    python_executable,
-                    "infra/scripts/server_runtime_check.py",
-                    "--base-url",
-                    args.base_url,
-                    "--samples",
-                    str(args.runtime_samples),
-                    "--interval-seconds",
-                    str(args.runtime_interval_seconds),
-                    "--include-ops-trends",
-                    "--json-output",
-                    str(evidence_dir / "server-runtime-check.json"),
-                ],
+                command=runtime_command,
                 evidence_files=[evidence_dir / "server-runtime-check.json"],
             )
         )
@@ -289,6 +293,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop after the first failing stage.",
     )
+    parser.add_argument(
+        "--fail-on-warning",
+        action="store_true",
+        help=(
+            "Return a failing exit code for warning-only acceptance and pass the "
+            "strict warning mode to server_runtime_check.py."
+        ),
+    )
     return parser
 
 
@@ -307,7 +319,11 @@ def main(argv: list[str] | None = None) -> int:
     report = build_report(results, evidence_dir=args.evidence_dir)
     write_report(args.json_output, report)
     print(_format_summary(report, args.json_output))
-    return 1 if report["status"] == "fail" else 0
+    if report["status"] == "fail":
+        return 1
+    if report["status"] == "warn" and args.fail_on_warning:
+        return 1
+    return 0
 
 
 def _format_summary(report: dict[str, object], output_path: Path) -> str:

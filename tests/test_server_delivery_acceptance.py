@@ -76,6 +76,16 @@ def test_build_stage_specs_passes_custom_base_url_to_api_checks(tmp_path: Path) 
     assert "https://api.example.test" in stages[2].command
 
 
+def test_build_stage_specs_passes_fail_on_warning_to_runtime_only(tmp_path: Path) -> None:
+    args = _args(tmp_path, fail_on_warning=True)
+
+    stages = server_delivery_acceptance.build_stage_specs(args)
+
+    assert "--fail-on-warning" not in stages[0].command
+    assert "--fail-on-warning" not in stages[1].command
+    assert "--fail-on-warning" in stages[2].command
+
+
 def test_build_stage_specs_supports_runtime_overrides(tmp_path: Path) -> None:
     args = _args(tmp_path, runtime_samples=5, runtime_interval_seconds=7)
 
@@ -373,6 +383,52 @@ def test_main_returns_zero_and_reports_warning(monkeypatch, tmp_path: Path, caps
     assert report["summary"]["warn"] == 1
     assert "[WARN] deploy_preflight exit=0" in captured.out
     assert "evidence_statuses=" in captured.out
+
+
+def test_main_fail_on_warning_returns_nonzero_for_warning_report(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    output = tmp_path / "acceptance.json"
+
+    monkeypatch.setattr(server_delivery_acceptance, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_delivery_acceptance,
+        "run_stage",
+        lambda stage, *, repo_root: server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status="warn" if stage.name == "deploy_preflight" else "ok",
+            command=stage.command,
+            exit_code=0,
+            evidence_files=stage.evidence_files,
+            evidence_statuses={str(path): "warn" for path in stage.evidence_files},
+            stdout="warning-only",
+        ),
+    )
+
+    exit_code = server_delivery_acceptance.main(
+        [
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--json-output",
+            str(output),
+            "--python-executable",
+            "python",
+            "--runtime-samples",
+            "1",
+            "--runtime-interval-seconds",
+            "1",
+            "--fail-on-warning",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 1
+    assert report["status"] == "warn"
+    assert report["summary"]["warn"] == 1
+    assert "[WARN] deploy_preflight exit=0" in captured.out
 
 
 def test_main_rejects_invalid_runtime_samples() -> None:

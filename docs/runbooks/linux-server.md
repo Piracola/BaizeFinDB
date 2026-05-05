@@ -104,6 +104,14 @@ uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api
 对应阶段标为 `fail` 并返回非零。这样新服务器空信号列表等 warning 会被保留在
 交付记录里，但不会被误当成 blocker。
 
+生产切换或正式交付前，如果希望 warning-only 验收也阻断流水线，可以加
+`--fail-on-warning`。报告仍保留 `status: "warn"` 方便区分 warning 和 hard
+failure，但 CLI 会返回非零；该严格模式也会透传给运行采样阶段：
+
+```powershell
+uv run python infra/scripts/server_delivery_acceptance.py --base-url https://api.example.com --fail-on-warning
+```
+
 它只编排已有 helper，不直接导出数据库、不读取 `.env` 内容、不输出展开后的 compose
 environment。需要调整证据目录、运行采样窗口，或在首个失败阶段停止：
 

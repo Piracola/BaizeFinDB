@@ -233,9 +233,11 @@ python infra/scripts/server_delivery_acceptance.py --base-url https://<your-doma
 Delivery acceptance reads the top-level `status` field from each helper evidence
 JSON. Warning-only evidence stays visible as non-blocking `warn`; missing,
 unreadable, invalid, failing, `error`, or `blocked` evidence marks the stage as
-`fail`. Use `--evidence-dir`, `--runtime-samples`, `--runtime-interval-seconds`,
-and `--fail-fast` to adjust the evidence bundle or stop on the first failing
-stage.
+`fail`. Use `--fail-on-warning` for production handoff gates that should return a
+non-zero exit code on warning-only acceptance while preserving report
+`status="warn"`. Use `--evidence-dir`, `--runtime-samples`,
+`--runtime-interval-seconds`, and `--fail-fast` to adjust the evidence bundle or
+stop on the first failing stage.
 
 Verify Tushare `stock_basic` without writing to the database:
 
