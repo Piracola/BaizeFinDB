@@ -13,6 +13,7 @@
 | `infra/scripts/server_deploy_check.py` | 服务器部署预检脚本，验证 `.env`、compose 配置、可选镜像构建、容器状态、API 健康检查、Ops 运行状态、Ops 趋势快照、AKShare/Tushare 状态、Tushare 准入自检和 M5 只读 smoke check。 |
 | `infra/scripts/server_runtime_check.py` | 服务器运行采样脚本，连续读取健康检查、Ops 运行状态、运维历史和运行就绪自检，可选读取 Ops 趋势快照，用退出码区分阻塞状态。 |
 | `infra/scripts/postgres_backup.py` | PostgreSQL 备份脚本，固定使用 server compose overlay 调用容器内 `pg_dump`。 |
+| `infra/scripts/postgres_backup_retention.py` | PostgreSQL 备份保留期脚本，默认 dry-run，只扫描本地普通 `.sql` 备份；显式 `--delete` 才删除过期文件。 |
 | `infra/scripts/postgres_restore.py` | PostgreSQL 恢复脚本，固定使用 server compose overlay 调用容器内 `psql`，执行前必须显式确认。 |
 | `infra/linux/README.md` | Ubuntu 部署步骤、迁移、健康检查、Telegram webhook、日志、备份、升级、回滚。 |
 | `infra/linux/baizefindb-compose.service` | systemd 自动启动 compose project 示例。 |
@@ -275,6 +276,22 @@ uv run python infra/scripts/postgres_backup.py
 ```powershell
 uv run python infra/scripts/postgres_backup.py --output backups/pre-upgrade.sql
 ```
+
+查看哪些本地 `.sql` 备份超过保留期，不删除文件，并保存有界 evidence：
+
+```powershell
+uv run python infra/scripts/postgres_backup_retention.py --retention-days 14 --json-output evidence/postgres-backup-retention.json
+```
+
+确认报告后，如需删除超过保留期的普通 `.sql` 文件，必须显式加 `--delete`：
+
+```powershell
+uv run python infra/scripts/postgres_backup_retention.py --retention-days 14 --delete --json-output evidence/postgres-backup-retention-delete.json
+```
+
+retention helper 只扫描 `backups/` 下的普通 `*.sql` 文件，跳过 symlink、目录和
+非 SQL 文件；它不读取 `.env`、不调用 Docker、不执行恢复、不触碰数据库。删除模式只
+适合作为人工确认后的服务器维护动作，当前 backup systemd timer 不自动执行清理。
 
 如果要让服务器自己定时写本地 PostgreSQL 备份，可复制 backup systemd timer
 示例。复制前先根据实际部署账号调整

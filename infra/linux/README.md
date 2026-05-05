@@ -15,6 +15,7 @@ Celery beat scheduler. It is not a full production-hardening guide.
 | `../scripts/server_monitor_check.py` | Standard-library compact monitor summary wrapper around runtime sampling, suitable for cron/systemd status capture before alert delivery is implemented. |
 | `../scripts/server_delivery_acceptance.py` | One-command delivery acceptance orchestrator that runs deploy preflight, backup check-only evidence, and runtime sampling into one bounded evidence bundle. |
 | `../scripts/postgres_backup.py` | Standard-library PostgreSQL backup helper that runs `pg_dump` through the server compose overlay. |
+| `../scripts/postgres_backup_retention.py` | Standard-library filesystem-only PostgreSQL backup retention helper with dry-run default and explicit delete mode. |
 | `../scripts/postgres_restore.py` | Standard-library PostgreSQL restore helper that streams a backup into `psql` through the server compose overlay. |
 | `baizefindb-compose.service` | Example systemd unit for starting the compose project on boot. |
 | `baizefindb-monitor.service` | Example oneshot systemd unit that writes compact monitor and full runtime JSON evidence. |
@@ -389,6 +390,22 @@ stream database contents.
 
 `backups/` is ignored by git. Also back up `.env` through a secure server-side
 secret process, not through git.
+
+Report local backup retention candidates before deleting anything:
+
+```bash
+python infra/scripts/postgres_backup_retention.py --retention-days 14 --json-output evidence/postgres-backup-retention.json
+```
+
+The retention helper is filesystem-only. It scans regular `*.sql` files under
+`backups/` by default, skips symlinks, directories, and non-SQL files, writes a
+bounded JSON report when requested, and does not read `.env`, call Docker, run
+restore commands, or touch the database. It deletes nothing unless `--delete` is
+explicitly supplied:
+
+```bash
+python infra/scripts/postgres_backup_retention.py --retention-days 14 --delete --json-output evidence/postgres-backup-retention-delete.json
+```
 
 ### systemd Backup Timer
 
