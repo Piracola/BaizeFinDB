@@ -90,6 +90,12 @@ uv run python infra/scripts/server_delivery_acceptance.py
 - `server_deploy_check.py --check-backup --backup-check-json-output <path>`
 - `server_runtime_check.py --samples 3 --interval-seconds 30 --include-ops-trends`
 
+汇总报告会读取每个 helper 生成的 evidence JSON 顶层 `status`：任一 evidence
+为 `warn` / `warning` 时，阶段和总报告标为 `warn` 但仍零退出；任一 evidence
+为 `fail` / `error` / `blocked`，或预期 evidence 文件缺失、不可读、JSON 损坏时，
+对应阶段标为 `fail` 并返回非零。这样新服务器空信号列表等 warning 会被保留在
+交付记录里，但不会被误当成 blocker。
+
 它只编排已有 helper，不直接导出数据库、不读取 `.env` 内容、不输出展开后的 compose
 environment。需要调整证据目录、运行采样窗口，或在首个失败阶段停止：
 

@@ -11,7 +11,7 @@ import argparse
 import json
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,12 +34,13 @@ class StageResult:
     command: list[str]
     exit_code: int | None
     evidence_files: list[Path]
+    evidence_statuses: dict[str, str] = field(default_factory=dict)
     stdout: str = ""
     stderr: str = ""
 
     @property
     def ok(self) -> bool:
-        return self.status in {"ok", "skipped"}
+        return self.status in {"ok", "warn", "skipped"}
 
 
 def build_stage_specs(args: argparse.Namespace) -> list[StageSpec]:
@@ -138,12 +139,18 @@ def run_stage(stage: StageSpec, *, repo_root: Path) -> StageResult:
         capture_output=True,
         check=False,
     )
+    evidence_statuses = collect_evidence_statuses(stage.evidence_files)
+    stage_status = stage_status_from_evidence(
+        completed.returncode,
+        evidence_statuses,
+    )
     return StageResult(
         name=stage.name,
-        status="ok" if completed.returncode == 0 else "fail",
+        status=stage_status,
         command=stage.command,
         exit_code=completed.returncode,
         evidence_files=stage.evidence_files,
+        evidence_statuses=evidence_statuses,
         stdout=_truncate(completed.stdout or ""),
         stderr=_truncate(completed.stderr or ""),
     )
@@ -168,12 +175,20 @@ def build_report(
 ) -> dict[str, object]:
     counts = {
         "ok": sum(1 for result in results if result.status == "ok"),
+        "warn": sum(1 for result in results if result.status == "warn"),
         "fail": sum(1 for result in results if result.status == "fail"),
         "skipped": sum(1 for result in results if result.status == "skipped"),
     }
+    if counts["fail"]:
+        status = "fail"
+    elif counts["warn"]:
+        status = "warn"
+    else:
+        status = "ok"
+
     return {
         "generated_at": datetime.now(UTC).isoformat(),
-        "status": "fail" if counts["fail"] else "ok",
+        "status": status,
         "evidence_dir": str(evidence_dir),
         "summary": {
             "total": len(results),
@@ -186,6 +201,7 @@ def build_report(
                 "command": result.command,
                 "exit_code": result.exit_code,
                 "evidence_files": [str(path) for path in result.evidence_files],
+                "evidence_statuses": result.evidence_statuses,
                 "stdout": result.stdout,
                 "stderr": result.stderr,
             }
@@ -281,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     report = build_report(results, evidence_dir=args.evidence_dir)
     write_report(args.json_output, report)
     print(_format_summary(report, args.json_output))
-    return 0 if report["status"] == "ok" else 1
+    return 1 if report["status"] == "fail" else 0
 
 
 def _format_summary(report: dict[str, object], output_path: Path) -> str:
@@ -296,7 +312,62 @@ def _format_summary(report: dict[str, object], output_path: Path) -> str:
         lines.append(
             f"[{str(stage['status']).upper()}] {stage['name']} exit={stage['exit_code']}"
         )
+        evidence_statuses = stage.get("evidence_statuses")
+        if evidence_statuses:
+            lines.append(f"  evidence_statuses={evidence_statuses}")
     return "\n".join(lines)
+
+
+def collect_evidence_statuses(evidence_files: list[Path]) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    for path in evidence_files:
+        statuses[str(path)] = read_evidence_status(path)
+    return statuses
+
+
+def read_evidence_status(path: Path) -> str:
+    if not path.exists():
+        return "missing"
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return "unreadable"
+    except json.JSONDecodeError:
+        return "invalid_json"
+
+    if not isinstance(payload, dict):
+        return "invalid_json"
+
+    status = payload.get("status")
+    if status is None:
+        return "missing_status"
+    return str(status).lower()
+
+
+def stage_status_from_evidence(
+    exit_code: int,
+    evidence_statuses: dict[str, str],
+) -> str:
+    if exit_code != 0:
+        return "fail"
+
+    failure_statuses = {
+        "fail",
+        "error",
+        "blocked",
+        "missing",
+        "unreadable",
+        "invalid_json",
+        "missing_status",
+    }
+    if any(status in failure_statuses for status in evidence_statuses.values()):
+        return "fail"
+
+    if any(status in {"warn", "warning"} for status in evidence_statuses.values()):
+        return "warn"
+
+    return "ok"
 
 
 def _truncate(text: str, *, limit: int = MAX_CAPTURE_LENGTH) -> str:

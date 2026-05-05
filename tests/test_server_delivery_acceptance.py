@@ -127,10 +127,106 @@ def test_run_acceptance_fail_fast_stops_after_failure(monkeypatch, tmp_path: Pat
     assert len(results) == 1
 
 
+def test_run_acceptance_fail_fast_continues_after_warning(monkeypatch, tmp_path: Path) -> None:
+    args = _args(tmp_path, fail_fast=True)
+    calls = []
+
+    def fake_run_stage(stage, *, repo_root: Path):
+        calls.append(stage.name)
+        status = "warn" if stage.name == "deploy_preflight" else "fail"
+        return server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status=status,
+            command=stage.command,
+            exit_code=0 if status == "warn" else 2,
+            evidence_files=stage.evidence_files,
+        )
+
+    monkeypatch.setattr(server_delivery_acceptance, "run_stage", fake_run_stage)
+
+    results = server_delivery_acceptance.run_acceptance(args, repo_root=tmp_path)
+
+    assert calls == ["deploy_preflight", "backup_check"]
+    assert [result.status for result in results] == ["warn", "fail"]
+
+
+def test_run_stage_promotes_warning_evidence_status(monkeypatch, tmp_path: Path) -> None:
+    evidence = tmp_path / "deploy.json"
+    evidence.write_text(json.dumps({"status": "warn"}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        server_delivery_acceptance.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0, stdout="[WARN] deploy"),
+    )
+
+    result = server_delivery_acceptance.run_stage(
+        server_delivery_acceptance.StageSpec(
+            name="deploy_preflight",
+            command=["python", "helper.py"],
+            evidence_files=[evidence],
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert result.status == "warn"
+    assert result.ok
+    assert result.evidence_statuses == {str(evidence): "warn"}
+
+
+def test_run_stage_fails_for_missing_expected_evidence(monkeypatch, tmp_path: Path) -> None:
+    evidence = tmp_path / "missing.json"
+
+    monkeypatch.setattr(
+        server_delivery_acceptance.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0),
+    )
+
+    result = server_delivery_acceptance.run_stage(
+        server_delivery_acceptance.StageSpec(
+            name="deploy_preflight",
+            command=["python", "helper.py"],
+            evidence_files=[evidence],
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert result.status == "fail"
+    assert result.evidence_statuses == {str(evidence): "missing"}
+
+
+def test_run_stage_fails_for_failing_evidence_despite_zero_exit(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "deploy.json"
+    evidence.write_text(json.dumps({"status": "blocked"}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        server_delivery_acceptance.subprocess,
+        "run",
+        lambda *args, **kwargs: _Completed(returncode=0),
+    )
+
+    result = server_delivery_acceptance.run_stage(
+        server_delivery_acceptance.StageSpec(
+            name="deploy_preflight",
+            command=["python", "helper.py"],
+            evidence_files=[evidence],
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert result.status == "fail"
+    assert result.evidence_statuses == {str(evidence): "blocked"}
+
+
 def test_build_report_summarizes_stage_results(tmp_path: Path) -> None:
     report = server_delivery_acceptance.build_report(
         [
             _result("deploy_preflight", "ok", 0),
+            _result("backup_check", "warn", 0),
             _result("backup_check", "skipped", None),
             _result("runtime_check", "fail", 2),
         ],
@@ -139,9 +235,34 @@ def test_build_report_summarizes_stage_results(tmp_path: Path) -> None:
 
     assert report["status"] == "fail"
     assert report["evidence_dir"] == str(tmp_path)
-    assert report["summary"] == {"total": 3, "ok": 1, "fail": 1, "skipped": 1}
+    assert report["summary"] == {
+        "total": 4,
+        "ok": 1,
+        "warn": 1,
+        "fail": 1,
+        "skipped": 1,
+    }
     assert report["stages"][0]["name"] == "deploy_preflight"
     assert report["stages"][0]["command"] == ["python", "helper.py"]
+
+
+def test_build_report_warns_without_failure(tmp_path: Path) -> None:
+    report = server_delivery_acceptance.build_report(
+        [
+            _result("deploy_preflight", "warn", 0),
+            _result("backup_check", "ok", 0),
+        ],
+        evidence_dir=tmp_path,
+    )
+
+    assert report["status"] == "warn"
+    assert report["summary"] == {
+        "total": 2,
+        "ok": 1,
+        "warn": 1,
+        "fail": 0,
+        "skipped": 0,
+    }
 
 
 def test_write_report_creates_parent_directory(tmp_path: Path) -> None:
@@ -196,6 +317,48 @@ def test_main_writes_report_and_returns_nonzero_on_failure(
     assert "[FAIL] runtime_check exit=4" in captured.out
 
 
+def test_main_returns_zero_and_reports_warning(monkeypatch, tmp_path: Path, capsys) -> None:
+    output = tmp_path / "acceptance.json"
+
+    monkeypatch.setattr(server_delivery_acceptance, "find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        server_delivery_acceptance,
+        "run_stage",
+        lambda stage, *, repo_root: server_delivery_acceptance.StageResult(
+            name=stage.name,
+            status="warn" if stage.name == "deploy_preflight" else "ok",
+            command=stage.command,
+            exit_code=0,
+            evidence_files=stage.evidence_files,
+            evidence_statuses={str(path): "warn" for path in stage.evidence_files},
+            stdout="warning-only",
+        ),
+    )
+
+    exit_code = server_delivery_acceptance.main(
+        [
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--json-output",
+            str(output),
+            "--python-executable",
+            "python",
+            "--runtime-samples",
+            "1",
+            "--runtime-interval-seconds",
+            "1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["status"] == "warn"
+    assert report["summary"]["warn"] == 1
+    assert "[WARN] deploy_preflight exit=0" in captured.out
+    assert "evidence_statuses=" in captured.out
+
+
 def test_main_rejects_invalid_runtime_samples() -> None:
     with pytest.raises(SystemExit) as exc_info:
         server_delivery_acceptance.main(["--runtime-samples", "0"])
@@ -236,3 +399,10 @@ def _result(name: str, status: str, exit_code: int | None):
         stdout="ok",
         stderr="",
     )
+
+
+class _Completed:
+    def __init__(self, *, returncode: int, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
