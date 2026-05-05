@@ -1,5 +1,7 @@
+import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -21,6 +23,8 @@ from app.radar.service import (
     list_radar_signals,
     run_radar_scan,
 )
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest_asyncio.fixture
@@ -235,6 +239,78 @@ async def test_radar_scan_maps_major_tushare_announcement_to_risk_p0(
     assert detail.evidences[0].evidence_type == "risk_event"
     assert detail.evidences[0].source_name == "tushare"
     assert detail.evidences[0].public_share_policy == "internal_summary_only"
+
+
+@pytest.mark.asyncio
+async def test_radar_scan_tushare_announcement_golden_cases(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    case_path = ROOT_DIR / "golden_cases" / "radar_m5_risk_announcements.json"
+    cases = json.loads(case_path.read_text(encoding="utf-8"))
+    base_time = datetime(2026, 5, 3, 9, 30, tzinfo=UTC)
+
+    async with session_factory() as session:
+        for index, case in enumerate(cases):
+            rows = case["rows"]
+            session.add(
+                MarketSnapshot(
+                    provider_name="tushare",
+                    endpoint="anns_d",
+                    market="A_SHARE",
+                    snapshot_type="announcements",
+                    source_time=None,
+                    collected_at=base_time + timedelta(minutes=index),
+                    row_count=len(rows),
+                    raw_summary={"columns": []},
+                    normalized_rows=rows,
+                    normalization_version="golden",
+                )
+            )
+            await session.commit()
+
+            scan = await run_radar_scan(session)
+            expected = case["expected"]
+
+            assert scan.status.value == expected["status"], case["name"]
+            assert scan.summary["candidate_count"] == expected["candidate_count"], (
+                case["name"]
+            )
+            assert scan.summary["source_endpoints"] == ["anns_d"], case["name"]
+            for priority, count in expected["priority_counts"].items():
+                assert scan.summary["priority_counts"][priority] == count, case["name"]
+            assert len(scan.signals) == len(expected["signals"]), case["name"]
+
+            for signal, expected_signal in zip(
+                scan.signals,
+                expected["signals"],
+                strict=True,
+            ):
+                assert signal.priority == expected_signal["priority"], case["name"]
+                assert signal.subject_type == expected_signal["subject_type"], case["name"]
+                assert signal.subject_code == expected_signal["subject_code"], case["name"]
+                assert signal.subject_name == expected_signal["subject_name"], case["name"]
+                assert signal.metrics["risk_event_type"] == expected_signal[
+                    "risk_event_type"
+                ], case["name"]
+                assert signal.metrics["severity"] == expected_signal["severity"], (
+                    case["name"]
+                )
+                assert signal.metrics["source_label"] == "tushare:anns_d", case["name"]
+                for keyword in expected_signal["announcement_keywords"]:
+                    assert keyword in signal.metrics["announcement_keywords"], case["name"]
+                for reason in expected_signal["rule_reasons"]:
+                    assert reason in signal.metrics["rule_reasons"], case["name"]
+
+                detail = await get_radar_signal_detail(session, signal.id)
+                assert detail is not None, case["name"]
+                assert detail.evidences[0].evidence_type == "risk_event", case["name"]
+                assert detail.evidences[0].source_name == "tushare", case["name"]
+                assert detail.evidences[0].public_share_policy == (
+                    "internal_summary_only"
+                ), case["name"]
+                evidence_json = detail.evidences[0].model_dump_json()
+                for fragment in expected_signal["forbidden_evidence_fragments"]:
+                    assert fragment not in evidence_json, case["name"]
 
 
 @pytest.mark.asyncio

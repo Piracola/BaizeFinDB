@@ -73,7 +73,7 @@
 - 雷达扫描失败会记录 `failure`、`error_message` 和失败摘要，避免普通异常留下 `running` 批次
 - 轻量审查层：拦截诱导交易语言、证据缺失、低置信度证据、失败/降级数据质量，并标记证据冲突、重复触发和来源过期
 - 分享预览安全门：内部预检输出阻断原因；公开 payload 只输出脱源脱敏摘要和公开标签
-- `golden_cases` 规则黄金样例，用于锁定基础 P0/P1/P2 判定、误报场景、审查结果和分享安全
+- `golden_cases` 规则黄金样例，用于锁定基础 P0/P1/P2 判定、Tushare 公告 risk P0 / 普通公告无信号的完整扫描、误报场景、审查结果和分享安全
 - Pydantic 配置
 - SQLAlchemy 2.0 异步数据库连接
 - Alembic 迁移框架
@@ -357,7 +357,7 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 
 该集成仍是离线/no-token 模式，输出精简摘要；`warn` 不阻断部署预检，只有 checklist `fail` 会返回失败退出码。
 
-`verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。它是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
+`verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。完整雷达扫描层另有 `golden_cases/radar_m5_risk_announcements.json`，用于沉淀 Tushare 公告 risk P0 / 普通公告无信号的端到端规则样例。它们是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁和调参基线，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
 
 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存 announcements live evidence；`stock_basic` 和 `stock_company` evidence 用于同步留存 token 权限、积分和字段稳定性。
 

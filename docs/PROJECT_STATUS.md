@@ -6,7 +6,7 @@
 
 当前已完成 **M5 A 股 5 分钟资金主线雷达 MVP 验收项**，下一阶段进入生产化验证、真实数据源增强和运行稳定性建设。
 
-项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
+项目已经具备后端骨架、AKShare 最小数据底座、Tushare `stock_basic`、`anns_d` 和 `stock_company` 手动抓取能力、Tushare 只读准入自检、Tushare `anns_d` 离线预调度校验、Tushare 重大风险公告到 risk P0 的轻量映射、Tushare 公告完整雷达扫描 golden cases、雷达扫描批次、候选信号、证据链、P0/P1/P2 初判、生命周期初判、连续扫描记忆、雷达总览查询、优先级和生命周期分布、单信号只读研究摘要 API、Web/Telegram/Windows 市场情绪摘要、个股回推证据、涨停/跌停/炸板池情绪摘要、Provider 数据质量透传、只读运维状态、服务端磁盘/CPU/内存摘要、运维历史和运行就绪自检、轻量规则审查、内部分享预检、公开分享 payload、持仓/自选最小维护 API、quick/standard 报告 MVP 和 Telegram 折叠推送日志。
 
 Telegram Bot MVP Webhook 模块已补充为当前命令入口，可查看健康状态、运行状态、运维历史、OPS 趋势桶、运行就绪自检、OPS 告警钻取、Tushare 数据源状态和准入自检、最近扫描状态、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号折叠摘要、单条信号复盘、单信号后端分析摘要、当前聊天绑定的持仓、自选、报告列表、日报/周报和单信号 v2 评分档位与组件明细；`/analysis <id>` 只读消费 `/radar/signals/{signal_id}/analysis`，展示后端 key points、metric highlights、risk flags、evidence/review summary 和 next actions，不本地生成分析、不展示 raw source、raw excerpt、精确信心值、个人持仓字段或交易指令；`/ops_trends` 固定使用 Telegram 24 小时 OPS 窗口和 `bucket_count=12`，只读复用后端趋势桶扫描、失败和 unhealthy 计数，不重算 OPS readiness 或运行状态；`/ops_warn` 固定使用 Telegram 24 小时 OPS 窗口和有界历史条数，只读复用后端 readiness、overview 和 history，优先展示 readiness 状态、非 OK 检查、alerts、failure_summary 和有界 recent events；`telegram_bindings` 已接入 chat 与 `user_key` 绑定、白名单和禁用状态，环境变量 `TELEGRAM_ALLOWED_CHAT_IDS` 仍可作为硬过滤，`TELEGRAM_REQUIRE_BINDING=true` 可关闭无白名单且无绑定时的本地开放兜底；Telegram 折叠推送 API 已能基于最新扫描按 P0/P1/P2 汇总、复用审查过滤 blocked、记录 push log，并在 P0 推送后为对应聊天用户自动生成 standard report。Telegram 仍只消费后端结果，不重新计算雷达等级、运行状态、OPS readiness、数据源状态、分析摘要或评分。
 
@@ -40,7 +40,7 @@ Telegram 告警 env 预检已新增：`infra/scripts/server_alert_telegram_env_c
 
 交付验收编排已支持可选 Telegram env 预检阶段：`server_delivery_acceptance.py --include-alert-telegram-env-check` 会在同一 evidence bundle 中调用上述只读 helper，默认输出 `server-alert-telegram-env-check.json` 并纳入 warning/fail 汇总；`--telegram-alert-env-file <path>` 可指定非默认凭据文件，`--telegram-alert-env-strict-permissions` 可把权限 warning 升级为阻断验收。
 
-5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。Tushare `anns_d` 公告 Beat 调度已具备独立开关，但默认关闭，只有显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会额外加入调度；启用前应先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，再运行 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，用本地样例验证字段漂移和风险 P0/普通公告映射边界，然后用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存真实 token 下的脱敏 live evidence。`stock_basic`、`anns_d` 和 `stock_company` 三条 live verify 脚本均可输出同类脱敏 evidence；默认 checklist 和离线门禁不替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 readiness 验证。
+5 分钟调度 MVP 已接入 Celery beat：默认每 300 秒执行 `baizefindb.radar.collect_and_scan`，顺序完成 AKShare 最小采集和雷达扫描；当 `TELEGRAM_PUSH_ENABLED=true` 时会追加 Telegram 折叠推送；服务器 compose overlay 已补充 worker / beat 服务。Tushare `anns_d` 公告 Beat 调度已具备独立开关，但默认关闭，只有显式设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会额外加入调度；启用前应先运行 `uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py` 输出 JSON checklist，再运行 `uv run python infra/scripts/verify_tushare_anns_d_preflight.py`，用本地样例验证字段漂移和风险 P0/普通公告映射边界；完整扫描层的 `golden_cases/radar_m5_risk_announcements.json` 已覆盖重大风险公告、退市风险公告和普通公告无信号样例。随后再用 `uv run python infra/scripts/verify_tushare_announcements.py --ann-date YYYYMMDD --json-output evidence/tushare-anns-YYYYMMDD.json` 保存真实 token 下的脱敏 live evidence。`stock_basic`、`anns_d` 和 `stock_company` 三条 live verify 脚本均可输出同类脱敏 evidence；默认 checklist、离线门禁和 golden cases 不替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 readiness 验证。
 
 持仓/自选最小 API 已接入：支持按 `user_key` 手工维护持仓和自选，成本价与仓位比例可为空；静态 Web 终端工作台已能查看运行状态、维护和展示这些个人数据。跨 API 测试已锁定这些个人数据只影响后续个人提醒、展示排序和报告上下文，不改变市场级 P0/P1/P2、生命周期分布或当前主题。
 
@@ -192,6 +192,7 @@ Windows 客户端：
 - `infra/scripts/check_tushare_anns_d_beat_enablement.py`：Tushare `anns_d` Beat 启用前 JSON checklist，默认离线/no-token，汇总 sample gate、token、Beat 启停、interval、live verify 和 readiness/live data 检查状态。
 - `infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-enablement`：可选部署预检集成项，复用上述 checklist；`warn` 只告警不阻断，只有 checklist `fail` 会让部署预检失败。
 - `infra/scripts/verify_tushare_anns_d_preflight.py`：离线/no-token `anns_d` 预调度校验，读取本地 golden case，验证必需字段、重大风险 P0 样例和普通公告无风险信号样例。
+- `golden_cases/radar_m5_risk_announcements.json`：完整雷达扫描 golden cases，覆盖 Tushare 重大风险公告、退市风险公告映射 risk P0，以及普通公告不生成信号。
 - `infra/scripts/verify_tushare_stock_basic.py --json-output <path>`、`infra/scripts/verify_tushare_announcements.py --json-output <path>`、`infra/scripts/verify_tushare_stock_company.py --json-output <path>`：真实 token live verify 脱敏 evidence 输出；不写数据库，成功和失败都会保存状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去 URL/source/token/secret-like 字段的少量归一化样例或错误摘要，样例值会递归脱敏并截断超长文本。
 - `evidence/`、`runtime-check*.json` 和 `ops-evidence*.json`：本地/服务器运行证据产物，已加入 `.gitignore`，真实 token 环境下生成后不要提交到 git。
 
@@ -290,5 +291,5 @@ uv run uvicorn app.main:app --reload
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；三条 live verify 脚本均支持脱敏 JSON evidence 输出；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0；`anns_d` Beat 调度默认关闭，后续在 checklist、`verify_tushare_anns_d_preflight.py` 离线预调度校验、真实 token live evidence、字段和误报样例稳定后再显式启用。
 - 增加运行可观测性：`/ops/overview` 已汇总服务端进程运行时长、磁盘/CPU/内存资源、扫描耗时、失败率、推送结果、模型降级、数据质量状态和只读告警摘要，`/ops/history` 已返回最近扫描、Provider 异常、数据质量异常、推送异常和模型降级/失败历史，`/ops/trends` 已按固定时间桶汇总扫描、失败和 unhealthy 计数，`/ops/readiness` 已基于这些信息输出运行就绪自检；Web 状态面板、Windows 客户端和 Telegram `/ops`、`/ops_history`、`/ops_trends`、`/ops_ready` 已展示这些摘要，Web、Windows 客户端和 Telegram `/ops_warn` 已有只读告警钻取视图聚合三组 OPS 响应；后续再接趋势图和真实监控告警。
-- 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases。
+- 完善真实运行后的误报/漏报样例，把规则调参沉淀为 golden cases；Tushare 公告完整扫描层已先建立 `radar_m5_risk_announcements.json` 基线。
 - Web / Telegram / Windows 继续只消费后端结果，不在入口层重算雷达等级。

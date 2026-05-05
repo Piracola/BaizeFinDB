@@ -1,0 +1,110 @@
+[
+  {
+    "name": "major_investigation_announcement_maps_to_risk_p0",
+    "rows": [
+      {
+        "ann_date": "20260503",
+        "ts_code": "000001.SZ",
+        "name": "风险样例",
+        "title": "关于收到中国证监会立案调查通知书的公告",
+        "url": "https://example.invalid/internal-only-risk"
+      },
+      {
+        "ann_date": "20260503",
+        "ts_code": "000002.SZ",
+        "name": "普通样例",
+        "title": "董事会决议公告",
+        "url": "https://example.invalid/internal-only-ordinary"
+      }
+    ],
+    "expected": {
+      "status": "success",
+      "candidate_count": 1,
+      "priority_counts": {
+        "P0": 1
+      },
+      "signals": [
+        {
+          "priority": "P0",
+          "subject_type": "announcements",
+          "subject_code": "000001.SZ",
+          "subject_name": "关于收到中国证监会立案调查通知书的公告",
+          "risk_event_type": "major_announcement",
+          "severity": "major",
+          "announcement_keywords": ["立案调查"],
+          "rule_reasons": [
+            "risk_event_type_major_announcement",
+            "risk_severity_major",
+            "risk_severity_score_ge_85pct"
+          ],
+          "forbidden_evidence_fragments": [
+            "https://example.invalid/internal-only-risk"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "critical_delisting_announcement_maps_to_critical_risk_p0",
+    "rows": [
+      {
+        "ann_date": "20260503",
+        "ts_code": "000003.SZ",
+        "name": "退市样例",
+        "title": "关于公司股票终止上市暨摘牌的公告",
+        "url": "https://example.invalid/internal-only-delisting"
+      }
+    ],
+    "expected": {
+      "status": "success",
+      "candidate_count": 1,
+      "priority_counts": {
+        "P0": 1
+      },
+      "signals": [
+        {
+          "priority": "P0",
+          "subject_type": "announcements",
+          "subject_code": "000003.SZ",
+          "subject_name": "关于公司股票终止上市暨摘牌的公告",
+          "risk_event_type": "major_announcement",
+          "severity": "critical",
+          "announcement_keywords": ["终止上市"],
+          "rule_reasons": [
+            "risk_event_type_major_announcement",
+            "risk_severity_critical",
+            "risk_severity_score_ge_85pct"
+          ],
+          "forbidden_evidence_fragments": [
+            "https://example.invalid/internal-only-delisting"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "ordinary_announcements_do_not_create_radar_signals",
+    "rows": [
+      {
+        "ann_date": "20260503",
+        "ts_code": "000004.SZ",
+        "name": "普通样例一",
+        "title": "董事会决议公告",
+        "url": "https://example.invalid/internal-only-board"
+      },
+      {
+        "ann_date": "20260503",
+        "ts_code": "000005.SZ",
+        "name": "普通样例二",
+        "title": "年度权益分派实施公告",
+        "url": "https://example.invalid/internal-only-dividend"
+      }
+    ],
+    "expected": {
+      "status": "no_data",
+      "candidate_count": 0,
+      "priority_counts": {},
+      "signals": []
+    }
+  }
+]
