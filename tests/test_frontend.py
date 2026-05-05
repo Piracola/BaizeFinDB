@@ -85,6 +85,13 @@ def test_frontend_assets_are_served() -> None:
     assert "scoreSelectedSignal" in js_response.text
     assert "renderScoreComponents" in js_response.text
     assert "score_band" in js_response.text
+    assert "/radar/signals/${signalId}/analysis" in js_response.text
+    assert "renderSignalAnalysisBrief" in js_response.text
+    assert "metric_highlights" in js_response.text
+    assert "risk_flags" in js_response.text
+    assert "evidence_summary" in js_response.text
+    assert "review_summary" in js_response.text
+    assert "next_actions" in js_response.text
     assert "data_quality" in js_response.text
     assert "renderLifecycleCounts" in js_response.text
     assert "lifecycle_counts" in js_response.text
@@ -121,6 +128,8 @@ def test_frontend_assets_are_served() -> None:
     assert "lifecycle-grid" in css_response.text
     assert "sentiment-grid" in css_response.text
     assert "backtrace-list" in css_response.text
+    assert "analysis-brief" in css_response.text
+    assert "analysis-grid" in css_response.text
 
 
 def test_frontend_ops_warning_drilldown_keeps_backend_owned_status_boundary() -> None:
@@ -145,6 +154,46 @@ def test_frontend_ops_warning_drilldown_keeps_backend_owned_status_boundary() ->
     assert "recent_scan_failure_count" not in drilldown_block
     assert "is_cpu_pressure_high" not in drilldown_block
     assert "is_memory_pressure_high" not in drilldown_block
+
+
+def test_frontend_signal_analysis_uses_backend_brief_without_raw_fields() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    load_start = js_text.index("async function loadSignalDetail")
+    load_end = js_text.index("async function runRadarScan")
+    load_block = js_text[load_start:load_end]
+    render_start = js_text.index("function renderSignalAnalysisBrief")
+    render_end = js_text.index("function renderHoldings")
+    render_block = js_text[render_start:render_end]
+
+    assert "Promise.allSettled" in load_block
+    assert "fetchJson(`/radar/signals/${signalId}`)" in load_block
+    assert "fetchJson(`/radar/signals/${signalId}/analysis`)" in load_block
+    assert "renderSignalDetail(" in load_block
+    assert "analysis_title" in render_block
+    assert "key_points" in render_block
+    assert "metric_highlights" in render_block
+    assert "risk_flags" in render_block
+    assert "evidence_summary" in render_block
+    assert "review_summary" in render_block
+    assert "next_actions" in render_block
+    assert "priorityBadgeClass(analysis.priority)" in render_block
+    assert "label(analysis.lifecycle_stage)" in render_block
+    assert "label(analysis.review_status)" in render_block
+    assert "raw_excerpt" not in render_block
+    assert "source_ref" not in render_block
+    assert "source_url" not in render_block
+    assert "details" not in render_block
+    assert "position_ratio" not in render_block
+    assert "cost_price" not in render_block
+    assert "buy" not in render_block.lower()
+    assert "sell" not in render_block.lower()
+    assert "买入" not in render_block
+    assert "卖出" not in render_block
 
 
 def test_frontend_ops_trends_uses_backend_bucket_counts_only() -> None:

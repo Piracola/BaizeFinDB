@@ -296,6 +296,7 @@ h3 {
 .signal-card,
 .detail-card,
 .evidence-card,
+.analysis-metric,
 .portfolio-card,
 .report-card,
 .telegram-binding-card,
@@ -327,6 +328,47 @@ h3 {
 
 .status-warning {
   border-left: 4px solid var(--orange);
+}
+
+.analysis-brief {
+  display: grid;
+  gap: 12px;
+}
+
+.analysis-section {
+  display: grid;
+  gap: 8px;
+}
+
+.analysis-section h4 {
+  margin: 0;
+  color: #6d5316;
+  font-size: 13px;
+}
+
+.analysis-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-metric {
+  min-width: 0;
+  background: #f0e7d4;
+  box-shadow: none;
+}
+
+.analysis-metric strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #6d5316;
 }
 
 .priority-number {

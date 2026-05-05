@@ -321,8 +321,20 @@ async function loadSignalDetail(signalId) {
   elements.signalDetail.innerHTML = emptyState("正在读取信号详情。");
 
   try {
-    const detail = await fetchJson(`/radar/signals/${signalId}`);
-    renderSignalDetail(detail);
+    const [detailResult, analysisResult] = await Promise.allSettled([
+      fetchJson(`/radar/signals/${signalId}`),
+      fetchJson(`/radar/signals/${signalId}/analysis`),
+    ]);
+
+    if (detailResult.status === "rejected") {
+      throw detailResult.reason;
+    }
+
+    renderSignalDetail(
+      detailResult.value,
+      analysisResult.status === "fulfilled" ? analysisResult.value : null,
+      analysisResult.status === "rejected" ? analysisResult.reason : null,
+    );
   } catch (error) {
     elements.signalDetail.innerHTML = emptyState(`信号详情暂不可用：${formatError(error)}`);
   }
@@ -1300,7 +1312,7 @@ function renderSignals(signals) {
   });
 }
 
-function renderSignalDetail(detail) {
+function renderSignalDetail(detail, analysis = null, analysisError = null) {
   const evidences = detail.evidences || [];
   elements.signalDetail.classList.remove("empty-state");
   elements.signalDetail.innerHTML = `
@@ -1327,6 +1339,10 @@ function renderSignalDetail(detail) {
     <section>
       <h3>后端指标</h3>
       <pre id="metrics-json"></pre>
+    </section>
+    <section>
+      <h3>信号分析摘要</h3>
+      ${renderSignalAnalysisBrief(analysis, analysisError)}
     </section>
     <section>
       <h3>证据摘要</h3>
@@ -1358,6 +1374,124 @@ function renderSignalDetail(detail) {
     button.addEventListener("click", () => createReport(button.dataset.reportType));
   });
   elements.signalDetail.querySelector("[data-score-signal]").addEventListener("click", scoreSelectedSignal);
+}
+
+function renderSignalAnalysisBrief(analysis, analysisError) {
+  if (analysisError) {
+    return emptyState(`分析摘要暂不可用：${formatError(analysisError)}`);
+  }
+
+  if (!analysis) {
+    return emptyState("后端暂未返回分析摘要。");
+  }
+
+  const evidenceSummary = analysis.evidence_summary || {};
+  const reviewSummary = analysis.review_summary || {};
+  return `
+    <article class="analysis-brief detail-card">
+      <div class="meta-row">
+        <span class="badge ${priorityBadgeClass(analysis.priority)}">${escapeHtml(analysis.priority || "-")}</span>
+        <span class="badge">${escapeHtml(label(analysis.lifecycle_stage))}</span>
+        <span class="badge">${escapeHtml(label(analysis.review_status))}</span>
+        <span class="badge">后端摘要</span>
+      </div>
+      <h3>${escapeHtml(analysis.analysis_title || "信号研究摘要")}</h3>
+      ${renderAnalysisList("Key Points", analysis.key_points)}
+      ${renderMetricHighlights(analysis.metric_highlights || [])}
+      ${renderAnalysisList("Risk Flags", analysis.risk_flags)}
+      ${renderEvidenceSummary(evidenceSummary)}
+      ${renderReviewSummary(reviewSummary)}
+      ${renderAnalysisList("Next Actions", analysis.next_actions)}
+    </article>
+  `;
+}
+
+function renderAnalysisList(title, items) {
+  const values = Array.isArray(items) ? items.filter(Boolean).slice(0, 8) : [];
+  if (values.length === 0) {
+    return `
+      <section class="analysis-section">
+        <h4>${escapeHtml(title)}</h4>
+        ${emptyState("后端未返回该项。")}
+      </section>
+    `;
+  }
+
+  return `
+    <section class="analysis-section">
+      <h4>${escapeHtml(title)}</h4>
+      <ul class="analysis-list">
+        ${values.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </section>
+  `;
+}
+
+function renderMetricHighlights(highlights) {
+  const values = Array.isArray(highlights) ? highlights.slice(0, 6) : [];
+  if (values.length === 0) {
+    return renderAnalysisList("Metric Highlights", []);
+  }
+
+  return `
+    <section class="analysis-section">
+      <h4>Metric Highlights</h4>
+      <div class="analysis-grid">
+        ${values
+          .map((item) => {
+            return `
+              <article class="analysis-metric">
+                <strong>${escapeHtml(label(item.label))}</strong>
+                <div>${escapeHtml(item.value || "-")}</div>
+                <p class="muted">${escapeHtml(item.interpretation || "后端未返回说明。")}</p>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderEvidenceSummary(summary) {
+  const evidenceTypes = Array.isArray(summary.evidence_types) ? summary.evidence_types : [];
+  const freshnessLabels = Array.isArray(summary.freshness_labels) ? summary.freshness_labels : [];
+  const confidenceLabels = Array.isArray(summary.confidence_labels)
+    ? summary.confidence_labels
+    : [];
+  const summaries = Array.isArray(summary.summaries) ? summary.summaries : [];
+
+  return `
+    <section class="analysis-section">
+      <h4>Evidence Summary</h4>
+      <div class="meta-row">
+        <span class="badge">证据 ${escapeHtml(summary.evidence_count ?? 0)}</span>
+        ${evidenceTypes.map((item) => `<span class="badge">${escapeHtml(label(item))}</span>`).join("")}
+        ${freshnessLabels.map((item) => `<span class="badge">${escapeHtml(label(item))}</span>`).join("")}
+        ${confidenceLabels.map((item) => `<span class="badge">confidence ${escapeHtml(label(item))}</span>`).join("")}
+      </div>
+      ${renderAnalysisList("Evidence Notes", summaries)}
+    </section>
+  `;
+}
+
+function renderReviewSummary(summary) {
+  const reasons = Array.isArray(summary.reasons) ? summary.reasons : [];
+  return `
+    <section class="analysis-section">
+      <h4>Review Summary</h4>
+      <div class="meta-row">
+        <span class="badge">${escapeHtml(label(summary.status))}</span>
+        <span class="badge">${summary.human_review_required ? "需要人工复核" : "无需人工复核"}</span>
+        ${
+          summary.latest_review_id === null || summary.latest_review_id === undefined
+            ? ""
+            : `<span class="badge">review #${escapeHtml(summary.latest_review_id)}</span>`
+        }
+      </div>
+      ${renderAnalysisList("Review Reasons", reasons)}
+    </section>
+  `;
 }
 
 function renderHoldings(holdings) {
