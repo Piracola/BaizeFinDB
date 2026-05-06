@@ -24,7 +24,9 @@ Windows 客户端 MVP 已补充为本地桌面入口，可连接本地或 Linux 
 
 Web 雷达终端工作台已在状态面板加入只读 OPS 趋势摘要、OPS 趋势图和 OPS 告警钻取，命令栏 `trend` / `trends` 会滚动并刷新 `/ops/trends?lookback_hours=24&bucket_count=12`，只展示后端趋势桶的扫描、失败和 unhealthy 计数，并用同一批后端桶渲染扫描/失败/异常柱状图，不在浏览器重算 OPS readiness 或状态；命令栏 `warn` / `warning` 会滚动并刷新钻取块，该块固定沿用 Web 24 小时 OPS 窗口，只读取 `/ops/readiness`、`/ops/overview` 和 `/ops/history`，优先展示后端 readiness 状态、非 OK 检查、overview alerts、history `failure_summary` 和有界 recent events，不在浏览器从 alerts/counts/events 重算 OPS 状态，也不触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作。Web 信号详情已读取 `/radar/signals/{signal_id}/analysis` 并展示后端生成的只读单信号研究摘要，包括 key points、metric highlights、risk flags、确定性 agent assessments、evidence/review summary 和 next actions；Web 只显示后端 `agent_assessments` 的 label/status/summary/findings/next_actions，不本地生成或重算多 agent 输出。Web 信号详情也新增手动 `生成模型草稿` 按钮，点击后才 POST `/radar/signals/{signal_id}/model-analysis-draft`，只展示后端返回的模型/草稿状态、脱敏 advisory 字段、blocked count 和 boundary；Windows 客户端也已有同名手动入口，读取当前 Signal ID 后才调用同一 endpoint。前端不重算雷达定级、生命周期、审查状态、评分、模型状态或交易建议。Web 雷达终端工作台、Windows 客户端和 Telegram `/tushare` 已展示 Tushare token 状态、手动抓取启用状态和已实现端点数；`/providers/tushare/readiness`、Web 数据源状态卡片、Windows“数据源自检”按钮和 Telegram `/tushare_ready` 已展示 token、端点、最近抓取、数据质量准入状态和 `anns_d` Beat 开关策略。所有这些入口都只读，不触发真实抓取或调度。
 
-Web 雷达终端工作台已新增只读设置/API 配置状态中心：`GET /settings/status` 汇总 Tushare token 与 `anns_d` Beat、Telegram bot/白名单/webhook/推送开关，以及模型 provider readiness 的脱敏状态、计数和检查说明；命令栏 `settings` / `config` 会滚动并刷新设置面板。该接口不读数据库、不调用外部 API、不验证 token、不写 `.env`、不发送 Telegram、不触发采集、扫描、报告或模型调用，返回和前端展示均不包含 token、API key、webhook secret、Authorization、raw `.env`、prompt 或模型响应。浏览器写入密钥仍未实现；后续要做可编辑设置页前，需要先补本地管理员认证或 localhost-only 写入边界。
+Web 雷达终端工作台已新增日线优先 `DATA` 面板：首屏优先展示 `Tushare 日线行情`，明确标记单数据源模式，支持从浏览器手动触发 `/providers/tushare/fetch/daily`，并展示 `/providers/tushare/snapshots/latest?endpoint=daily` 的最新快照预览、`/providers/tushare/fetch-logs?endpoint=daily` 的抓取日志和 `/providers/tushare/readiness` 的 daily 准入摘要。命令栏 `market` / `data` / `dailydata` 会滚动并刷新该面板。当前只有 Tushare `daily` 一个真实行情源时，系统仍可完成配置检查、日线抓取、快照留存、日志追踪和后续雷达/报告数据底座迭代；其他 Provider 没有数据不再被视觉上处理成日线链路不可运行。
+
+Web 雷达终端工作台已新增设置/API 配置状态中心：`GET /settings/status` 汇总 Tushare token 与 `anns_d` Beat、Telegram bot/白名单/webhook/推送开关，以及模型 provider readiness 的脱敏状态、计数和检查说明；命令栏 `settings` / `config` 会滚动并刷新设置面板。设置面板读取 `/settings/editable`，在 owner-only/localhost 边界下可写入服务器本地 `.env`，并可显式测试 Tushare、Telegram 和模型 provider 连接。设置状态、可编辑表单和连接测试结果均不包含 token、API key、webhook secret、Authorization、raw `.env`、prompt 或模型响应；远程写入建议配置 `SETTINGS_ADMIN_TOKEN`。
 
 `infra/scripts/dev_environment_check.py` 已新增为开发环境只读自检入口，可在新机器迁移或继续开发前检查 Python/uv、Linux `.venv`、Docker Compose、base/server compose config、Tkinter、PowerShell 可选项和 Git 工作区，并可写出有界 JSON evidence；它不安装软件、不启动容器、不输出 `.env` 或 secrets。
 
@@ -99,7 +101,7 @@ PowerShell/Windows 打包脚本运行环境。
 
 当前长期开发规范：
 
-- 后续 AI 协作默认在模块设计或开发阶段完成后自动做 git commit，不再每次向用户确认；不自动 push。
+- 后续 AI 协作默认在模块设计或开发阶段完成后自动做 git commit 并推送到已配置的远端，不再每次向用户确认。
 - 即使是小的模块化更新，只要形成明确阶段边界，也要同步更新相关开发文档并提交 git commit。
 - 提交前先跑对应质量检查，再查看 `git status`，并检查 staged 文件，确认没有误提交 `.env`、密钥、个人数据、原始付费数据、持仓截图、报告导出等敏感文件。
 - commit 仍按模块边界拆分，不把多个无关模块混成一个大提交。
@@ -156,6 +158,7 @@ Provider：
 - `GET /providers/tushare/endpoints`
 - `GET /providers/tushare/status`
 - `GET /providers/tushare/readiness`
+- `POST /providers/tushare/fetch/daily`
 - `POST /providers/tushare/fetch/stock-basic`
 - `POST /providers/tushare/fetch/announcements`
 - `POST /providers/tushare/fetch/stock-company`

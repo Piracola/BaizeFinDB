@@ -22,9 +22,13 @@ const LIFECYCLE_ORDER = [
   "extinguished",
 ];
 
+const TUSHARE_DATE_PATTERN = /^\d{8}$/;
+const TUSHARE_TS_CODE_PATTERN = /^\d{6}\.(?:SH|SZ|BJ)(?:,\d{6}\.(?:SH|SZ|BJ))*$/;
+
 const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   runScanButton: document.querySelector("#run-scan-button"),
+  fetchDailyButton: document.querySelector("#fetch-daily-button"),
   fetchAkshareButton: document.querySelector("#fetch-akshare-button"),
   dailyReportButton: document.querySelector("#daily-report-button"),
   weeklyReportButton: document.querySelector("#weekly-report-button"),
@@ -44,6 +48,11 @@ const elements = {
   opsReadiness: document.querySelector("#ops-readiness"),
   opsWarningDrilldown: document.querySelector("#ops-warning-drilldown"),
   tushareStatus: document.querySelector("#tushare-status"),
+  dailySourceSummary: document.querySelector("#daily-source-summary"),
+  dailyFetchForm: document.querySelector("#daily-fetch-form"),
+  dailyRefreshButton: document.querySelector("#daily-refresh-button"),
+  dailySnapshot: document.querySelector("#daily-snapshot"),
+  dailyFetchLogs: document.querySelector("#daily-fetch-logs"),
   settingsStatus: document.querySelector("#settings-status"),
   settingsForm: document.querySelector("#settings-form"),
   settingsFields: document.querySelector("#settings-fields"),
@@ -73,7 +82,10 @@ const elements = {
 document.addEventListener("DOMContentLoaded", () => {
   elements.refreshButton.addEventListener("click", refreshAll);
   elements.runScanButton.addEventListener("click", runRadarScan);
+  elements.fetchDailyButton.addEventListener("click", fetchTushareDaily);
   elements.fetchAkshareButton.addEventListener("click", fetchMinimalAkshare);
+  elements.dailyFetchForm.addEventListener("submit", fetchTushareDaily);
+  elements.dailyRefreshButton.addEventListener("click", () => loadTushareDailyConsole());
   elements.dailyReportButton.addEventListener("click", () => loadPeriodicReport("daily"));
   elements.weeklyReportButton.addEventListener("click", () => loadPeriodicReport("weekly"));
   elements.scoreSignalButton.addEventListener("click", scoreSelectedSignal);
@@ -116,6 +128,7 @@ async function refreshAll() {
       loadOpsReadiness(),
       loadOpsWarningDrilldown({ silent: true }),
       loadTushareStatus(),
+      loadTushareDailyConsole({ silent: true }),
       loadSettingsStatus({ silent: true }),
       loadOverview(),
       loadSignals(),
@@ -216,6 +229,30 @@ async function loadTushareStatus() {
     renderTushareStatus(status, readiness);
   } catch (error) {
     renderTushareUnavailable(`Tushare 状态暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadTushareDailyConsole(options = {}) {
+  try {
+    const [status, readiness, snapshots, logs] = await Promise.all([
+      fetchJson("/providers/tushare/status"),
+      fetchJson("/providers/tushare/readiness"),
+      fetchJson("/providers/tushare/snapshots/latest?endpoint=daily"),
+      fetchJson("/providers/tushare/fetch-logs?endpoint=daily&limit=8"),
+    ]);
+    const latestSnapshot = Array.isArray(snapshots) ? snapshots[0] : null;
+    const dailyLogs = Array.isArray(logs) ? logs : [];
+    renderDailySourceSummary(status, readiness, latestSnapshot, dailyLogs[0]);
+    renderDailySnapshot(latestSnapshot);
+    renderDailyFetchLogs(dailyLogs);
+    if (!options.silent) {
+      showMessage("info", "Tushare 日线行情状态已刷新。");
+    }
+  } catch (error) {
+    renderDailyConsoleUnavailable(`日线行情暂不可用：${formatError(error)}`);
+    if (!options.silent) {
+      showMessage("error", `日线行情刷新失败：${formatError(error)}`);
+    }
   }
 }
 
@@ -391,6 +428,7 @@ function renderRadarUnavailable(reason) {
   renderOpsReadinessUnavailable("依赖服务恢复后再读取就绪自检。");
   renderOpsWarningDrilldownUnavailable("依赖服务恢复后再读取 OPS 告警钻取。");
   renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
+  renderDailyConsoleUnavailable("依赖服务恢复后再读取日线行情。");
   renderSettingsStatusUnavailable("依赖服务恢复后再读取设置状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
@@ -443,6 +481,36 @@ async function runRadarScan() {
     await Promise.all([loadOverview(), loadSignals()]);
   } catch (error) {
     showMessage("error", `雷达扫描失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function fetchTushareDaily(event) {
+  if (event?.preventDefault) {
+    event.preventDefault();
+  }
+
+  const query = buildDailyFetchQuery();
+  if (query === null) {
+    return;
+  }
+
+  setButtonsBusy(true);
+  showMessage("info", "正在请求 Tushare daily 日线行情。");
+
+  try {
+    const suffix = query ? `?${query}` : "";
+    const result = await fetchJson(`/providers/tushare/fetch/daily${suffix}`, { method: "POST" });
+    showMessage(
+      "info",
+      `日线抓取完成：${label(result.status)}，行数 ${result.row_count ?? 0}，质量 ${label(
+        result.quality_status,
+      )}。`,
+    );
+    await Promise.all([loadTushareStatus(), loadTushareDailyConsole({ silent: true })]);
+  } catch (error) {
+    showMessage("error", `Tushare daily 抓取失败：${formatError(error)}`);
   } finally {
     setButtonsBusy(false);
   }
@@ -689,7 +757,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、settings、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：market、data、dailydata、ops、settings、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -745,6 +813,26 @@ function executeCommand() {
       scrollToPanel("status-panel");
       loadTushareStatus();
     },
+    market: () => {
+      scrollToPanel("market-data-panel");
+      loadTushareDailyConsole();
+    },
+    data: () => {
+      scrollToPanel("market-data-panel");
+      loadTushareDailyConsole();
+    },
+    quote: () => {
+      scrollToPanel("market-data-panel");
+      loadTushareDailyConsole();
+    },
+    quotes: () => {
+      scrollToPanel("market-data-panel");
+      loadTushareDailyConsole();
+    },
+    dailydata: () => {
+      scrollToPanel("market-data-panel");
+      loadTushareDailyConsole();
+    },
     settings: () => {
       scrollToPanel("settings-panel");
       loadSettingsStatus();
@@ -780,7 +868,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、settings、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：market、data、dailydata、ops、settings、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -1336,6 +1424,152 @@ function renderTushareStatus(status, readiness) {
 
 function renderTushareUnavailable(reason) {
   elements.tushareStatus.innerHTML = emptyState(reason);
+}
+
+function renderDailySourceSummary(status, readiness, snapshot, latestLog) {
+  const dailyEndpoint = dailyReadinessEndpoint(readiness);
+  const tokenConfigured = Boolean(status?.token_configured);
+  const latestRows = snapshot?.row_count ?? latestLog?.row_count ?? 0;
+  const sourceTime = snapshot?.source_time || latestLog?.source_time;
+  const cards = [
+    {
+      name: "主行情源",
+      status: tokenConfigured ? dailyEndpoint?.status || "warning" : "fail",
+      value: "Tushare daily",
+      detail: tokenConfigured ? "日线行情可作为单一数据源运行" : "需要先在设置页填写 Tushare token",
+    },
+    {
+      name: "单源模式",
+      status: "ok",
+      value: "已启用",
+      detail: "只有 daily 数据时，系统仍保留快照、日志、质量和报告链路",
+    },
+    {
+      name: "最新交易日",
+      status: sourceTime ? "ok" : "warning",
+      value: sourceTime ? formatDate(sourceTime) : "暂无快照",
+      detail: "来自最新日线快照 source_time",
+    },
+    {
+      name: "样本行数",
+      status: Number(latestRows) > 0 ? "ok" : "warning",
+      value: `${latestRows} 行`,
+      detail: snapshot?.id ? `snapshot #${snapshot.id}` : "抓取后显示最新快照",
+    },
+    {
+      name: "最近抓取",
+      status: latestLog?.status || "warning",
+      value: latestLog ? label(latestLog.status) : "未抓取",
+      detail: latestLog
+        ? `${formatDate(latestLog.fetch_finished_at)} / ${latestLog.row_count ?? 0} 行`
+        : "可用下方表单先抓取一个交易日",
+    },
+    {
+      name: "数据质量",
+      status: dailyEndpoint?.latest_quality_status || "warning",
+      value: label(dailyEndpoint?.latest_quality_status || "待验证"),
+      detail: dailyEndpoint?.row_count
+        ? `readiness row_count=${dailyEndpoint.row_count}`
+        : "需要至少一次成功日线样例",
+    },
+  ];
+
+  elements.dailySourceSummary.innerHTML = cards
+    .map(
+      (card) => `
+        <article class="market-stat ${statusCardClass(card.status)}">
+          <span>${escapeHtml(card.name)}</span>
+          <strong>${escapeHtml(card.value)}</strong>
+          <small>${escapeHtml(card.detail)}</small>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderDailySnapshot(snapshot) {
+  if (!snapshot) {
+    elements.dailySnapshot.innerHTML = emptyState("暂无日线快照。填写 Tushare token 后，可先抓取一个交易日。");
+    return;
+  }
+
+  const rows = Array.isArray(snapshot.preview_rows) ? snapshot.preview_rows : [];
+  if (rows.length === 0) {
+    elements.dailySnapshot.innerHTML = emptyState("最新日线快照没有预览行。请检查交易日、权限或返回字段。");
+    return;
+  }
+
+  elements.dailySnapshot.innerHTML = `
+    <div class="quote-snapshot-meta">
+      <span class="badge">snapshot #${escapeHtml(snapshot.id)}</span>
+      <span class="badge">rows ${escapeHtml(snapshot.row_count ?? 0)}</span>
+      <span class="badge">${escapeHtml(formatDate(snapshot.source_time))}</span>
+    </div>
+    ${renderMarketTable(
+      ["代码", "日期", "开", "高", "低", "收", "涨跌%", "成交量", "成交额"],
+      rows.map((row) => [
+        row.ts_code,
+        row.trade_date,
+        formatMarketNumber(row.open),
+        formatMarketNumber(row.high),
+        formatMarketNumber(row.low),
+        formatMarketNumber(row.close),
+        formatSignedPercent(row.pct_chg),
+        formatMarketNumber(row.vol, 0),
+        formatMarketNumber(row.amount, 0),
+      ]),
+    )}
+  `;
+}
+
+function renderDailyFetchLogs(logs) {
+  if (!Array.isArray(logs) || logs.length === 0) {
+    elements.dailyFetchLogs.innerHTML = emptyState("暂无日线抓取日志。");
+    return;
+  }
+
+  elements.dailyFetchLogs.innerHTML = renderMarketTable(
+    ["时间", "状态", "行数", "新鲜度", "缺失字段"],
+    logs.slice(0, 8).map((log) => [
+      formatDate(log.fetch_finished_at),
+      label(log.status),
+      log.row_count ?? 0,
+      label(log.freshness),
+      Array.isArray(log.missing_fields) && log.missing_fields.length
+        ? log.missing_fields.join(", ")
+        : "-",
+    ]),
+  );
+}
+
+function renderDailyConsoleUnavailable(reason) {
+  elements.dailySourceSummary.innerHTML = emptyState(reason);
+  elements.dailySnapshot.innerHTML = emptyState(reason);
+  elements.dailyFetchLogs.innerHTML = emptyState(reason);
+}
+
+function dailyReadinessEndpoint(readiness) {
+  const endpoints = Array.isArray(readiness?.endpoints) ? readiness.endpoints : [];
+  return endpoints.find((endpoint) => endpoint.endpoint === "daily") || null;
+}
+
+function renderMarketTable(headers, rows) {
+  return `
+    <div class="market-table" role="table" style="--market-columns: ${escapeHtml(headers.length)}">
+      <div class="market-table-row market-table-head" role="row">
+        ${headers.map((header) => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}
+      </div>
+      ${rows
+        .map(
+          (row) => `
+            <div class="market-table-row" role="row">
+              ${row.map((cell) => `<span role="cell">${escapeHtml(cell ?? "-")}</span>`).join("")}
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function renderSettingsStatus(status) {
@@ -2422,7 +2656,11 @@ async function readPayload(response) {
 function setButtonsBusy(isBusy) {
   elements.refreshButton.disabled = isBusy;
   elements.runScanButton.disabled = isBusy;
+  elements.fetchDailyButton.disabled = isBusy;
   elements.fetchAkshareButton.disabled = isBusy;
+  elements.dailyFetchForm.querySelectorAll("button").forEach((button) => {
+    button.disabled = isBusy;
+  });
   elements.dailyReportButton.disabled = isBusy;
   elements.weeklyReportButton.disabled = isBusy;
   elements.scoreSignalButton.disabled = isBusy;
@@ -2525,6 +2763,58 @@ function periodicQuery(period) {
   return `${portfolioQuery()}&period=${encodeURIComponent(period)}`;
 }
 
+function buildDailyFetchQuery() {
+  const formData = new FormData(elements.dailyFetchForm);
+  const tradeDate = String(formData.get("trade_date") || "").trim();
+  const tsCode = String(formData.get("ts_code") || "").trim().toUpperCase();
+  const startDate = String(formData.get("start_date") || "").trim();
+  const endDate = String(formData.get("end_date") || "").trim();
+
+  if (tradeDate && !TUSHARE_DATE_PATTERN.test(tradeDate)) {
+    showMessage("error", "交易日必须是 YYYYMMDD。");
+    return null;
+  }
+  if (startDate && !TUSHARE_DATE_PATTERN.test(startDate)) {
+    showMessage("error", "开始日期必须是 YYYYMMDD。");
+    return null;
+  }
+  if (endDate && !TUSHARE_DATE_PATTERN.test(endDate)) {
+    showMessage("error", "结束日期必须是 YYYYMMDD。");
+    return null;
+  }
+  if (tsCode && !TUSHARE_TS_CODE_PATTERN.test(tsCode)) {
+    showMessage("error", "股票代码格式应类似 000001.SZ；多个代码用英文逗号分隔。");
+    return null;
+  }
+  if (tradeDate && (startDate || endDate)) {
+    showMessage("error", "交易日不能和开始/结束日期同时填写。");
+    return null;
+  }
+  if (Boolean(startDate) !== Boolean(endDate)) {
+    showMessage("error", "开始日期和结束日期必须同时填写。");
+    return null;
+  }
+  if (!tsCode && (startDate || endDate)) {
+    showMessage("error", "按区间抓取时必须填写股票代码，避免请求范围过大。");
+    return null;
+  }
+
+  const params = new URLSearchParams();
+  if (tradeDate) {
+    params.set("trade_date", tradeDate);
+  }
+  if (tsCode) {
+    params.set("ts_code", tsCode);
+  }
+  if (startDate) {
+    params.set("start_date", startDate);
+  }
+  if (endDate) {
+    params.set("end_date", endDate);
+  }
+  return params.toString();
+}
+
 function formPayload(form) {
   const formData = new FormData(form);
   const payload = {};
@@ -2604,6 +2894,18 @@ function formatOptionalNumber(value) {
   }
 
   return Number(value).toString();
+}
+
+function formatMarketNumber(value, fractionDigits = 2) {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) {
+    return "-";
+  }
+
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: 0,
+  }).format(numberValue);
 }
 
 function formatSignedPercent(value) {

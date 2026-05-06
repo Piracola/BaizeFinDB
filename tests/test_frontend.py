@@ -12,8 +12,17 @@ def test_frontend_index_returns_static_page() -> None:
     assert "BaizeFinDB" in response.text
     assert "雷达" in response.text
     assert "Radar Terminal" in response.text
+    assert "DATA" in response.text
     assert "OPS" in response.text
     assert "command-input" in response.text
+    assert "market / data / dailydata" in response.text
+    assert "market-data-panel" in response.text
+    assert "Tushare 日线行情" in response.text
+    assert "单数据源模式" in response.text
+    assert "daily-source-summary" in response.text
+    assert "daily-fetch-form" in response.text
+    assert "daily-snapshot" in response.text
+    assert "daily-fetch-logs" in response.text
     assert "持仓 / 自选" in response.text
     assert "报告列表" in response.text
     assert "周期汇总 / 综合评分" in response.text
@@ -85,8 +94,17 @@ def test_frontend_assets_are_served() -> None:
     assert "cpu_usage_percent" in js_response.text
     assert "memory_used_percent" in js_response.text
     assert "loadTushareStatus" in js_response.text
+    assert "loadTushareDailyConsole" in js_response.text
+    assert "fetchTushareDaily" in js_response.text
+    assert "buildDailyFetchQuery" in js_response.text
+    assert "renderDailySourceSummary" in js_response.text
+    assert "renderDailySnapshot" in js_response.text
+    assert "renderDailyFetchLogs" in js_response.text
     assert "/providers/tushare/status" in js_response.text
     assert "/providers/tushare/readiness" in js_response.text
+    assert "/providers/tushare/fetch/daily" in js_response.text
+    assert "/providers/tushare/snapshots/latest?endpoint=daily" in js_response.text
+    assert "/providers/tushare/fetch-logs?endpoint=daily&limit=8" in js_response.text
     assert "loadSettingsStatus" in js_response.text
     assert "/settings/status" in js_response.text
     assert "/settings/editable" in js_response.text
@@ -97,6 +115,8 @@ def test_frontend_assets_are_served() -> None:
     assert "renderSettingsStatus" in js_response.text
     assert "settings: () =>" in js_response.text
     assert "config: () =>" in js_response.text
+    assert "market: () =>" in js_response.text
+    assert "dailydata: () =>" in js_response.text
     assert "renderTushareStatus" in js_response.text
     assert "statusCardClass" in js_response.text
     assert "loadPortfolio" in js_response.text
@@ -150,6 +170,11 @@ def test_frontend_assets_are_served() -> None:
     assert "ops-warning-drilldown" in css_response.text
     assert "ops-drilldown-section" in css_response.text
     assert "tushare-grid" in css_response.text
+    assert "market-data-panel" in css_response.text
+    assert "market-summary-grid" in css_response.text
+    assert "market-console" in css_response.text
+    assert "market-table" in css_response.text
+    assert "quote-form-grid" in css_response.text
     assert "status-warning" in css_response.text
     assert "portfolio-panel" in css_response.text
     assert "reports-panel" in css_response.text
@@ -171,6 +196,43 @@ def test_frontend_assets_are_served() -> None:
     assert "analysis-grid" in css_response.text
     assert "analysis-agent-grid" in css_response.text
     assert "analysis-agent-list" in css_response.text
+
+
+def test_frontend_daily_data_console_uses_tushare_daily_contract() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    load_start = js_text.index("async function loadTushareDailyConsole")
+    load_end = js_text.index("async function loadSettingsStatus")
+    load_block = js_text[load_start:load_end]
+    fetch_start = js_text.index("async function fetchTushareDaily")
+    fetch_end = js_text.index("async function fetchMinimalAkshare")
+    fetch_block = js_text[fetch_start:fetch_end]
+    query_start = js_text.index("function buildDailyFetchQuery")
+    query_end = js_text.index("function formPayload")
+    query_block = js_text[query_start:query_end]
+
+    assert 'fetchJson("/providers/tushare/status")' in load_block
+    assert 'fetchJson("/providers/tushare/readiness")' in load_block
+    assert 'fetchJson("/providers/tushare/snapshots/latest?endpoint=daily")' in load_block
+    assert 'fetchJson("/providers/tushare/fetch-logs?endpoint=daily&limit=8")' in load_block
+    assert "renderDailySourceSummary(status, readiness, latestSnapshot, dailyLogs[0])" in load_block
+    assert "renderDailySnapshot(latestSnapshot)" in load_block
+    assert "renderDailyFetchLogs(dailyLogs)" in load_block
+    assert "`/providers/tushare/fetch/daily${suffix}`" in fetch_block
+    assert "loadTushareStatus()" in fetch_block
+    assert "loadTushareDailyConsole({ silent: true })" in fetch_block
+    assert "TUSHARE_DATE_PATTERN" in query_block
+    assert "TUSHARE_TS_CODE_PATTERN" in query_block
+    assert "交易日不能和开始/结束日期同时填写" in query_block
+    assert "按区间抓取时必须填写股票代码" in query_block
+    assert 'params.set("trade_date", tradeDate)' in query_block
+    assert 'params.set("ts_code", tsCode)' in query_block
+    assert "TUSHARE_TOKEN" not in query_block
+    assert "token" not in query_block.lower()
 
 
 def test_frontend_settings_panel_uses_editable_settings_contract() -> None:

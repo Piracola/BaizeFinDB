@@ -49,6 +49,7 @@
 - `/reports/periodic` 按日/周生成当前 `user_key` 的雷达汇总报告
 - `/scores/signals/{signal_id}` 生成或查看 1d/3d/5d/10d 综合评分
 - 静态 Web 雷达终端工作台可查看运行状态、服务端磁盘/CPU/内存摘要、运维历史、只读 OPS 趋势摘要和趋势图、运行就绪自检、OPS 告警钻取、Tushare 状态、设置/API 配置状态、雷达总览、优先级和生命周期分布、市场情绪摘要、个股回推证据、信号详情、后端单信号分析摘要和确定性 agent assessments，手动生成模型分析草稿，维护默认 `user_key` 的持仓/自选，生成/查看 quick/standard 报告、确认后手动生成 deep 报告、日报/周报汇总和单信号 v2 综合评分明细，并维护 Telegram chat 绑定/白名单；设置面板读取 `/settings/status` 和 `/settings/editable`，可在 owner-only/localhost 边界下把 Tushare、Telegram 和模型 provider 配置写入服务器本地 `.env`，并可显式手动测试 Tushare、Telegram 和模型 provider 连接；状态、表单和测试结果都不回显 token、API key、webhook secret、raw `.env`、模型名/base URL、raw prompt 或模型响应。远程写入建议配置 `SETTINGS_ADMIN_TOKEN`，无 token 时只允许 localhost 写入；连接测试可能访问外部 provider 或产生模型调用费用，只在点击测试按钮时执行。Telegram 面板会读取 `/telegram/status`，展示严格绑定模式和白名单/绑定汇总计数，但不展示原始环境值、bot token 或 webhook secret；命令栏支持 `settings` / `config` 滚动并刷新设置状态，支持 `trend` / `trends` 滚动并刷新 `/ops/trends?lookback_hours=24&bucket_count=12` 的后端趋势桶计数，也支持 `warn` / `warning` 滚动并刷新 OPS 告警钻取。趋势摘要和趋势图只展示后端返回的扫描、失败和 unhealthy 桶计数；告警钻取只读复用 `/ops/readiness`、`/ops/overview` 和 `/ops/history` 的 24 小时窗口结果，展示后端 readiness、非 OK 检查、alerts、failure_summary 和有界 recent events，不在浏览器重算 OPS 状态或触发采集、扫描、评分、报告、Telegram mutation、模型调用、evidence 写入或交易相关动作；模型草稿只在点击 `生成模型草稿` 时调用后端，不随详情加载自动触发
+- 静态 Web 的 `DATA` / `Tushare 日线行情` 面板现在是日线优先的专业终端视图：支持单数据源模式、手动抓取 `daily`、查看最新日线快照、抓取日志和准入摘要；命令栏 `market` / `data` / `dailydata` 会滚动并刷新该面板。只有 Tushare `daily` 一个真实数据源时，系统仍可完成配置检查、日线抓取、快照留存、日志追踪和后续雷达/报告数据底座迭代。
 - 雷达扫描批次、候选信号、证据链和审查记录基础表
 - `/radar/scans/run` 基于最新 Provider 快照生成雷达候选信号
 - `/radar/scans/latest` 查看最新一次雷达扫描
@@ -97,7 +98,7 @@
 | M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成；Tushare `daily`、`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取、日志和快照查询，`daily` 为后续雷达和报告提供日线基础行情，`anns_d` 重大风险公告可被后续雷达扫描映射为 risk P0；`anns_d` Beat 调度有默认关闭的显式开关。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、诱导交易语言正反例、否定式风险提示误报防护、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
-| M5 | 验收项完成 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、手动 deep 报告入口、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check；后续进入生产化验证和真实数据增强。 |
+| M5 | 验收项完成 | 已有静态 Web 终端工作台、日线优先 DATA 面板、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、手动 deep 报告入口、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check；后续进入生产化验证和真实数据增强。 |
 
 ## 本地启动
 
@@ -128,7 +129,7 @@ uv run uvicorn app.main:app --reload
 
 访问：
 
-- `http://127.0.0.1:8000/` 静态 Web 雷达终端工作台
+- `http://127.0.0.1:8000/` 静态 Web 雷达终端工作台，首页优先展示 `DATA` 日线行情面板
 - `http://127.0.0.1:8000/health`
 - `http://127.0.0.1:8000/health/ready`
 - `http://127.0.0.1:8000/ops/overview?lookback_hours=24`

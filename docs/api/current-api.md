@@ -1238,6 +1238,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 ## 12. 接 Telegram / Web / 报告时的推荐用法
 
 - 状态面板：用 `GET /health/ready`、`GET /ops/overview`、`GET /ops/history` 和 `GET /ops/readiness`，展示依赖就绪、服务端磁盘/CPU/内存摘要、扫描新鲜度、失败率、数据质量、推送、模型调用、最近运维异常历史、运行就绪自检和只读 OPS 告警钻取。Web 和 Telegram `/ops_warn` 告警钻取沿用 24 小时窗口，展示后端 readiness、非 OK 检查、overview alerts、history `failure_summary` 和有界 recent events；不要在浏览器或 Telegram 层从 alerts/counts/resources/events 重算 OPS 状态。
+- 日线数据面板：用 `GET /providers/tushare/status`、`GET /providers/tushare/readiness`、`GET /providers/tushare/snapshots/latest?endpoint=daily` 和 `GET /providers/tushare/fetch-logs?endpoint=daily&limit=8` 展示单数据源模式、daily 准入、最新快照和抓取日志；只在用户点击时调用 `POST /providers/tushare/fetch/daily`。只有 Tushare `daily` 一个行情源时，Web 仍应把它视为可运行基础数据链路，而不是前端自行标记为系统不可用。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。
 - 信号列表：用 `GET /radar/signals`，按 `priority` 过滤。
 - 信号详情：用 `GET /radar/signals/{signal_id}`。

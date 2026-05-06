@@ -18,6 +18,7 @@
       </div>
       <nav class="module-nav" aria-label="模块">
         <button type="button" data-scroll-target="status-panel">OPS</button>
+        <button type="button" data-scroll-target="market-data-panel">DATA</button>
         <button type="button" data-scroll-target="settings-panel">SETTINGS</button>
         <button type="button" data-scroll-target="overview-panel">RADAR</button>
         <button type="button" data-scroll-target="signals-panel">SIGNALS</button>
@@ -42,7 +43,7 @@
             type="text"
             autocomplete="off"
             spellcheck="false"
-            placeholder="ops / settings / trend / warn / ready / history / tushare / radar / scan / fetch / portfolio / reports / daily / score / telegram"
+            placeholder="market / data / dailydata / ops / settings / trend / warn / tushare / radar / scan / portfolio / reports / daily / score"
           />
           <button id="command-run-button" type="button">执行</button>
         </div>
@@ -51,7 +52,8 @@
       <div class="action-strip" aria-label="常用操作">
         <button id="refresh-button" type="button" data-terminal-action="refresh">F1 刷新</button>
         <button id="run-scan-button" type="button" data-terminal-action="scan">F2 扫描</button>
-        <button id="fetch-akshare-button" type="button" data-terminal-action="fetch">F3 采集</button>
+        <button id="fetch-daily-button" type="button" data-terminal-action="daily-fetch">F3 日线</button>
+        <button id="fetch-akshare-button" type="button" data-terminal-action="fetch">AK 采集</button>
         <button type="button" data-scroll-target="ops-warning-drilldown">F4 告警</button>
         <button type="button" data-scroll-target="signals-panel">F5 信号</button>
         <button type="button" data-scroll-target="portfolio-panel">F6 持仓</button>
@@ -81,6 +83,80 @@
         <h3>数据源状态</h3>
         <div id="tushare-status" class="tushare-grid"></div>
         <div id="action-message" class="message" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="market-data-panel" class="panel market-data-panel" aria-labelledby="market-data-title">
+        <div class="market-board-head">
+          <div>
+            <p class="eyebrow">Primary Market Feed</p>
+            <h2 id="market-data-title">Tushare 日线行情</h2>
+          </div>
+          <div class="market-mode-strip" aria-label="数据源模式">
+            <span>单数据源模式</span>
+            <strong>daily OHLCV</strong>
+          </div>
+        </div>
+
+        <div id="daily-source-summary" class="market-summary-grid"></div>
+
+        <div class="market-console">
+          <form id="daily-fetch-form" class="daily-fetch-form">
+            <div class="quote-form-grid">
+              <label>
+                <span>交易日</span>
+                <input
+                  id="daily-trade-date"
+                  name="trade_date"
+                  inputmode="numeric"
+                  maxlength="8"
+                  placeholder="YYYYMMDD"
+                />
+              </label>
+              <label>
+                <span>股票代码</span>
+                <input
+                  id="daily-ts-code"
+                  name="ts_code"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="000001.SZ"
+                />
+              </label>
+              <label>
+                <span>开始日期</span>
+                <input id="daily-start-date" name="start_date" inputmode="numeric" maxlength="8" />
+              </label>
+              <label>
+                <span>结束日期</span>
+                <input id="daily-end-date" name="end_date" inputmode="numeric" maxlength="8" />
+              </label>
+              <button type="submit">抓取日线</button>
+              <button id="daily-refresh-button" type="button" class="secondary">刷新行情</button>
+            </div>
+          </form>
+
+          <div class="market-console-note">
+            <strong>运行策略</strong>
+            <span>当前只要求 Tushare daily 可用。其他 Provider 没有数据时，不影响日线快照、日志和后续报告/雷达数据底座迭代。</span>
+          </div>
+        </div>
+
+        <div class="market-split">
+          <section>
+            <div class="section-heading compact-heading">
+              <h3>最新日线快照</h3>
+              <span class="muted">来自 /providers/tushare/snapshots/latest?endpoint=daily</span>
+            </div>
+            <div id="daily-snapshot" class="market-table-wrap"></div>
+          </section>
+          <section>
+            <div class="section-heading compact-heading">
+              <h3>抓取日志</h3>
+              <span class="muted">来自 /providers/tushare/fetch-logs?endpoint=daily</span>
+            </div>
+            <div id="daily-fetch-logs" class="market-table-wrap"></div>
+          </section>
+        </div>
       </section>
 
       <section id="settings-panel" class="panel settings-panel" aria-labelledby="settings-title">
