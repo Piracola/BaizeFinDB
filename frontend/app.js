@@ -44,6 +44,7 @@ const elements = {
   opsReadiness: document.querySelector("#ops-readiness"),
   opsWarningDrilldown: document.querySelector("#ops-warning-drilldown"),
   tushareStatus: document.querySelector("#tushare-status"),
+  settingsStatus: document.querySelector("#settings-status"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
   lifecycleCounts: document.querySelector("#lifecycle-counts"),
@@ -105,6 +106,7 @@ async function refreshAll() {
       loadOpsReadiness(),
       loadOpsWarningDrilldown({ silent: true }),
       loadTushareStatus(),
+      loadSettingsStatus({ silent: true }),
       loadOverview(),
       loadSignals(),
       loadPortfolio(),
@@ -135,6 +137,7 @@ async function loadReadyStatus() {
     renderOpsTrendsUnavailable("无法连接 API。");
     renderOpsReadinessUnavailable("无法连接 API。");
     renderOpsWarningDrilldownUnavailable("无法连接 API。");
+    renderSettingsStatusUnavailable("无法连接 API。");
     return false;
   }
 }
@@ -203,6 +206,21 @@ async function loadTushareStatus() {
     renderTushareStatus(status, readiness);
   } catch (error) {
     renderTushareUnavailable(`Tushare 状态暂不可用：${formatError(error)}`);
+  }
+}
+
+async function loadSettingsStatus(options = {}) {
+  try {
+    const status = await fetchJson("/settings/status");
+    renderSettingsStatus(status);
+    if (!options.silent) {
+      showMessage("info", "设置状态已刷新。");
+    }
+  } catch (error) {
+    renderSettingsStatusUnavailable(`设置状态暂不可用：${formatError(error)}`);
+    if (!options.silent) {
+      showMessage("error", `读取设置状态失败：${formatError(error)}`);
+    }
   }
 }
 
@@ -300,6 +318,7 @@ function renderRadarUnavailable(reason) {
   renderOpsReadinessUnavailable("依赖服务恢复后再读取就绪自检。");
   renderOpsWarningDrilldownUnavailable("依赖服务恢复后再读取 OPS 告警钻取。");
   renderTushareUnavailable("依赖服务恢复后再读取 Tushare 状态。");
+  renderSettingsStatusUnavailable("依赖服务恢复后再读取设置状态。");
   elements.priorityCounts.innerHTML = emptyState(reason);
   elements.lifecycleCounts.innerHTML = emptyState("暂无生命周期分布。");
   elements.marketSentiment.innerHTML = emptyState("暂无市场情绪摘要。");
@@ -597,7 +616,7 @@ async function disableTelegramBinding() {
 function executeCommand() {
   const command = elements.commandInput.value.trim().toLowerCase();
   if (!command) {
-    showMessage("info", "可执行命令：ops、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
+    showMessage("info", "可执行命令：ops、settings、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。");
     return;
   }
 
@@ -653,6 +672,18 @@ function executeCommand() {
       scrollToPanel("status-panel");
       loadTushareStatus();
     },
+    settings: () => {
+      scrollToPanel("settings-panel");
+      loadSettingsStatus();
+    },
+    config: () => {
+      scrollToPanel("settings-panel");
+      loadSettingsStatus();
+    },
+    api: () => {
+      scrollToPanel("settings-panel");
+      loadSettingsStatus();
+    },
     radar: refreshAll,
     refresh: refreshAll,
     scan: runRadarScan,
@@ -676,7 +707,7 @@ function executeCommand() {
     help: () =>
       showMessage(
         "info",
-        "可执行命令：ops、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
+        "可执行命令：ops、settings、trend、warn、ready、history、tushare、radar、scan、fetch、signals、portfolio、reports、daily、weekly、score、telegram。",
       ),
   };
 
@@ -1234,12 +1265,99 @@ function renderTushareUnavailable(reason) {
   elements.tushareStatus.innerHTML = emptyState(reason);
 }
 
+function renderSettingsStatus(status) {
+  const tushare = status?.tushare || {};
+  const telegram = status?.telegram || {};
+  const model = status?.model || {};
+  const modelChecks = Array.isArray(model.checks) ? model.checks : [];
+  const nonOkModelChecks = modelChecks.filter((check) => check.status !== "ok").slice(0, 4);
+  const cards = [
+    settingsCard(
+      "Tushare Token",
+      tushare.token_configured ? "ok" : "fail",
+      tushare.token_configured ? "已配置" : "未配置",
+      "只显示配置状态，不显示 token 原文",
+    ),
+    settingsCard(
+      "Tushare 调度",
+      tushare.anns_d_beat_enabled ? "warning" : "ok",
+      tushare.anns_d_beat_enabled ? "已开启" : "未开启",
+      `anns_d interval ${tushare.anns_d_beat_interval_seconds ?? "-"} 秒`,
+    ),
+    settingsCard(
+      "Telegram Bot",
+      telegram.bot_token_configured ? "ok" : "fail",
+      telegram.bot_token_configured ? "已配置" : "未配置",
+      `白名单 ${telegram.allowed_chat_count ?? 0} 个 / push ${telegram.push_enabled ? "开启" : "关闭"}`,
+    ),
+    settingsCard(
+      "Telegram Webhook",
+      telegram.webhook_secret_enabled ? "ok" : "warning",
+      telegram.webhook_secret_enabled ? "Secret 已启用" : "Secret 未启用",
+      `严格绑定 ${telegram.require_binding ? "开启" : "关闭"}`,
+    ),
+    settingsCard(
+      "模型 Provider",
+      model.status || "unknown",
+      label(model.status || "unknown"),
+      `provider=${label(model.provider || "disabled")} / analysis ${model.analysis_enabled ? "开启" : "关闭"}`,
+    ),
+    settingsCard(
+      "模型凭据",
+      model.openai_api_key_configured || model.model_api_key_configured ? "ok" : "warning",
+      model.openai_api_key_configured || model.model_api_key_configured ? "已配置" : "未配置",
+      `primary ${model.primary_model_configured ? "已配置" : "未配置"} / fallback ${
+        model.fallback_model_configured ? "已配置" : "未配置"
+      }`,
+    ),
+  ];
+
+  const checkHtml = nonOkModelChecks.length
+    ? nonOkModelChecks
+        .map((check) =>
+          settingsCard(
+            `模型检查：${check.name || "unknown"}`,
+            check.status || "unknown",
+            label(check.status || "unknown"),
+            check.detail || "后端未返回说明",
+          ),
+        )
+        .join("")
+    : settingsCard("模型检查", "ok", "无阻断项", "模型 provider readiness 当前没有失败或警告。");
+
+  elements.settingsStatus.innerHTML = `
+    <div class="settings-grid">
+      ${cards.join("")}
+      ${checkHtml}
+    </div>
+    <article class="detail-card settings-boundary">
+      <strong>配置边界</strong>
+      <p class="summary">${escapeHtml(status?.read_only_boundary || "只读配置状态，不展示或写入密钥。")}</p>
+      <p class="muted">当前模块不从浏览器写入服务器环境；真实密钥仍放在服务器本地环境或 .env 中。</p>
+    </article>
+  `;
+}
+
+function settingsCard(name, status, value, detail) {
+  return `
+    <article class="status-card ${statusCardClass(status)}">
+      <strong>${escapeHtml(name)}</strong>
+      <div>${escapeHtml(value)}</div>
+      <div class="muted">${escapeHtml(detail)}</div>
+    </article>
+  `;
+}
+
+function renderSettingsStatusUnavailable(reason) {
+  elements.settingsStatus.innerHTML = emptyState(reason);
+}
+
 function statusCardClass(status) {
   const value = String(status || "").toLowerCase();
   if (["ok", "ready", "configured", "success"].includes(value)) {
     return "status-ok";
   }
-  if (["warning", "degraded"].includes(value)) {
+  if (["warn", "warning", "degraded"].includes(value)) {
     return "status-warning";
   }
   return "status-fail";
@@ -2085,6 +2203,7 @@ function priorityBadgeClass(priority) {
 function label(value) {
   const labels = {
     ready: "就绪",
+    warn: "有警告",
     warning: "有警告",
     not_ready: "未就绪",
     ok: "正常",

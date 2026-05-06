@@ -12,6 +12,7 @@ GET  /ops/overview
 GET  /ops/history
 GET  /ops/trends
 GET  /ops/readiness
+GET  /settings/status
 GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
 GET  /providers/tushare/status
@@ -176,7 +177,26 @@ Invoke-RestMethod "http://127.0.0.1:8000/ops/readiness?lookback_hours=24"
 
 - `lookback_hours`：统计窗口，范围 1 到 168，默认 24。
 
-## 3. Provider API
+## 3. Settings API
+
+### `GET /settings/status`
+
+用途：读取只读设置/API 配置状态中心，用于 Web 设置面板和启用真实 API 前的本地核对。该接口只读取配置状态，不调用 Tushare、Telegram、OpenAI-compatible provider 或其他外部 API，不验证 token，不读数据库，不写 `.env`，不触发采集、扫描、报告、Telegram 发送或模型调用。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/settings/status
+```
+
+响应重点：
+
+- `tushare`：Tushare token 是否配置、`anns_d` Beat 是否开启、调度间隔秒数。
+- `telegram`：bot token 是否配置、环境白名单数量、webhook secret 是否启用、严格绑定和推送开关。
+- `model`：模型分析是否开启、provider、primary/fallback/base URL/key 是否配置，以及复用模型 provider readiness 的脱敏检查状态。
+- `read_only_boundary`：明确该接口不输出 secret、不写环境、不调用 provider。
+
+返回值不包含 token、API key、webhook secret、Authorization 值、raw `.env`、raw prompt 或模型响应。未来如果要支持浏览器填写并保存 API key，必须先增加本地管理员认证或 localhost-only 写入边界。
+
+## 4. Provider API
 
 ### `GET /providers/akshare/endpoints`
 
@@ -436,7 +456,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/akshare/snapshots/latest
 | --- | --- |
 | `endpoint` | 只看某个 AKShare endpoint |
 
-## 4. Radar API
+## 5. Radar API
 
 ### `POST /radar/scans/run`
 
@@ -641,7 +661,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/radar/signals/1/model-analy
   `draft_status="blocked"`，malformed/non-object JSON 会返回 `draft_status="degraded"`。
 - Web 信号详情、Windows 客户端和 Telegram `/model_draft <id>` 已有显式手动入口。
 
-## 5. Portfolio / 持仓自选 API
+## 6. Portfolio / 持仓自选 API
 
 Portfolio API 是单用户 MVP 能力，当前通过 `user_key` 查询参数做个人数据隔离，默认值为 `default`。它不接券商、不保存交易密码、不导入持仓截图。
 
@@ -722,7 +742,7 @@ Invoke-RestMethod -Method Patch http://127.0.0.1:8000/portfolio/watchlist/1 `
 Invoke-RestMethod -Method Delete http://127.0.0.1:8000/portfolio/watchlist/1
 ```
 
-## 6. Reports / 报告 API
+## 7. Reports / 报告 API
 
 报告 API 当前是 MVP 模板生成，不调用模型。quick/standard 可从普通报告入口生成；deep 只能走专门手动入口并二次确认。报告只用于关注、观察、风险和复盘，不构成投资建议。
 
@@ -819,7 +839,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/reports/periodic?user_key=telegram-1001
 - `push_count`：当前 `user_key` 在周期内记录的 Telegram 推送数量。
 - `body_markdown`：日报/周报正文摘要，不包含原始证据摘录、URL、域名、持仓成本或交易指令。
 
-## 7. Scores / 评分 API
+## 8. Scores / 评分 API
 
 ### `POST /scores/signals/{signal_id}`
 
@@ -847,7 +867,7 @@ Invoke-RestMethod http://127.0.0.1:8000/scores/signals/1
 
 如果信号不存在，返回 `404`。如果信号存在但尚未评分，返回空 `records`。
 
-## 8. Governance / 分享安全 API
+## 9. Governance / 分享安全 API
 
 ### `POST /radar/signals/{signal_id}/review`
 
@@ -930,7 +950,7 @@ Invoke-RestMethod http://127.0.0.1:8000/radar/signals/1/share-payload
 - 精确置信度。
 - 来源时间。
 
-## 9. Telegram Bot API
+## 10. Telegram Bot API
 
 Telegram Bot MVP 是 Webhook 模式，适合后续 Linux + HTTPS 部署。Telegram 只消费健康检查、运行状态、OPS 趋势桶、OPS 告警钻取、Tushare 数据源状态、Tushare 准入自检、雷达和单信号分析摘要等后端结果，不重新计算 P0/P1/P2、生命周期、市场情绪、运行状态、OPS readiness、数据源状态、审查状态或分析摘要。
 
@@ -1113,7 +1133,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 
 返回字段包括推送来源批次、投递状态、折叠后的正文、包含/过滤/人工复核信号 id 和非敏感投递元数据。返回内容不得包含 Telegram token、webhook secret、原始证据摘录、原始 URL 或来源域名。
 
-## 10. 错误码约定
+## 11. 错误码约定
 
 | 错误码 | 常见原因 | 调用方处理 |
 | --- | --- | --- |
@@ -1124,7 +1144,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/telegram/push/logs?user_key=telegram-10
 | `403` | Telegram webhook secret 不匹配 | 检查 `TELEGRAM_WEBHOOK_SECRET` 和请求 header |
 | `503` | PostgreSQL 或 Redis 不可用 | 检查 Docker、迁移和 `/health/ready` |
 
-## 11. 接 Telegram / Web / 报告时的推荐用法
+## 12. 接 Telegram / Web / 报告时的推荐用法
 
 - 状态面板：用 `GET /health/ready`、`GET /ops/overview`、`GET /ops/history` 和 `GET /ops/readiness`，展示依赖就绪、服务端磁盘/CPU/内存摘要、扫描新鲜度、失败率、数据质量、推送、模型调用、最近运维异常历史、运行就绪自检和只读 OPS 告警钻取。Web 和 Telegram `/ops_warn` 告警钻取沿用 24 小时窗口，展示后端 readiness、非 OK 检查、overview alerts、history `failure_summary` 和有界 recent events；不要在浏览器或 Telegram 层从 alerts/counts/resources/events 重算 OPS 状态。
 - 首页/总览：用 `GET /radar/overview`，展示后端返回的优先级、生命周期、当前主题和 `stock_backtrace_evidences`。

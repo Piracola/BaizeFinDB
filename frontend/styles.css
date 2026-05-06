@@ -202,7 +202,7 @@ h3 {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 22px;
   border-bottom: 1px solid var(--line);
@@ -229,6 +229,7 @@ h3 {
 }
 
 .status-panel,
+.settings-panel,
 .overview-panel,
 .signals-panel,
 .detail-panel,
@@ -254,6 +255,7 @@ h3 {
 .portfolio-panel,
 .reports-panel,
 .analytics-panel,
+.settings-panel,
 .telegram-panel {
   grid-column: 1 / -1;
 }
@@ -274,6 +276,7 @@ h3 {
 .status-grid,
 .ops-grid,
 .tushare-grid,
+.settings-grid,
 .priority-grid,
 .lifecycle-grid,
 .sentiment-grid {
@@ -284,6 +287,7 @@ h3 {
 
 .ops-grid,
 .tushare-grid,
+.settings-grid,
 .lifecycle-grid,
 .sentiment-grid {
   margin-top: 10px;
@@ -450,6 +454,7 @@ h3 {
 .ops-readiness-list,
 .ops-warning-drilldown,
 .ops-drilldown-section,
+.settings-status,
 .report-list {
   display: grid;
   gap: 10px;
@@ -615,6 +620,10 @@ h3 {
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 14px;
+}
+
+.settings-boundary {
+  margin-top: 10px;
 }
 
 .compact-form {
@@ -840,6 +849,7 @@ pre {
   .portfolio-panel,
   .reports-panel,
   .analytics-panel,
+  .settings-panel,
   .telegram-panel {
     grid-column: auto;
     grid-row: auto;
@@ -881,6 +891,7 @@ pre {
 
   .status-grid,
   .ops-grid,
+  .settings-grid,
   .ops-trend-chart,
   .ops-trend-row,
   .priority-grid,

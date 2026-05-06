@@ -18,7 +18,8 @@ def test_frontend_index_returns_static_page() -> None:
     assert "报告列表" in response.text
     assert "周期汇总 / 综合评分" in response.text
     assert "Telegram 绑定 / 白名单" in response.text
-    assert "ops / trend / warn" in response.text
+    assert "设置 / API 配置" in response.text
+    assert "ops / settings / trend / warn" in response.text
     assert "tushare / radar" in response.text
     assert "ops-overview" in response.text
     assert "ops-history" in response.text
@@ -28,6 +29,8 @@ def test_frontend_index_returns_static_page() -> None:
     assert "OPS 告警钻取" in response.text
     assert "ops-warning-drilldown" in response.text
     assert "tushare-status" in response.text
+    assert "settings-panel" in response.text
+    assert "settings-status" in response.text
     assert "lifecycle-counts" in response.text
     assert "market-sentiment" in response.text
     assert "stock-backtrace-evidences" in response.text
@@ -82,6 +85,11 @@ def test_frontend_assets_are_served() -> None:
     assert "loadTushareStatus" in js_response.text
     assert "/providers/tushare/status" in js_response.text
     assert "/providers/tushare/readiness" in js_response.text
+    assert "loadSettingsStatus" in js_response.text
+    assert "/settings/status" in js_response.text
+    assert "renderSettingsStatus" in js_response.text
+    assert "settings: () =>" in js_response.text
+    assert "config: () =>" in js_response.text
     assert "renderTushareStatus" in js_response.text
     assert "statusCardClass" in js_response.text
     assert "loadPortfolio" in js_response.text
@@ -139,6 +147,9 @@ def test_frontend_assets_are_served() -> None:
     assert "portfolio-panel" in css_response.text
     assert "reports-panel" in css_response.text
     assert "analytics-panel" in css_response.text
+    assert "settings-panel" in css_response.text
+    assert "settings-grid" in css_response.text
+    assert "settings-status" in css_response.text
     assert "telegram-panel" in css_response.text
     assert "score-grid" in css_response.text
     assert "score-components" in css_response.text
@@ -150,6 +161,37 @@ def test_frontend_assets_are_served() -> None:
     assert "analysis-grid" in css_response.text
     assert "analysis-agent-grid" in css_response.text
     assert "analysis-agent-list" in css_response.text
+
+
+def test_frontend_settings_panel_uses_read_only_settings_status_contract() -> None:
+    client = TestClient(create_app())
+
+    js_response = client.get("/assets/app.js")
+
+    assert js_response.status_code == 200
+    js_text = js_response.text
+    load_start = js_text.index("async function loadSettingsStatus")
+    load_end = js_text.index("async function loadOverview")
+    load_block = js_text[load_start:load_end]
+    render_start = js_text.index("function renderSettingsStatus")
+    render_end = js_text.index("function renderSettingsStatusUnavailable")
+    render_block = js_text[render_start:render_end]
+
+    assert 'fetchJson("/settings/status")' in load_block
+    assert "renderSettingsStatus(status)" in load_block
+    assert "settings-grid" in render_block
+    assert "token_configured" in render_block
+    assert "bot_token_configured" in render_block
+    assert "openai_api_key_configured" in render_block
+    assert "model_api_key_configured" in render_block
+    assert "read_only_boundary" in render_block
+    assert "真实密钥仍放在服务器本地环境或 .env 中" in render_block
+    assert "TUSHARE_TOKEN" not in render_block
+    assert "TELEGRAM_BOT_TOKEN" not in render_block
+    assert "TELEGRAM_WEBHOOK_SECRET" not in render_block
+    assert "MODEL_API_KEY" not in render_block
+    assert "OPENAI_API_KEY" not in render_block
+    assert "Authorization" not in render_block
 
 
 def test_frontend_manual_deep_report_action_uses_confirmed_backend_endpoint() -> None:

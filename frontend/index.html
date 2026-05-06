@@ -18,6 +18,7 @@
       </div>
       <nav class="module-nav" aria-label="模块">
         <button type="button" data-scroll-target="status-panel">OPS</button>
+        <button type="button" data-scroll-target="settings-panel">SETTINGS</button>
         <button type="button" data-scroll-target="overview-panel">RADAR</button>
         <button type="button" data-scroll-target="signals-panel">SIGNALS</button>
         <button type="button" data-scroll-target="detail-panel">DETAIL</button>
@@ -41,7 +42,7 @@
             type="text"
             autocomplete="off"
             spellcheck="false"
-            placeholder="ops / trend / warn / ready / history / tushare / radar / scan / fetch / portfolio / reports / daily / score / telegram"
+            placeholder="ops / settings / trend / warn / ready / history / tushare / radar / scan / fetch / portfolio / reports / daily / score / telegram"
           />
           <button id="command-run-button" type="button">执行</button>
         </div>
@@ -57,6 +58,7 @@
         <button type="button" data-scroll-target="reports-panel">F7 报告</button>
         <button type="button" data-scroll-target="analytics-panel">F8 周期</button>
         <button type="button" data-scroll-target="telegram-panel">F9 绑定</button>
+        <button type="button" data-scroll-target="settings-panel">F10 设置</button>
       </div>
 
       <main class="layout">
@@ -79,6 +81,14 @@
         <h3>数据源状态</h3>
         <div id="tushare-status" class="tushare-grid"></div>
         <div id="action-message" class="message" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="settings-panel" class="panel settings-panel" aria-labelledby="settings-title">
+        <div class="section-heading">
+          <h2 id="settings-title">设置 / API 配置</h2>
+          <span class="muted">来自 /settings/status</span>
+        </div>
+        <div id="settings-status" class="settings-status"></div>
       </section>
 
       <section id="overview-panel" class="panel overview-panel" aria-labelledby="overview-title">
