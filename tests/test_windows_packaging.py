@@ -9,6 +9,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SCRIPT = REPO_ROOT / "clients" / "windows" / "package-client.ps1"
+INSTALLER_SCRIPT = REPO_ROOT / "clients" / "windows" / "package-installer.ps1"
+INNO_SCRIPT = REPO_ROOT / "clients" / "windows" / "installer" / "BaizeFinDB-Windows-Client.iss"
 PACKAGE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "windows-client-package.yml"
 GITIGNORE = REPO_ROOT / ".gitignore"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -116,6 +118,44 @@ def test_windows_package_workflow_validates_packaged_imports() -> None:
     assert "BAIZEFINDB_PACKAGED_IMPORT_CHECK" in workflow
     assert "BaizeFinDB-Windows-Client.exe" in workflow
     assert "$LASTEXITCODE" in workflow
+
+
+def test_installer_script_wraps_pyinstaller_onedir_with_inno_setup() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    assert "Resolve-InnoSetupCompiler" in script
+    assert "choco install innosetup --no-progress --yes" in script
+    assert "BaizeFinDB-Windows-Client.iss" in script
+    assert "BaizeFinDB-Windows-Client-Setup" in script
+    assert "Packaged client exe was not found" in script
+    assert "Packaged installer output" in script
+
+
+def test_inno_setup_script_installs_client_with_shortcuts_and_uninstall() -> None:
+    script = INNO_SCRIPT.read_text(encoding="utf-8")
+
+    assert "AppName={#AppName}" in script
+    assert "PrivilegesRequired=lowest" in script
+    assert "DefaultDirName={localappdata}\\Programs\\BaizeFinDB Windows Client" in script
+    assert "UninstallDisplayIcon={app}\\{#AppExeName}" in script
+    assert 'Source: "{#SourceDir}\\*"' in script
+    assert "recursesubdirs" in script
+    assert 'Name: "{group}\\BaizeFinDB Windows Client"' in script
+    assert 'Name: "{autodesktop}\\BaizeFinDB Windows Client"' in script
+    assert "desktopicon" in script
+
+
+def test_windows_package_workflow_builds_and_uploads_installer() -> None:
+    workflow = PACKAGE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "Install Inno Setup" in workflow
+    assert "choco install innosetup --no-progress --yes" in workflow
+    assert "Build Windows installer" in workflow
+    assert "clients/windows/package-installer.ps1" in workflow
+    assert "Validate Windows installer artifact" in workflow
+    assert "BaizeFinDB-Windows-Client-Setup.exe" in workflow
+    assert "Upload Windows installer artifact" in workflow
+    assert "BaizeFinDB-Windows-Client-Setup-${{ github.sha }}" in workflow
 
 
 def test_packaging_dependency_group_is_dedicated_and_bounded() -> None:

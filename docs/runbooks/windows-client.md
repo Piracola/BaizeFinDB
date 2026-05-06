@@ -1,6 +1,6 @@
 # Windows 客户端 MVP Runbook
 
-这份 runbook 用于在 Windows 上运行 BaizeFinDB 客户端 MVP。客户端默认使用 Python 标准库和 Tkinter 源码运行，不引入运行时依赖；仓库另提供可选 PyInstaller onedir 打包脚手架，但它不是签名安装器或生产分发包。
+这份 runbook 用于在 Windows 上运行 BaizeFinDB 客户端 MVP。客户端默认使用 Python 标准库和 Tkinter 源码运行，不引入运行时依赖；仓库另提供可选 PyInstaller onedir 打包脚手架和基于 Inno Setup 的普通 `Setup.exe` 安装包脚手架。安装包当前仍是未签名 preview，不包含自动更新或生产分发承诺。
 
 ## 1. 功能边界
 
@@ -232,7 +232,20 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 
 这些目录和生成的 `*.spec` 已加入 `.gitignore`。不要提交 exe、spec、中间构建目录、签名证书、token、smoke evidence 或个人数据。脚手架不做 onefile、MSI、代码签名、SmartScreen 信誉、自动更新或生产发布。
 
-如果开发环境已经迁移到 Linux 服务器，不能直接用 PyInstaller 交叉生成 Windows `.exe`。仓库的 `.github/workflows/windows-client-package.yml` 会在 GitHub Actions 的 `windows-latest` runner 上执行同一份 `package-client.ps1`，并用 `BAIZEFINDB_PACKAGED_IMPORT_CHECK=1` 启动打包后的 exe 做导入校验，确认 `clients` 包已进入 onedir bundle 后再上传 `BaizeFinDB-Windows-Client-<commit>` artifact。该 artifact 是 onedir Windows 客户端包；真实发布前仍需要 Windows 目标机试运行、代码签名和分发策略。
+需要普通 Windows 安装包时，先完成 onedir 打包，再安装 Inno Setup 6 并运行：
+
+```powershell
+choco install innosetup --no-progress --yes
+powershell -ExecutionPolicy Bypass -File clients/windows/package-installer.ps1
+```
+
+安装包默认输出：
+
+- `clients/windows/dist/installer/BaizeFinDB-Windows-Client-Setup.exe`
+
+该安装包默认安装到当前用户目录，创建开始菜单快捷方式，提供可选桌面快捷方式和卸载入口；当前仍未签名，首次运行可能触发 Windows 安全提示。
+
+如果开发环境已经迁移到 Linux 服务器，不能直接用 PyInstaller 交叉生成 Windows `.exe`。仓库的 `.github/workflows/windows-client-package.yml` 会在 GitHub Actions 的 `windows-latest` runner 上执行同一份 `package-client.ps1`，并用 `BAIZEFINDB_PACKAGED_IMPORT_CHECK=1` 启动打包后的 exe 做导入校验，确认 `clients` 包已进入 onedir bundle 后，再安装 Inno Setup 并生成 `BaizeFinDB-Windows-Client-Setup.exe`。CI 会同时上传 `BaizeFinDB-Windows-Client-<commit>` onedir artifact 和 `BaizeFinDB-Windows-Client-Setup-<commit>` installer artifact；真实发布前仍需要 Windows 目标机试运行、代码签名和分发策略。
 
 打包前建议先运行第 3 节的 smoke check。打包后的 GUI 与源码版边界一致：只消费后端 API，不自动采集、扫描、评分、生成报告、修改 Telegram，也不提供交易相关能力。
 

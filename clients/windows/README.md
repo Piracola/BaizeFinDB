@@ -2,7 +2,7 @@
 
 这是 Windows 客户端 MVP：用 Python 标准库和 Tkinter 连接 BaizeFinDB API，查看健康状态、运行状态、服务端磁盘摘要、运维历史、运行就绪自检、OPS 告警钻取、首用诊断、告警摘要、Tushare 数据源状态和准入自检、雷达总览、生命周期分布、市场情绪摘要、个股回推证据、信号列表、单信号后端分析摘要、手动生成模型分析草稿、持仓、自选、报告摘要、确认后手动生成 deep 报告、日报/周报汇总、单信号 v2 综合评分明细，维护 Telegram chat 绑定/白名单，并打开现有 Web 面板。GUI 内的 `OPS Lookback (hours)` 输入框默认 24，允许 1 到 168 小时，供运行状态、运维历史、就绪自检、告警钻取和首用诊断共用。
 
-默认仍是源码运行版，不是安装包。当前目录提供可选 PyInstaller onedir 打包脚手架，方便后续在 Windows 目标机上验证 exe 形态；它不是签名安装器，也不包含自动更新或生产分发承诺。
+默认仍是源码运行版。当前目录提供可选 PyInstaller onedir 打包脚手架，也提供基于 Inno Setup 的普通 `Setup.exe` 安装包脚手架；安装包当前仍是未签名 preview，不包含自动更新或生产分发承诺。
 
 ## 前置条件
 
@@ -174,6 +174,15 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 脚本随后会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。打包命令会显式加入 `clients.windows.baizefindb_client`、`clients.windows.client_api` 和 `clients.windows.smoke_check` hidden imports，避免 onedir 包缺少 `clients` 模块。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
 
 GitHub Actions 的 Windows 打包流程会用 `BAIZEFINDB_PACKAGED_IMPORT_CHECK=1` 启动打包后的 exe 做导入校验，确认客户端模块能从 bundle 内加载后再上传 artifact。
+
+如果要生成普通 Windows 安装包，先完成 onedir 打包，再安装 Inno Setup 6 并运行：
+
+```powershell
+choco install innosetup --no-progress --yes
+powershell -ExecutionPolicy Bypass -File clients/windows/package-installer.ps1
+```
+
+安装包默认输出在 `clients/windows/dist/installer/BaizeFinDB-Windows-Client-Setup.exe`，会安装到当前用户目录，创建开始菜单快捷方式，并提供可选桌面快捷方式和卸载入口。GitHub Actions 会同时上传 onedir artifact 和 installer artifact。
 
 打包前仍建议先运行 smoke check；打包后的 GUI 只连接后端 API，不会自动采集、扫描、评分、生成报告、修改 Telegram 或执行任何交易相关动作。
 

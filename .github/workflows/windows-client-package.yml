@@ -56,6 +56,22 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress --yes
+
+      - name: Build Windows installer
+        shell: powershell
+        run: |
+          & clients/windows/package-installer.ps1 -AppVersion "0.1.0-preview.${{ github.run_number }}"
+
+      - name: Validate Windows installer artifact
+        shell: powershell
+        run: |
+          if (-not (Test-Path "clients/windows/dist/installer/BaizeFinDB-Windows-Client-Setup.exe")) {
+            Write-Error "Installer artifact was not created."
+            exit 1
+          }
+
       - name: Upload Windows client artifact
         uses: actions/upload-artifact@v4
         with:
@@ -63,4 +79,11 @@ jobs:
           path: |
             clients/windows/dist/BaizeFinDB-Windows-Client/**
             clients/windows/package-check-evidence.ci.json
+          if-no-files-found: error
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaizeFinDB-Windows-Client-Setup-${{ github.sha }}
+          path: clients/windows/dist/installer/BaizeFinDB-Windows-Client-Setup.exe
           if-no-files-found: error
