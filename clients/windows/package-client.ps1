@@ -178,6 +178,7 @@ if ($DryRun) {
 
 if (-not $SkipPreflight) {
     $PreflightReportPath = [System.IO.Path]::GetTempFileName()
+    $PreflightScriptPath = [System.IO.Path]::GetTempFileName()
     $PreflightCode = @'
 import importlib
 import importlib.util
@@ -233,10 +234,12 @@ if report["tkinter"]["status"] == "pass":
 report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 sys.exit(0 if all(item["status"] == "pass" for item in report.values()) else 1)
 '@
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($PreflightScriptPath, $PreflightCode, $Utf8NoBom)
     $PreviousPreflightReportEnv = $env:BAIZE_PACKAGE_PREFLIGHT_REPORT
     $env:BAIZE_PACKAGE_PREFLIGHT_REPORT = $PreflightReportPath
     try {
-        & python -c $PreflightCode $RepoRoot $PreflightReportPath
+        & python $PreflightScriptPath $RepoRoot $PreflightReportPath
         $PreflightExitCode = $LASTEXITCODE
     }
     finally {
@@ -264,6 +267,7 @@ sys.exit(0 if all(item["status"] == "pass" for item in report.values()) else 1)
     }
 
     Remove-Item -Force -ErrorAction SilentlyContinue $PreflightReportPath
+    Remove-Item -Force -ErrorAction SilentlyContinue $PreflightScriptPath
 
     if ($LASTEXITCODE -ne 0) {
         if ($null -ne $CheckEvidence) {
