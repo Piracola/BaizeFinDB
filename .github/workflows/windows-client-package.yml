@@ -47,6 +47,15 @@ jobs:
           -File clients/windows/package-client.ps1
           -Clean
 
+      - name: Validate packaged launcher imports
+        shell: powershell
+        run: |
+          $env:BAIZEFINDB_PACKAGED_IMPORT_CHECK = "1"
+          & clients/windows/dist/BaizeFinDB-Windows-Client/BaizeFinDB-Windows-Client.exe
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
       - name: Upload Windows client artifact
         uses: actions/upload-artifact@v4
         with:

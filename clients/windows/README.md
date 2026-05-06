@@ -171,7 +171,9 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -SkipPreflight
 ```
 
-脚本随后会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
+脚本随后会为 `clients.windows.baizefindb_client` 生成临时 launcher，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。打包命令会显式加入 `clients.windows.baizefindb_client`、`clients.windows.client_api` 和 `clients.windows.smoke_check` hidden imports，避免 onedir 包缺少 `clients` 模块。默认输出在 `clients/windows/dist/`，中间文件在 `clients/windows/build/`，这些生成物已加入 `.gitignore`，不要提交 exe、spec 或构建目录。
+
+GitHub Actions 的 Windows 打包流程会用 `BAIZEFINDB_PACKAGED_IMPORT_CHECK=1` 启动打包后的 exe 做导入校验，确认客户端模块能从 bundle 内加载后再上传 artifact。
 
 打包前仍建议先运行 smoke check；打包后的 GUI 只连接后端 API，不会自动采集、扫描、评分、生成报告、修改 Telegram 或执行任何交易相关动作。
 

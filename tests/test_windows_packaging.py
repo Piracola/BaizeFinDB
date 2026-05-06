@@ -9,6 +9,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_SCRIPT = REPO_ROOT / "clients" / "windows" / "package-client.ps1"
+PACKAGE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "windows-client-package.yml"
 GITIGNORE = REPO_ROOT / ".gitignore"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 UV_LOCK = REPO_ROOT / "uv.lock"
@@ -63,7 +64,13 @@ def test_packaging_script_uses_pyinstaller_onedir_for_windows_client_module() ->
     assert '"--windowed"' in script
     assert '"--name"' in script
     assert '"BaizeFinDB-Windows-Client"' in script
-    assert 'runpy.run_module("clients.windows.baizefindb_client", run_name="__main__")' in script
+    assert '"--hidden-import"' in script
+    assert '"clients.windows.baizefindb_client"' in script
+    assert '"clients.windows.client_api"' in script
+    assert '"clients.windows.smoke_check"' in script
+    assert "from clients.windows.baizefindb_client import main" in script
+    assert 'os.environ.get("BAIZEFINDB_PACKAGED_IMPORT_CHECK") == "1"' in script
+    assert "runpy.run_module" not in script
 
 
 def test_packaging_script_has_lightweight_python_preflight() -> None:
@@ -100,6 +107,15 @@ def test_packaging_outputs_are_gitignored() -> None:
     assert "clients/windows/dist/" in gitignore
     assert "clients/windows/package-check-evidence*.json" in gitignore
     assert "*.spec" in gitignore
+
+
+def test_windows_package_workflow_validates_packaged_imports() -> None:
+    workflow = PACKAGE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "Validate packaged launcher imports" in workflow
+    assert "BAIZEFINDB_PACKAGED_IMPORT_CHECK" in workflow
+    assert "BaizeFinDB-Windows-Client.exe" in workflow
+    assert "$LASTEXITCODE" in workflow
 
 
 def test_packaging_dependency_group_is_dedicated_and_bounded() -> None:

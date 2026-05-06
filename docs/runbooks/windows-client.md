@@ -225,14 +225,14 @@ uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/
 uv run --group package powershell -ExecutionPolicy Bypass -File clients/windows/package-client.ps1 -SkipPreflight
 ```
 
-脚本随后会生成临时 launcher，入口模块仍是 `clients.windows.baizefindb_client`，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。默认输出：
+脚本随后会生成临时 launcher，入口模块仍是 `clients.windows.baizefindb_client`，并调用 PyInstaller `--onedir --windowed --name BaizeFinDB-Windows-Client`。打包命令显式加入 `clients.windows.baizefindb_client`、`clients.windows.client_api` 和 `clients.windows.smoke_check` hidden imports，避免动态 launcher 漏打 `clients` 包。默认输出：
 
 - `clients/windows/dist/BaizeFinDB-Windows-Client/`
 - `clients/windows/build/`
 
 这些目录和生成的 `*.spec` 已加入 `.gitignore`。不要提交 exe、spec、中间构建目录、签名证书、token、smoke evidence 或个人数据。脚手架不做 onefile、MSI、代码签名、SmartScreen 信誉、自动更新或生产发布。
 
-如果开发环境已经迁移到 Linux 服务器，不能直接用 PyInstaller 交叉生成 Windows `.exe`。仓库的 `.github/workflows/windows-client-package.yml` 会在 GitHub Actions 的 `windows-latest` runner 上执行同一份 `package-client.ps1`，上传 `BaizeFinDB-Windows-Client-<commit>` artifact。该 artifact 是 onedir Windows 客户端包；真实发布前仍需要 Windows 目标机试运行、代码签名和分发策略。
+如果开发环境已经迁移到 Linux 服务器，不能直接用 PyInstaller 交叉生成 Windows `.exe`。仓库的 `.github/workflows/windows-client-package.yml` 会在 GitHub Actions 的 `windows-latest` runner 上执行同一份 `package-client.ps1`，并用 `BAIZEFINDB_PACKAGED_IMPORT_CHECK=1` 启动打包后的 exe 做导入校验，确认 `clients` 包已进入 onedir bundle 后再上传 `BaizeFinDB-Windows-Client-<commit>` artifact。该 artifact 是 onedir Windows 客户端包；真实发布前仍需要 Windows 目标机试运行、代码签名和分发策略。
 
 打包前建议先运行第 3 节的 smoke check。打包后的 GUI 与源码版边界一致：只消费后端 API，不自动采集、扫描、评分、生成报告、修改 Telegram，也不提供交易相关能力。
 

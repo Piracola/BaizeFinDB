@@ -137,6 +137,12 @@ if ($CheckOnly) {
     $CheckEvidence = New-CheckEvidence -Status "running" -EvidencePath $CheckJsonOutput
 }
 
+$HiddenImports = @(
+    "clients.windows.baizefindb_client",
+    "clients.windows.client_api",
+    "clients.windows.smoke_check"
+)
+
 $PyInstallerArgs = @(
     "-m",
     "PyInstaller",
@@ -152,9 +158,14 @@ $PyInstallerArgs = @(
     "--specpath",
     $SpecPath,
     "--paths",
-    $RepoRoot,
-    $LauncherPath
+    $RepoRoot
 )
+
+foreach ($HiddenImport in $HiddenImports) {
+    $PyInstallerArgs += @("--hidden-import", $HiddenImport)
+}
+
+$PyInstallerArgs += $LauncherPath
 
 if ($Clean) {
     $PyInstallerArgs = @("-m", "PyInstaller", "--clean") + $PyInstallerArgs[2..($PyInstallerArgs.Count - 1)]
@@ -305,9 +316,14 @@ if ($CheckOnly) {
 New-Item -ItemType Directory -Force -Path $WorkPath, $DistPath, $SpecPath | Out-Null
 
 $LauncherSource = @'
-import runpy
+import os
 
-runpy.run_module("clients.windows.baizefindb_client", run_name="__main__")
+from clients.windows.baizefindb_client import main
+
+if os.environ.get("BAIZEFINDB_PACKAGED_IMPORT_CHECK") == "1":
+    raise SystemExit(0)
+
+main()
 '@
 
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false

@@ -337,7 +337,7 @@ uv run uvicorn app.main:app --reload
 
 - 用 Docker / Linux runbook 跑通 API、worker、beat、迁移、只读 M5 smoke check 和短窗口 runtime check。
 - Web 设置页已支持 owner-only/localhost 边界下写入服务器本地 `.env`，并显式手动测试 Tushare、Telegram 和模型 provider 连接；远程写入建议配置 `SETTINGS_ADMIN_TOKEN`。填写 API 后，当前 API 进程会刷新配置缓存，但 Docker/Celery worker/beat 仍可能需要重启；连接测试通过也不等于完整雷达闭环已经验证。
-- Windows 客户端源码运行和本地 PyInstaller 脚手架已保留；Linux 服务器不能直接交叉生成 Windows `.exe`，仓库已新增 GitHub Actions Windows 打包工作流，推送后由 `windows-latest` runner 产出 onedir 客户端 artifact。
+- Windows 客户端源码运行和本地 PyInstaller 脚手架已保留；Linux 服务器不能直接交叉生成 Windows `.exe`，仓库已新增 GitHub Actions Windows 打包工作流，推送后由 `windows-latest` runner 产出 onedir 客户端 artifact；打包脚手架显式加入 `clients.windows.*` hidden imports，CI 会用 `BAIZEFINDB_PACKAGED_IMPORT_CHECK=1` 启动打包后的 exe 做导入校验，避免 artifact 缺少 `clients` 包。
 - 新库迁移后如需首用演示或 analysis smoke 样本，先运行 `uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.json` 写入可重复复用的合成 demo 用户、持仓/自选、雷达信号、证据、审查和 quick 报告；Windows 本机 Docker 首次试运行也可组合 `-SeedDemoDataJsonOutput <path> -DeployCheckM5Smoke -DeployCheckRequireRadarAnalysisSample`，在同一流程中先写 demo 数据，再严格验证单信号 analysis 样本；该路径不访问真实 Provider、不写 token、不保存真实个人持仓。
 - 接入更稳定的公告、监管、风险事件和情绪数据源，优先服务 risk P0 和主线确认。
 - Tushare 当前已支持 `stock_basic`、`anns_d` 和 `stock_company` 手动抓取；三条 live verify 脚本均支持脱敏 JSON evidence 输出；`anns_d` 中明显重大风险公告已能被雷达扫描映射为 risk P0；`anns_d` Beat 调度默认关闭，后续在 checklist、`verify_tushare_anns_d_preflight.py` 离线预调度校验、真实 token live evidence、字段和误报样例稳定后再显式启用。
