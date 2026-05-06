@@ -63,6 +63,13 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api
 docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat
 ```
 
+如果宿主机 `8000` 端口已被其他服务占用，可只改宿主机映射端口，容器内 API 仍监听
+`8000`：
+
+```powershell
+API_HOST_PORT=8010 docker compose -f docker-compose.yml -f docker-compose.server.yml up -d api worker beat
+```
+
 ## 部署演练命令
 
 先确认当前机器适合作为开发环境：
