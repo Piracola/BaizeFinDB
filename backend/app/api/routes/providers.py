@@ -20,6 +20,7 @@ from app.providers.schemas import (
 from app.providers.service import (
     collect_minimal_akshare,
     collect_tushare_announcements,
+    collect_tushare_daily,
     collect_tushare_stock_basic,
     collect_tushare_stock_company,
     get_akshare_collection_status,
@@ -38,6 +39,10 @@ SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 TushareDateQuery = Annotated[str | None, Query(pattern=r"^\d{8}$")]
 TushareExchangeQuery = Annotated[Literal["SSE", "SZSE", "BSE"], Query()]
+TushareTsCodeQuery = Annotated[
+    str | None,
+    Query(pattern=r"^\d{6}\.(?:SH|SZ|BJ)(?:,\d{6}\.(?:SH|SZ|BJ))*$"),
+]
 
 
 @router.get("/akshare/endpoints", response_model=list[ProviderEndpointInfo])
@@ -73,6 +78,33 @@ async def fetch_tushare_stock_basic(
         return await collect_tushare_stock_basic(session)
     except SQLAlchemyError as exc:
         raise _database_unavailable("recording tushare fetch", exc) from exc
+
+
+@router.post("/tushare/fetch/daily", response_model=ProviderEndpointResult)
+async def fetch_tushare_daily(
+    session: SessionDep,
+    trade_date: TushareDateQuery = None,
+    ts_code: TushareTsCodeQuery = None,
+    start_date: TushareDateQuery = None,
+    end_date: TushareDateQuery = None,
+) -> ProviderEndpointResult:
+    _ensure_valid_tushare_daily_query(
+        trade_date=trade_date,
+        ts_code=ts_code,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    try:
+        return await collect_tushare_daily(
+            session,
+            trade_date=trade_date,
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except SQLAlchemyError as exc:
+        raise _database_unavailable("recording tushare daily fetch", exc) from exc
 
 
 @router.post("/tushare/fetch/announcements", response_model=ProviderEndpointResult)
@@ -202,6 +234,32 @@ def _ensure_known_tushare_endpoint(endpoint: str | None) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"unknown tushare endpoint: {endpoint}",
+        )
+
+
+def _ensure_valid_tushare_daily_query(
+    *,
+    trade_date: str | None,
+    ts_code: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> None:
+    if trade_date is not None and (start_date is not None or end_date is not None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="trade_date cannot be combined with start_date/end_date.",
+        )
+
+    if (start_date is None) != (end_date is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="start_date and end_date must be provided together.",
+        )
+
+    if ts_code is None and (start_date is not None or end_date is not None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="ts_code is required when using start_date/end_date.",
         )
 
 

@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pandas as pd
 
 from app.providers.schemas import DataQualityStatus
@@ -52,6 +54,36 @@ def test_stock_basic_missing_required_fields_marks_dataset_degraded() -> None:
     assert dataset.quality.status == DataQualityStatus.DEGRADED
     assert "name" in dataset.quality.missing_fields
     assert dataset.quality.confidence < 0.95
+
+
+def test_daily_normalization_sets_market_freshness_and_source_time() -> None:
+    dataframe = pd.DataFrame(
+        [
+            {
+                "ts_code": "000001.SZ",
+                "trade_date": "20260504",
+                "open": 10.1,
+                "high": 10.5,
+                "low": 10.0,
+                "close": 10.3,
+                "pre_close": 10.0,
+                "change": 0.3,
+                "pct_chg": 3.0,
+                "vol": 123456.0,
+                "amount": 1234567.0,
+            }
+        ]
+    )
+
+    dataset = normalize_dataframe(dataframe, TUSHARE_ENDPOINTS["daily"])
+
+    assert dataset.endpoint == "daily"
+    assert dataset.snapshot_type == "daily_bar"
+    assert dataset.quality.status == DataQualityStatus.OK
+    assert dataset.quality.freshness == "daily_market_data"
+    assert dataset.source_time == datetime(2026, 5, 4, tzinfo=UTC)
+    assert dataset.normalized_rows[0]["ts_code"] == "000001.SZ"
+    assert dataset.normalized_rows[0]["close"] == 10.3
 
 
 def test_announcements_normalization() -> None:
@@ -169,6 +201,41 @@ async def test_tushare_provider_fetches_stock_company_with_exchange_query() -> N
                     "ts_code,exchange,chairman,manager,secretary,reg_capital,"
                     "setup_date,province,city,website,email,office,employees,"
                     "main_business,business_scope"
+                ),
+            },
+        )
+    ]
+
+
+async def test_tushare_provider_fetches_daily_with_trade_date_query() -> None:
+    dataframe = pd.DataFrame(
+        [
+            {
+                "ts_code": "000001.SZ",
+                "trade_date": "20260504",
+                "open": 10.1,
+                "high": 10.5,
+                "low": 10.0,
+                "close": 10.3,
+                "vol": 123456.0,
+                "amount": 1234567.0,
+            }
+        ]
+    )
+    client = FakeTushareClient(dataframe)
+    provider = TushareProvider(client=client)
+
+    dataset = await provider.fetch("daily", query_params={"trade_date": "20260504"})
+
+    assert dataset.endpoint == "daily"
+    assert client.calls == [
+        (
+            "daily",
+            {
+                "trade_date": "20260504",
+                "fields": (
+                    "ts_code,trade_date,open,high,low,close,pre_close,change,"
+                    "pct_chg,vol,amount"
                 ),
             },
         )

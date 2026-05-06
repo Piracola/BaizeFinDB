@@ -15,6 +15,7 @@ from app.providers.akshare import AKSHARE_ENDPOINTS, normalize_dataframe
 from app.providers.schemas import DataQualityStatus, ProviderStatus
 from app.providers.service import (
     collect_akshare_endpoint,
+    collect_tushare_daily,
     collect_tushare_endpoint,
     get_akshare_collection_status,
     get_tushare_readiness,
@@ -78,6 +79,32 @@ class SuccessfulTushareAnnouncementProvider:
                     "title": "年度报告摘要",
                     "url": "https://example.invalid/announcement",
                     "rec_time": "09:30:00",
+                }
+            ]
+        )
+        return normalize_tushare_dataframe(dataframe, TUSHARE_ENDPOINTS[endpoint])
+
+
+class SuccessfulTushareDailyProvider:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object] | None]] = []
+
+    async def fetch(self, endpoint: str, query_params=None):
+        self.calls.append((endpoint, query_params))
+        dataframe = pd.DataFrame(
+            [
+                {
+                    "ts_code": "000001.SZ",
+                    "trade_date": "20260504",
+                    "open": 10.1,
+                    "high": 10.5,
+                    "low": 10.0,
+                    "close": 10.3,
+                    "pre_close": 10.0,
+                    "change": 0.3,
+                    "pct_chg": 3.0,
+                    "vol": 123456.0,
+                    "amount": 1234567.0,
                 }
             ]
         )
@@ -231,6 +258,34 @@ async def test_tushare_query_api_returns_database_state(
     assert snapshots_response.json()[0]["preview_rows"][0]["ts_code"] == "600000.SH"
 
     assert unknown_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_tushare_daily_collection_can_be_queried_from_database(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    provider = SuccessfulTushareDailyProvider()
+
+    async with session_factory() as session:
+        result = await collect_tushare_daily(
+            session,
+            trade_date="20260504",
+            provider=provider,
+        )
+        snapshots = await list_latest_provider_snapshots(
+            session,
+            provider_name="tushare",
+            endpoint="daily",
+        )
+
+    assert result.status == ProviderStatus.SUCCESS
+    assert result.quality_status == DataQualityStatus.OK
+    assert provider.calls == [("daily", {"trade_date": "20260504"})]
+    assert snapshots[0].endpoint == "daily"
+    assert snapshots[0].snapshot_type == "daily_bar"
+    assert snapshots[0].source_time is not None
+    assert snapshots[0].source_time.strftime("%Y%m%d") == "20260504"
+    assert snapshots[0].preview_rows[0]["close"] == 10.3
 
 
 @pytest.mark.asyncio

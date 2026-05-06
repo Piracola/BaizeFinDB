@@ -66,7 +66,7 @@ FIELD_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "group": "Tushare",
         "input_type": "password",
         "secret": True,
-        "help_text": "用于 Tushare stock_basic、anns_d、stock_company 真实抓取。",
+        "help_text": "用于 Tushare daily、stock_basic、anns_d、stock_company 真实抓取。",
     },
     {
         "key": "TUSHARE_ANNS_D_BEAT_ENABLED",
@@ -531,17 +531,17 @@ async def _test_tushare_connection(settings: Settings) -> SettingsConnectionChec
             detail="Tushare token is not configured.",
         )
 
-    dataset = await TushareProvider(settings=settings).fetch("stock_basic")
+    dataset = await TushareProvider(settings=settings).fetch("daily")
     if dataset.row_count <= 0:
         return SettingsConnectionCheck(
             name="tushare",
             status="warn",
-            detail="Tushare responded but returned no stock_basic rows.",
+            detail="Tushare responded but returned no daily rows for the default trade date.",
         )
     return SettingsConnectionCheck(
         name="tushare",
         status="ok",
-        detail=f"Tushare stock_basic responded with {dataset.row_count} rows.",
+        detail=f"Tushare daily responded with {dataset.row_count} rows.",
     )
 
 

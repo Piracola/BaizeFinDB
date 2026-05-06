@@ -36,6 +36,41 @@ class TushareEndpointSpec:
 
 
 TUSHARE_ENDPOINTS: dict[str, TushareEndpointSpec] = {
+    "daily": TushareEndpointSpec(
+        endpoint="daily",
+        title="A股日线行情",
+        market="A_SHARE",
+        snapshot_type="daily_bar",
+        required_fields=(
+            "ts_code",
+            "trade_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "vol",
+            "amount",
+        ),
+        purpose="提供 A 股未复权日线 OHLCV 行情，作为后续雷达、复盘和报告的基础行情源。",
+        permission_note=(
+            "Tushare Pro daily 接口；可按单个交易日抓全市场，或按股票代码抓区间。"
+        ),
+        implemented=True,
+        fields=(
+            "ts_code",
+            "trade_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "pre_close",
+            "change",
+            "pct_chg",
+            "vol",
+            "amount",
+        ),
+        freshness="daily_market_data",
+    ),
     "anns_d": TushareEndpointSpec(
         endpoint="anns_d",
         title="公告快讯",
@@ -212,6 +247,7 @@ def normalize_dataframe(dataframe: "pd.DataFrame", spec: TushareEndpointSpec) ->
         },
         normalized_rows=normalized_rows,
         normalization_version=NORMALIZATION_VERSION,
+        source_time=_source_time(dataframe, spec),
         quality=DataQuality(
             status=_quality_status(row_count, missing_fields),
             confidence=_confidence(row_count, len(spec.required_fields), len(missing_fields)),
@@ -231,10 +267,38 @@ def _fetcher_kwargs(
     if spec.endpoint == "anns_d" and "ann_date" not in kwargs:
         kwargs["ann_date"] = datetime.now(UTC).strftime("%Y%m%d")
 
+    if spec.endpoint == "daily" and not _has_daily_query(kwargs):
+        kwargs["trade_date"] = datetime.now(UTC).strftime("%Y%m%d")
+
     if spec.fields:
         kwargs["fields"] = ",".join(spec.fields)
 
     return kwargs
+
+
+def _has_daily_query(kwargs: dict[str, object]) -> bool:
+    return any(
+        str(kwargs.get(name) or "").strip()
+        for name in ("trade_date", "ts_code", "start_date", "end_date")
+    )
+
+
+def _source_time(dataframe: "pd.DataFrame", spec: TushareEndpointSpec) -> datetime | None:
+    if spec.endpoint != "daily" or dataframe.empty or "trade_date" not in dataframe.columns:
+        return None
+
+    trade_dates = [
+        str(value)
+        for value in dataframe["trade_date"].dropna().tolist()
+        if str(value).strip()
+    ]
+    if not trade_dates:
+        return None
+
+    try:
+        return datetime.strptime(max(trade_dates), "%Y%m%d").replace(tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 def _dataframe_to_records(dataframe: "pd.DataFrame") -> list[dict[str, object]]:

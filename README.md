@@ -25,12 +25,13 @@
 - `/ops/readiness` 只读运行就绪自检：基于服务端磁盘/CPU/内存、雷达新鲜度、扫描失败率、Provider、数据质量、推送和模型调用给出 `ready` / `warning` / `blocked`
 - AKShare 最小 Provider：A 股行情、行业板块、概念板块
 - AKShare 情绪 Provider：涨停股池、跌停股池、炸板股池
-- Tushare Provider：可查看 token 配置状态和计划端点，`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取并写入 Provider 快照；`anns_d` 中明显重大风险公告可在后续雷达扫描中映射为 risk P0；可选 `anns_d` Celery Beat 调度默认关闭，启用前先跑 enablement checklist 和离线/no-token 预调度校验，再显式配置
+- Tushare Provider：可查看 token 配置状态和计划端点，`daily`、`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取并写入 Provider 快照；`daily` 日线行情作为后续雷达、复盘和报告的基础行情源，`anns_d` 中明显重大风险公告可在后续雷达扫描中映射为 risk P0；可选 `anns_d` Celery Beat 调度默认关闭，启用前先跑 enablement checklist 和离线/no-token 预调度校验，再显式配置
 - Provider 拉取日志、快照和数据质量表
 - `/providers/akshare/endpoints` 查看已封装接口
 - `/providers/tushare/endpoints` 查看计划接入的 Tushare 补充源端点
 - `/providers/tushare/status` 查看 Tushare token 是否配置，不返回 token 原文
 - `/providers/tushare/readiness` 查看 Tushare 手动抓取和后续调度准入自检，并反映 `anns_d` Beat 开关，不触发真实抓取
+- `/providers/tushare/fetch/daily` 手动触发 Tushare A 股日线行情抓取；不传参数时默认当天 `trade_date`，也可按 `trade_date` 抓全市场或按 `ts_code` + 日期区间抓单股
 - `/providers/tushare/fetch/stock-basic` 手动触发 Tushare 股票基础信息抓取
 - `/providers/tushare/fetch/announcements` 手动触发 Tushare 公告抓取
 - `/providers/tushare/fetch/stock-company` 手动触发 Tushare 上市公司基本信息抓取
@@ -93,7 +94,7 @@
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
 | M1 工程骨架 | 已完成 | 后端可启动、可测试，PostgreSQL / Redis / Alembic / Docker Compose 基础就绪。 |
-| M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成；Tushare `stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取、日志和快照查询，`anns_d` 重大风险公告可被后续雷达扫描映射为 risk P0；`anns_d` Beat 调度有默认关闭的显式开关。 |
+| M2 数据底座 | 已完成早期闭环 | AKShare 最小 Provider、采集入库、质量标签、查询 API、Celery 采集壳已完成；Tushare `daily`、`stock_basic`、`anns_d` 和 `stock_company` 已支持手动抓取、日志和快照查询，`daily` 为后续雷达和报告提供日线基础行情，`anns_d` 重大风险公告可被后续雷达扫描映射为 risk P0；`anns_d` Beat 调度有默认关闭的显式开关。 |
 | M3 雷达核心 | 已完成早期闭环 | 可基于板块/概念快照生成候选信号、证据链、生命周期、连续 P1 标记、扫描失败状态和雷达总览。 |
 | M4 审查层 | 已完成 | 已有轻量规则审查 API、审查记录表、数据质量审查、诱导交易语言正反例、否定式风险提示误报防护、审查/分享黄金样例、内部分享预检和公开分享 payload，先不接复杂 Agent/LLM。 |
 | M5 | 验收项完成 | 已有静态 Web 终端工作台、Telegram Bot MVP、Windows 客户端 MVP、5 分钟采集后扫描调度、持仓/自选最小 API、quick/standard 报告、手动 deep 报告入口、日报/周报、1d/3d/5d/10d v2 综合评分、Telegram 折叠推送、P0 推送后 standard report、风险 P0、Review Agent 范围控制、模型降级审计和只读 M5 smoke check；后续进入生产化验证和真实数据增强。 |
@@ -407,9 +408,10 @@ uv run python infra/scripts/seed_demo_data.py --json-output evidence/demo-seed.j
 uv run python infra/scripts/verify_akshare_minimal.py
 ```
 
-验证 Tushare `stock_basic`，不写数据库：
+验证 Tushare `daily`、`stock_basic` 等端点，不写数据库：
 
 ```powershell
+uv run python infra/scripts/verify_tushare_daily.py --trade-date 20260504 --json-output evidence/tushare-daily-20260504.json
 uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py --json-output evidence/tushare-anns-d-beat-enablement.json
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
@@ -429,7 +431,7 @@ uv run python infra/scripts/server_deploy_check.py --check-tushare-anns-d-beat-e
 
 `verify_tushare_anns_d_preflight.py` 不需要 `TUSHARE_TOKEN`，只读取本地 golden case，检查 `anns_d` 归一化必需字段、重大风险公告应映射 risk P0，以及普通公告不应产生风险信号。`check_tushare_anns_d_beat_enablement.py` 默认还会读取 `golden_cases/radar_m5_risk_announcements.json`，确认 Tushare 公告 risk P0 / 普通公告无信号的完整规则样例没有漂移。该完整扫描 golden case 文件要求每个 case 声明 `case_type`，取值为 `true_positive_major_risk`、`true_positive_critical_risk`、`false_positive_guard`、`false_negative_guard` 或 `ordinary_no_signal`，并可选填写 `source` / `notes`；默认套件必须同时覆盖真阳性风险、无信号守卫和误报/漏报反馈守卫。后续真实误报/漏报样例优先追加到该文件。它们是启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前的预调度门禁和调参基线，但不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证。
 
-`verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本，失败时也会写入脱敏 failure report。启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存 announcements live evidence；`stock_basic` 和 `stock_company` evidence 用于同步留存 token 权限、积分和字段稳定性。
+`verify_tushare_daily.py`、`verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，会在真实 token 可用时保存一份脱敏 live evidence JSON；报告只保留状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本，失败时也会写入脱敏 failure report。`daily` evidence 用于确认日线权限、字段和行数稳定性；启用 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 前，应先保留 offline checklist / preflight 结果，再保存 announcements live evidence；`stock_basic` 和 `stock_company` evidence 用于同步留存 token 权限、积分和字段稳定性。
 
 `evidence/`、`runtime-check*.json` 和 `ops-evidence*.json` 是本地运行证据产物，默认已加入 `.gitignore`，不要提交真实 token 环境下生成的报告。
 
@@ -437,6 +439,7 @@ PostgreSQL 迁移完成后，手动采集并写入数据库：
 
 ```powershell
 uv run python infra/scripts/collect_akshare_minimal.py
+uv run python infra/scripts/collect_tushare_daily.py --trade-date 20260504
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
 uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE

@@ -53,6 +53,29 @@ async def collect_tushare_stock_basic(
     return await collect_tushare_endpoint(session, tushare_provider, "stock_basic")
 
 
+async def collect_tushare_daily(
+    session: AsyncSession,
+    *,
+    trade_date: str | None = None,
+    ts_code: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    provider: TushareProvider | None = None,
+) -> ProviderEndpointResult:
+    tushare_provider = provider or TushareProvider()
+    return await collect_tushare_endpoint(
+        session,
+        tushare_provider,
+        "daily",
+        query_params=_tushare_daily_query_params(
+            trade_date=trade_date,
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+    )
+
+
 async def collect_tushare_announcements(
     session: AsyncSession,
     ann_date: str | None = None,
@@ -463,6 +486,14 @@ def _tushare_query_readiness(spec: TushareEndpointSpec) -> TushareReadinessCheck
             metadata={"query_params": {"ann_date": "dynamic_today_utc"}},
         )
 
+    if spec.endpoint == "daily":
+        return _tushare_readiness_check(
+            name="default_query",
+            status="ok",
+            message="未传交易日期或股票代码时会使用当天日期，适合先手动验证最新日线行情。",
+            metadata={"query_params": {"trade_date": "dynamic_today_utc"}},
+        )
+
     return _tushare_readiness_check(
         name="default_query",
         status="warning",
@@ -606,6 +637,26 @@ def _tushare_scheduler_policy(settings: Settings) -> str:
         )
 
     return "anns_d_celery_beat_disabled_by_default_enable_with_tushare_anns_d_beat_enabled"
+
+
+def _tushare_daily_query_params(
+    *,
+    trade_date: str | None,
+    ts_code: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> dict[str, object] | None:
+    query_params: dict[str, object] = {}
+    for key, value in {
+        "trade_date": trade_date,
+        "ts_code": ts_code,
+        "start_date": start_date,
+        "end_date": end_date,
+    }.items():
+        if value is not None:
+            query_params[key] = value
+
+    return query_params or None
 
 
 async def _record_failure(

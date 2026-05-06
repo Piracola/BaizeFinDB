@@ -135,7 +135,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/min
 
 ### 4.3 查看和手动验证 Tushare
 
-Tushare 当前用于补充证券主数据、公告数据和公司主体资料。`stock_basic`、`anns_d` 与 `stock_company` 已支持手动抓取并写入 Provider 快照。Tushare 不在当前 AKShare+雷达 5 分钟调度里，避免权限、积分或字段变化影响主雷达闭环；`anns_d` 中明显重大风险公告会在后续手动运行雷达扫描时映射为 risk P0，普通公告不会生成信号。
+Tushare 当前用于补充日线行情、证券主数据、公告数据和公司主体资料。`daily`、`stock_basic`、`anns_d` 与 `stock_company` 已支持手动抓取并写入 Provider 快照。Tushare 不在当前 AKShare+雷达 5 分钟调度里，避免权限、积分或字段变化影响主雷达闭环；`daily` 先作为后续雷达/复盘/报告的基础行情源，`anns_d` 中明显重大风险公告会在后续手动运行雷达扫描时映射为 risk P0，普通公告不会生成信号。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
@@ -162,25 +162,30 @@ uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 
 Web 状态面板的 `OPS 趋势` 会读取 `/ops/trends?lookback_hours=24&bucket_count=12`，同时展示后端桶计数表和扫描/失败/异常趋势图。该图只做后端计数的视觉化，不从桶计数推导 readiness 或新的 OPS 状态；`trend` / `trends` 命令会滚动到同一块并刷新数据。
 
-手动抓取股票基础信息：
+手动抓取 Tushare 日线行情和补充信息：
 
 ```powershell
+uv run python infra/scripts/verify_tushare_daily.py --trade-date 20260504 --json-output evidence/tushare-daily-20260504.json
+uv run python infra/scripts/collect_tushare_daily.py --trade-date 20260504
 uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/collect_tushare_stock_basic.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
+Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/daily?trade_date=20260504"
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/tushare/fetch/stock-basic
 Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/announcements?ann_date=20260503"
 Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/stock-company?exchange=SZSE"
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=daily"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=anns_d"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_company"
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=daily"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
-三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，不写数据库，只把 live verify 的脱敏 JSON 证据保存到本地；报告包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去掉 URL/source/token/secret-like 字段的少量归一化样例，样例值会递归脱敏并截断超长文本。失败时也会写入脱敏 failure report，便于留存权限、积分或字段漂移问题，但不保存 token、原始 URL/域名或付费原始数据。
+四条 live verify 脚本 `verify_tushare_daily.py`、`verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 都支持 `--json-output <path>`，不写数据库，只把 live verify 的脱敏 JSON 证据保存到本地；报告包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和去掉 URL/source/token/secret-like 字段的少量归一化样例，样例值会递归脱敏并截断超长文本。失败时也会写入脱敏 failure report，便于留存权限、积分或字段漂移问题，但不保存 token、原始 URL/域名或付费原始数据。
 
 `evidence/`、`runtime-check*.json` 和 `ops-evidence*.json` 是本地运行证据产物，默认已加入 `.gitignore`。真实 token 环境下生成的 evidence 只用于本机或服务器排障留存，不要提交到 git。
 
@@ -655,6 +660,7 @@ uv run python infra/scripts/verify_akshare_minimal.py
 
 ```powershell
 uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
+uv run python infra/scripts/verify_tushare_daily.py --trade-date 20260504 --json-output evidence/tushare-daily-20260504.json
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py --json-output evidence/tushare-anns-d-beat-enablement.json
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
 uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 --json-output evidence/tushare-anns-20260503.json

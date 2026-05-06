@@ -780,7 +780,7 @@ async def test_telegram_tushare_command_reports_read_only_status(
     assert "状态：已配置" in preview
     assert "Token：已配置" in preview
     assert "手动抓取：开启" in preview
-    assert "已实现端点：3/3" in preview
+    assert "已实现端点：4/4" in preview
     assert "不触发真实抓取" in preview
     assert "不构成投资建议" in preview
     assert "real-tushare-token" not in preview
@@ -800,7 +800,7 @@ async def test_telegram_tushare_ready_command_reports_read_only_readiness(
     preview = response.json()["preview"]
     assert "Tushare 准入自检" in preview
     assert "Token：已配置" in preview
-    assert "调度准入样例：0/3" in preview
+    assert "调度准入样例：0/4" in preview
     assert "不触发真实抓取或调度" in preview
     assert "不构成投资建议" in preview
     assert "real-tushare-token" not in preview

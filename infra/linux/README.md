@@ -65,7 +65,7 @@ Required notes:
 - `RADAR_SCAN_INTERVAL_SECONDS` controls the Celery beat interval for the collect-then-scan task. The default is `300`.
 - `RADAR_CONTINUOUS_P1_TRIGGER_COUNT` controls how many consecutive P1 scans create a quick-report candidate. The default is `3`.
 - `RADAR_CONTINUITY_WINDOW_MINUTES` controls the continuity window for repeated P1 checks. The default is `30`.
-- `TUSHARE_TOKEN` enables manual Tushare `stock_basic`, `anns_d`, and `stock_company` verification and collection. It does not enable Beat by itself; only `TUSHARE_ANNS_D_BEAT_ENABLED=true` adds the optional `anns_d` Beat task.
+- `TUSHARE_TOKEN` enables manual Tushare `daily`, `stock_basic`, `anns_d`, and `stock_company` verification and collection. It does not enable Beat by itself; only `TUSHARE_ANNS_D_BEAT_ENABLED=true` adds the optional `anns_d` Beat task.
 - `TELEGRAM_REQUIRE_BINDING=true` closes the local open fallback when no environment allow-list and no active database binding exist. Keep `/id` available to discover chat ids, then write active bindings before enabling pushes.
 - `TELEGRAM_PUSH_ENABLED=true` makes the collect-then-scan task send a folded Telegram radar push after each successful scan. Keep it `false` until token, chat whitelist or active bindings, webhook secret, and strict binding choice are ready.
 
@@ -485,9 +485,10 @@ send Telegram:
 python infra/scripts/server_delivery_acceptance.py --include-alert-telegram-service-verify
 ```
 
-Verify Tushare `stock_basic` without writing to the database:
+Verify Tushare `daily` and supplemental endpoints without writing to the database:
 
 ```bash
+python infra/scripts/verify_tushare_daily.py --trade-date 20260504
 python infra/scripts/verify_tushare_stock_basic.py
 python infra/scripts/verify_tushare_announcements.py --ann-date 20260503
 python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
@@ -496,6 +497,7 @@ python infra/scripts/verify_tushare_stock_company.py --exchange SZSE
 Manually write Tushare provider snapshots after migrations:
 
 ```bash
+python infra/scripts/collect_tushare_daily.py --trade-date 20260504
 python infra/scripts/collect_tushare_stock_basic.py
 python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
 python infra/scripts/collect_tushare_stock_company.py --exchange SZSE

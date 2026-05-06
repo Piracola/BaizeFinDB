@@ -531,9 +531,10 @@ uv run python infra/scripts/server_runtime_check.py --samples 2 --interval-secon
 uv run python infra/scripts/server_runtime_check.py --samples 5 --interval-seconds 60 --fail-on-warning
 ```
 
-验证 Tushare `stock_basic` token 和字段稳定性，不写数据库。`anns_d` Beat 启用前先跑离线/no-token 预调度校验；它只读取本地 golden case，检查归一化必需字段、重大风险公告应映射 risk P0、普通公告不应生成风险信号，并通过 checklist 读取带 `case_type` 分类和误报/漏报反馈守卫的完整雷达风险公告 golden cases。该离线门禁不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证：
+验证 Tushare `daily`、`stock_basic` token 和字段稳定性，不写数据库。`anns_d` Beat 启用前先跑离线/no-token 预调度校验；它只读取本地 golden case，检查归一化必需字段、重大风险公告应映射 risk P0、普通公告不应生成风险信号，并通过 checklist 读取带 `case_type` 分类和误报/漏报反馈守卫的完整雷达风险公告 golden cases。该离线门禁不能替代真实 `TUSHARE_TOKEN` 权限、积分消耗、实时接口字段和 `/providers/tushare/readiness` 验证：
 
 ```powershell
+uv run python infra/scripts/verify_tushare_daily.py --trade-date 20260504 --json-output evidence/tushare-daily-20260504.json
 uv run python infra/scripts/verify_tushare_stock_basic.py --json-output evidence/tushare-stock-basic.json
 uv run python infra/scripts/check_tushare_anns_d_beat_enablement.py --json-output evidence/tushare-anns-d-beat-enablement.json
 uv run python infra/scripts/verify_tushare_anns_d_preflight.py
@@ -541,7 +542,7 @@ uv run python infra/scripts/verify_tushare_announcements.py --ann-date 20260503 
 uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --json-output evidence/tushare-stock-company-SZSE.json
 ```
 
-三条 live verify 脚本 `verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 的 `--json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本；失败时也会写入脱敏 failure report。announcements evidence 步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
+四条 live verify 脚本 `verify_tushare_daily.py`、`verify_tushare_stock_basic.py`、`verify_tushare_announcements.py` 和 `verify_tushare_stock_company.py` 的 `--json-output <path>` 保存的是脱敏 live evidence：包含状态、端点、查询参数、行数、质量状态、必需字段、缺失字段和少量去 URL/source/token/secret-like 字段的归一化样例，样例值会递归脱敏并截断超长文本；失败时也会写入脱敏 failure report。announcements evidence 步骤应放在 offline checklist 和 `verify_tushare_anns_d_preflight.py` 之后、设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 之前。
 
 `evidence/`、`runtime-check*.json`、`ops-evidence*.json`、`server-alert-payload*.json`
 和 `server-alert-telegram*.json` 是本地/服务器运行证据产物，默认已加入 `.gitignore`。
@@ -552,6 +553,7 @@ uv run python infra/scripts/verify_tushare_stock_company.py --exchange SZSE --js
 
 ```powershell
 uv run python infra/scripts/collect_tushare_stock_basic.py
+uv run python infra/scripts/collect_tushare_daily.py --trade-date 20260504
 uv run python infra/scripts/collect_tushare_announcements.py --ann-date 20260503
 uv run python infra/scripts/collect_tushare_stock_company.py --exchange SZSE
 ```

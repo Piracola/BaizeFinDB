@@ -226,8 +226,8 @@ def test_fetch_tushare_status_uses_provider_status_endpoint() -> None:
                     "status": "configured",
                     "token_configured": True,
                     "fetch_enabled": True,
-                    "endpoint_count": 3,
-                    "implemented_endpoint_count": 3,
+                    "endpoint_count": 4,
+                    "implemented_endpoint_count": 4,
                 },
             ),
         )
@@ -251,7 +251,7 @@ def test_fetch_tushare_readiness_uses_provider_readiness_endpoint() -> None:
                     "token_configured": True,
                     "fetch_enabled": True,
                     "scheduler_ready_endpoint_count": 0,
-                    "implemented_endpoint_count": 3,
+                    "implemented_endpoint_count": 4,
                     "scheduler_policy": "manual_only",
                     "message": "Need samples.",
                     "endpoints": [],
@@ -538,8 +538,8 @@ def test_format_tushare_status_outputs_read_only_provider_state() -> None:
             "status": "configured",
             "token_configured": True,
             "fetch_enabled": True,
-            "endpoint_count": 3,
-            "implemented_endpoint_count": 3,
+            "endpoint_count": 4,
+            "implemented_endpoint_count": 4,
             "message": "Tushare fetch is enabled.",
         },
     )
@@ -548,7 +548,7 @@ def test_format_tushare_status_outputs_read_only_provider_state() -> None:
     assert "状态：已配置" in text
     assert "Token：已配置" in text
     assert "手动抓取：开启" in text
-    assert "已实现端点：3/3" in text
+    assert "已实现端点：4/4" in text
     assert "不触发真实抓取" in text
     assert "不构成投资建议" in text
 
@@ -561,7 +561,7 @@ def test_format_tushare_readiness_outputs_read_only_gate_state() -> None:
             "token_configured": True,
             "fetch_enabled": True,
             "scheduler_ready_endpoint_count": 1,
-            "implemented_endpoint_count": 3,
+            "implemented_endpoint_count": 4,
             "scheduler_policy": "manual_only_until_verified",
             "message": "Need more samples.",
             "endpoints": [
@@ -591,7 +591,7 @@ def test_format_tushare_readiness_outputs_read_only_gate_state() -> None:
 
     assert "Tushare 准入自检" in text
     assert "状态：有警告" in text
-    assert "调度准入样例：1/3" in text
+    assert "调度准入样例：1/4" in text
     assert "股票基础信息：可运行 / 可评审调度" in text
     assert "公告快讯：有警告 / 仅手动验证，暂无真实抓取记录。" in text
     assert "不触发真实抓取或调度" in text

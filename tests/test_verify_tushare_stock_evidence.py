@@ -29,6 +29,10 @@ verify_tushare_stock_company = _load_script(
     "verify_tushare_stock_company",
     "infra/scripts/verify_tushare_stock_company.py",
 )
+verify_tushare_daily = _load_script(
+    "verify_tushare_daily",
+    "infra/scripts/verify_tushare_daily.py",
+)
 
 
 def _stock_basic_dataset():
@@ -82,6 +86,29 @@ def _stock_company_dataset():
     )
 
 
+def _daily_dataset():
+    return normalize_dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "ts_code": "000001.SZ",
+                    "trade_date": "20260504",
+                    "open": 10.1,
+                    "high": 10.5,
+                    "low": 10.0,
+                    "close": 10.3,
+                    "pre_close": 10.0,
+                    "change": 0.3,
+                    "pct_chg": 3.0,
+                    "vol": 123456.0,
+                    "amount": 1234567.0,
+                }
+            ]
+        ),
+        TUSHARE_ENDPOINTS["daily"],
+    )
+
+
 class FakeStockBasicProvider:
     async def fetch(self, endpoint: str, query_params: dict[str, object] | None = None):
         assert endpoint == "stock_basic"
@@ -108,6 +135,104 @@ class FailingStockCompanyProvider:
         raise RuntimeError(
             "authorization=secret-token rejected by https://api.example.test/pro"
         )
+
+
+class FakeDailyProvider:
+    async def fetch(self, endpoint: str, query_params: dict[str, object] | None = None):
+        assert endpoint == "daily"
+        assert query_params == {"trade_date": "20260504"}
+        return _daily_dataset()
+
+
+class FailingDailyProvider:
+    async def fetch(self, endpoint: str, query_params: dict[str, object] | None = None):
+        raise RuntimeError(
+            "authorization=secret-token rejected by https://api.example.test/pro"
+        )
+
+
+async def test_daily_cli_writes_sanitized_success_report(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "secret-token")
+    monkeypatch.setattr(verify_tushare_daily, "TushareProvider", FakeDailyProvider)
+    output_path = tmp_path / "daily.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "verify_tushare_daily.py",
+            "--trade-date",
+            "20260504",
+            "--json-output",
+            str(output_path),
+            "--max-sample-rows",
+            "1",
+        ],
+    )
+
+    await verify_tushare_daily.main()
+    captured = capsys.readouterr()
+    encoded = output_path.read_text(encoding="utf-8")
+    payload = json.loads(encoded)
+
+    assert json.loads(captured.out)["status"] == "success"
+    assert payload["endpoint"] == "daily"
+    assert payload["query_params"] == {"trade_date": "20260504"}
+    assert payload["row_count"] == 1
+    assert payload["quality_status"] == "ok"
+    assert payload["required_fields"] == [
+        "ts_code",
+        "trade_date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "vol",
+        "amount",
+    ]
+    assert payload["missing_fields"] == []
+    assert payload["sample"][0]["close"] == 10.3
+    assert "secret-token" not in encoded
+    assert "https://" not in encoded
+    assert "example.test" not in encoded
+
+
+async def test_daily_cli_writes_sanitized_failure_report(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    monkeypatch.setenv("TUSHARE_TOKEN", "secret-token")
+    monkeypatch.setattr(verify_tushare_daily, "TushareProvider", FailingDailyProvider)
+    output_path = tmp_path / "daily-failure.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "verify_tushare_daily.py",
+            "--trade-date",
+            "20260504",
+            "--json-output",
+            str(output_path),
+        ],
+    )
+
+    await verify_tushare_daily.main()
+    captured = capsys.readouterr()
+    encoded = output_path.read_text(encoding="utf-8")
+    payload = json.loads(encoded)
+
+    assert json.loads(captured.out)["status"] == "failure"
+    assert payload["status"] == "failure"
+    assert payload["quality_status"] == "failed"
+    assert payload["query_params"] == {"trade_date": "20260504"}
+    assert "RuntimeError" in payload["error"]
+    assert "secret-token" not in encoded
+    assert "https://" not in encoded
+    assert "api.example.test" not in encoded
 
 
 async def test_stock_basic_cli_writes_sanitized_success_report(

@@ -30,12 +30,14 @@ def test_tushare_endpoint_list_is_registered() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert {item["endpoint"] for item in payload} == {
+        "daily",
         "anns_d",
         "stock_company",
         "stock_basic",
     }
     implemented = {item["endpoint"]: item["implemented"] for item in payload}
     assert implemented == {
+        "daily": True,
         "anns_d": True,
         "stock_company": True,
         "stock_basic": True,
@@ -59,8 +61,8 @@ def test_tushare_status_does_not_leak_token(monkeypatch) -> None:
         "provider_name": "tushare",
         "token_configured": True,
         "fetch_enabled": True,
-        "endpoint_count": 3,
-        "implemented_endpoint_count": 3,
+        "endpoint_count": 4,
+        "implemented_endpoint_count": 4,
         "status": "configured",
         "message": "Tushare token is configured and implemented endpoints can be enabled.",
     }
@@ -91,6 +93,71 @@ def test_tushare_stock_basic_fetch_route_uses_service(monkeypatch) -> None:
     assert response.json()["endpoint"] == "stock_basic"
     assert response.json()["status"] == "success"
     assert response.json()["fetch_log_id"] == 10
+
+
+def test_tushare_daily_fetch_route_uses_service(monkeypatch) -> None:
+    calls = []
+
+    async def fake_collect_tushare_daily(
+        session,
+        *,
+        trade_date=None,
+        ts_code=None,
+        start_date=None,
+        end_date=None,
+    ) -> ProviderEndpointResult:
+        calls.append(
+            {
+                "trade_date": trade_date,
+                "ts_code": ts_code,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        )
+        return ProviderEndpointResult(
+            endpoint="daily",
+            status=ProviderStatus.SUCCESS,
+            row_count=2,
+            quality_status=DataQualityStatus.OK,
+            confidence=0.95,
+            fetch_log_id=13,
+            snapshot_id=23,
+        )
+
+    monkeypatch.setattr(
+        "app.api.routes.providers.collect_tushare_daily",
+        fake_collect_tushare_daily,
+    )
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/providers/tushare/fetch/daily?ts_code=000001.SZ&start_date=20260501"
+        "&end_date=20260504"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["endpoint"] == "daily"
+    assert response.json()["row_count"] == 2
+    assert response.json()["snapshot_id"] == 23
+    assert calls == [
+        {
+            "trade_date": None,
+            "ts_code": "000001.SZ",
+            "start_date": "20260501",
+            "end_date": "20260504",
+        }
+    ]
+
+
+def test_tushare_daily_fetch_route_rejects_unbounded_date_range() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/providers/tushare/fetch/daily?start_date=20260501&end_date=20260504"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "ts_code is required when using start_date/end_date."
 
 
 def test_tushare_announcements_fetch_route_uses_service(monkeypatch) -> None:
@@ -154,4 +221,3 @@ def test_tushare_stock_company_fetch_route_uses_service(monkeypatch) -> None:
     assert response.json()["row_count"] == 3
     assert response.json()["snapshot_id"] == 22
     assert calls == ["SSE"]
-

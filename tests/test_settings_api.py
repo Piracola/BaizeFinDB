@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.main import create_app
+from app.settings import service as settings_service
 from app.settings.schemas import SettingsConnectionCheck
 
 
@@ -337,6 +339,29 @@ def test_settings_connection_test_sanitizes_provider_errors(
     assert "tushare-secret-value" not in serialized
     assert "openai-secret-value" not in serialized
     assert "<redacted>" in serialized
+
+
+@pytest.mark.asyncio
+async def test_tushare_connection_test_uses_daily_endpoint(monkeypatch) -> None:
+    calls = []
+
+    class FakeTushareProvider:
+        def __init__(self, settings: Settings) -> None:
+            self.settings = settings
+
+        async def fetch(self, endpoint: str):
+            calls.append(endpoint)
+            return SimpleNamespace(row_count=8)
+
+    monkeypatch.setattr(settings_service, "TushareProvider", FakeTushareProvider)
+
+    result = await settings_service._test_tushare_connection(
+        Settings(TUSHARE_TOKEN="tushare-secret-value")
+    )
+
+    assert result.status == "ok"
+    assert result.detail == "Tushare daily responded with 8 rows."
+    assert calls == ["daily"]
 
 
 def _set_default_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:

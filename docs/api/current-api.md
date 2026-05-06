@@ -20,6 +20,7 @@ GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
 GET  /providers/tushare/status
 GET  /providers/tushare/readiness
+POST /providers/tushare/fetch/daily
 POST /providers/tushare/fetch/stock-basic
 POST /providers/tushare/fetch/announcements
 POST /providers/tushare/fetch/stock-company
@@ -235,6 +236,8 @@ Invoke-RestMethod -Method Put http://127.0.0.1:8000/settings/editable `
 
 用途：显式手动测试配置连接。该接口使用和写设置相同的 owner-only/localhost 边界；支持 `server`、`tushare`、`telegram`、`model`、`all`。除 `server` 外，测试可能访问外部 provider，`model` 测试会发起一次最小 chat completion，可能产生模型费用。该接口不写数据库、不保存 secret、不发送 Telegram 消息、不改雷达、报告或调度状态。
 
+`tushare` 测试默认调用 `daily` 日线行情，以匹配当前优先接入的日线数据源；不传查询参数时使用当天日期，非交易日或未入库时可能返回 `warn`。
+
 ```powershell
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/settings/connection-test `
   -Headers @{ "X-BaizeFinDB-Settings-Token" = "<settings-admin-token>" } `
@@ -301,7 +304,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/providers/akshare/fetch/min
 
 ### `GET /providers/tushare/endpoints`
 
-用途：查看计划接入的 Tushare 补充源端点。当前 `stock_basic`、`anns_d` 和 `stock_company` 都已支持手动抓取。
+用途：查看计划接入的 Tushare 补充源端点。当前 `daily`、`stock_basic`、`anns_d` 和 `stock_company` 都已支持手动抓取。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
@@ -309,6 +312,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
 
 当前预留：
 
+- `daily`：A 股日线行情，当前 `implemented=true`，可按单个交易日抓全市场，或按 `ts_code` + 日期区间抓单股并写入 Provider 快照和质量记录。
 - `anns_d`：公告快讯，后续用于重大公告、风险事件和持仓/自选催化，当前 `implemented=true`，可手动抓取并写入 Provider 快照和质量记录。
 - `stock_company`：上市公司基本信息，当前 `implemented=true`，可按交易所手动抓取并写入 Provider 快照和质量记录。
 - `stock_basic`：股票基础信息，当前 `implemented=true`，可手动抓取并写入 Provider 快照和质量记录。
@@ -323,7 +327,7 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/endpoints
 
 ### `GET /providers/tushare/status`
 
-用途：查看 `TUSHARE_TOKEN` 是否配置和 Tushare Provider 是否启用真实抓取。该接口不返回 token 原文。当前 `stock_basic`、`anns_d` 和 `stock_company` 已实现，`fetch_enabled=true` 还要求 token 已配置。
+用途：查看 `TUSHARE_TOKEN` 是否配置和 Tushare Provider 是否启用真实抓取。该接口不返回 token 原文。当前 `daily`、`stock_basic`、`anns_d` 和 `stock_company` 已实现，`fetch_enabled=true` 还要求 token 已配置。
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
@@ -336,8 +340,8 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/status
   "provider_name": "tushare",
   "token_configured": false,
   "fetch_enabled": false,
-  "endpoint_count": 3,
-  "implemented_endpoint_count": 3,
+  "endpoint_count": 4,
+  "implemented_endpoint_count": 4,
   "status": "not_configured",
   "message": "TUSHARE_TOKEN is required before enabling Tushare fetch."
 }
@@ -358,6 +362,39 @@ Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/readiness
 - `scheduler_ready_endpoint_count`：具备成功抓取、非空行数和 `ok` 质量记录的已实现端点数量。
 - `scheduler_policy`：当前调度策略说明；默认 `anns_d` Celery Beat 关闭，只有设置 `TUSHARE_ANNS_D_BEAT_ENABLED=true` 才会加入 Beat。
 - `endpoints[].checks`：逐端点检查 token、实现状态、必需字段、默认查询、最近抓取、数据质量；`anns_d` 还标记重大风险公告映射已接入。
+
+### `POST /providers/tushare/fetch/daily`
+
+用途：手动触发 Tushare `daily` A 股未复权日线行情抓取，写入 `market_snapshots`、`provider_fetch_logs` 和 `data_quality_checks`。该接口不进入 Celery 5 分钟调度，适合先验证你当前可用的日线权限、字段稳定性和行数。
+
+```powershell
+Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/daily?trade_date=20260504"
+Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/daily?ts_code=000001.SZ&start_date=20260501&end_date=20260504"
+```
+
+查询参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `trade_date` | 可选，交易日期，`YYYYMMDD`；用于抓某个交易日的全市场日线 |
+| `ts_code` | 可选，Tushare 股票代码，如 `000001.SZ`；支持逗号分隔多个代码 |
+| `start_date` / `end_date` | 可选，区间日期，必须成对出现，并且需要同时传 `ts_code`，避免误触发过大范围 |
+
+不传任何参数时，后端会使用当天 UTC 日期作为 `trade_date`。非交易日可能返回 0 行，此时质量状态会是 `degraded`，用于提醒需要换成最近交易日或检查权限。
+
+当前标准化字段：
+
+- `ts_code`
+- `trade_date`
+- `open`
+- `high`
+- `low`
+- `close`
+- `pre_close`
+- `change`
+- `pct_chg`
+- `vol`
+- `amount`
 
 ### `POST /providers/tushare/fetch/stock-basic`
 
@@ -447,6 +484,7 @@ Invoke-RestMethod -Method Post "http://127.0.0.1:8000/providers/tushare/fetch/st
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?limit=20"
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=daily"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_basic"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=anns_d"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=stock_company"
@@ -458,6 +496,7 @@ Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/fetch-logs?endpoint=s
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/providers/tushare/snapshots/latest
+Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=daily"
 Invoke-RestMethod "http://127.0.0.1:8000/providers/tushare/snapshots/latest?endpoint=stock_basic"
 ```
 
