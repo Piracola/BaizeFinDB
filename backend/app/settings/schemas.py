@@ -53,3 +53,65 @@ class SettingsStatusRead(BaseModel):
     tushare: TushareSettingsStatus
     telegram: TelegramSettingsStatus
     model: ModelSettingsStatus
+
+
+class EditableSettingsField(BaseModel):
+    key: str
+    label: str
+    group: str
+    input_type: str
+    value: str | bool | int | None = None
+    configured: bool
+    secret: bool
+    choices: list[str] = Field(default_factory=list)
+    help_text: str
+
+
+class EditableSettingsAuth(BaseModel):
+    admin_token_configured: bool
+    local_write_without_token: bool
+    header_name: str = "X-BaizeFinDB-Settings-Token"
+
+
+class EditableSettingsRead(BaseModel):
+    generated_at: datetime
+    report_type: str = "editable_settings"
+    mode: str = "editable_local_env"
+    env_file: str = ".env"
+    write_boundary: str
+    auth: EditableSettingsAuth
+    fields: list[EditableSettingsField]
+    status: SettingsStatusRead
+
+
+class EditableSettingsUpdate(BaseModel):
+    values: dict[str, str | bool | int | None] = Field(default_factory=dict)
+    clear: list[str] = Field(default_factory=list)
+
+
+class EditableSettingsSaveResult(BaseModel):
+    saved: bool
+    updated_keys: list[str]
+    unchanged_secret_keys: list[str] = Field(default_factory=list)
+    env_file: str = ".env"
+    restart_note: str
+    settings: EditableSettingsRead
+
+
+class SettingsConnectionTestRequest(BaseModel):
+    target: str = Field(pattern="^(server|tushare|telegram|model|all)$")
+
+
+class SettingsConnectionCheck(BaseModel):
+    name: str
+    status: str
+    detail: str
+
+
+class SettingsConnectionTestResult(BaseModel):
+    generated_at: datetime
+    report_type: str = "settings_connection_test"
+    target: str
+    status: str
+    boundary: str
+    checks: list[SettingsConnectionCheck]

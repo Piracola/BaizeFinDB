@@ -86,9 +86,35 @@
       <section id="settings-panel" class="panel settings-panel" aria-labelledby="settings-title">
         <div class="section-heading">
           <h2 id="settings-title">设置 / API 配置</h2>
-          <span class="muted">来自 /settings/status</span>
+          <span class="muted">来自 /settings/status 与 /settings/editable</span>
         </div>
         <div id="settings-status" class="settings-status"></div>
+        <form id="settings-form" class="settings-form">
+          <div class="section-heading">
+            <h3>API 写入</h3>
+            <button id="settings-save-button" type="submit">保存设置</button>
+          </div>
+          <label class="field-row settings-token-row">
+            <span>写入 Token</span>
+            <input
+              id="settings-admin-token"
+              name="settings_admin_token"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="远程访问时填写"
+            />
+          </label>
+          <div id="settings-fields" class="settings-form-grid"></div>
+          <div class="settings-test-bar" aria-label="API 连接测试">
+            <button type="button" data-settings-test-target="server">测试服务端</button>
+            <button type="button" data-settings-test-target="tushare">测试 Tushare</button>
+            <button type="button" data-settings-test-target="telegram">测试 Telegram</button>
+            <button type="button" data-settings-test-target="model">测试模型</button>
+            <button type="button" data-settings-test-target="all">全部测试</button>
+          </div>
+          <div id="settings-test-result" class="settings-test-result"></div>
+        </form>
       </section>
 
       <section id="overview-panel" class="panel overview-panel" aria-labelledby="overview-title">

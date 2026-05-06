@@ -75,6 +75,7 @@ class Settings(BaseSettings):
         default=False,
         alias="MODEL_AUDIT_STORE_RAW_PROMPT",
     )
+    settings_admin_token: str | None = Field(default=None, alias="SETTINGS_ADMIN_TOKEN")
     ops_disk_check_path: str = Field(default=".", alias="OPS_DISK_CHECK_PATH")
     ops_disk_free_percent_alert_threshold: float = Field(
         default=10.0,
@@ -149,6 +150,10 @@ class Settings(BaseSettings):
     @property
     def openai_api_key_configured(self) -> bool:
         return bool(self.openai_api_key and self.openai_api_key.strip())
+
+    @property
+    def settings_admin_token_configured(self) -> bool:
+        return bool(self.settings_admin_token and self.settings_admin_token.strip())
 
 
 @lru_cache

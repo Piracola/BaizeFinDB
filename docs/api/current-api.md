@@ -13,6 +13,9 @@ GET  /ops/history
 GET  /ops/trends
 GET  /ops/readiness
 GET  /settings/status
+GET  /settings/editable
+PUT  /settings/editable
+POST /settings/connection-test
 GET  /providers/akshare/endpoints
 GET  /providers/tushare/endpoints
 GET  /providers/tushare/status
@@ -194,7 +197,56 @@ Invoke-RestMethod http://127.0.0.1:8000/settings/status
 - `model`：模型分析是否开启、provider、primary/fallback/base URL/key 是否配置，以及复用模型 provider readiness 的脱敏检查状态。
 - `read_only_boundary`：明确该接口不输出 secret、不写环境、不调用 provider。
 
-返回值不包含 token、API key、webhook secret、Authorization 值、raw `.env`、raw prompt 或模型响应。未来如果要支持浏览器填写并保存 API key，必须先增加本地管理员认证或 localhost-only 写入边界。
+返回值不包含 token、API key、webhook secret、Authorization 值、raw `.env`、raw prompt 或模型响应。
+
+### `GET /settings/editable`
+
+用途：读取 Web 设置页的可编辑字段元数据和当前脱敏配置状态。该接口不返回任何 secret 原文，也不写 `.env`，不调用外部 provider。
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/settings/editable
+```
+
+响应重点：
+
+- `fields`：支持编辑的 key、标签、分组、输入类型、是否已配置、是否 secret、可选项和帮助说明；secret 字段的 `value` 始终为 `null`。
+- `auth`：是否配置 `SETTINGS_ADMIN_TOKEN`，以及无 token 时是否只允许 localhost 写入。
+- `status`：同 `/settings/status` 的脱敏状态摘要。
+
+### `PUT /settings/editable`
+
+用途：在 owner-only/localhost 边界下写入服务器本地 `.env`。远程访问建议配置 `SETTINGS_ADMIN_TOKEN`，请求头使用 `X-BaizeFinDB-Settings-Token`；未配置 token 时只允许 localhost 写入。成功后会刷新当前 API 进程的配置缓存，但 Docker、Celery worker 和 beat 进程可能仍需重启才能读取新环境。
+
+```powershell
+Invoke-RestMethod -Method Put http://127.0.0.1:8000/settings/editable `
+  -Headers @{ "X-BaizeFinDB-Settings-Token" = "<settings-admin-token>" } `
+  -ContentType "application/json" `
+  -Body '{"values":{"MODEL_PROVIDER":"openai","MODEL_ANALYSIS_ENABLED":true,"MODEL_PRIMARY_MODEL":"<model>","OPENAI_API_KEY":"<key>"},"clear":[]}'
+```
+
+请求体：
+
+- `values`：要写入的配置键值。secret 字段留空或不传表示不修改。
+- `clear`：要清空的配置 key 列表。清空优先级高于 `values`。
+
+返回值只包含 `updated_keys`、`unchanged_secret_keys`、重启提示和刷新后的脱敏设置状态，不包含任何 secret 原文。
+
+### `POST /settings/connection-test`
+
+用途：显式手动测试配置连接。该接口使用和写设置相同的 owner-only/localhost 边界；支持 `server`、`tushare`、`telegram`、`model`、`all`。除 `server` 外，测试可能访问外部 provider，`model` 测试会发起一次最小 chat completion，可能产生模型费用。该接口不写数据库、不保存 secret、不发送 Telegram 消息、不改雷达、报告或调度状态。
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/settings/connection-test `
+  -Headers @{ "X-BaizeFinDB-Settings-Token" = "<settings-admin-token>" } `
+  -ContentType "application/json" `
+  -Body '{"target":"all"}'
+```
+
+响应重点：
+
+- `status`：`ok`、`warn` 或 `fail`。
+- `checks`：每个目标的脱敏状态和说明。
+- `boundary`：说明这是显式连接测试，不是保存时自动测试。
 
 ## 4. Provider API
 

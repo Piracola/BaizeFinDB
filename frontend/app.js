@@ -45,6 +45,12 @@ const elements = {
   opsWarningDrilldown: document.querySelector("#ops-warning-drilldown"),
   tushareStatus: document.querySelector("#tushare-status"),
   settingsStatus: document.querySelector("#settings-status"),
+  settingsForm: document.querySelector("#settings-form"),
+  settingsFields: document.querySelector("#settings-fields"),
+  settingsAdminToken: document.querySelector("#settings-admin-token"),
+  settingsSaveButton: document.querySelector("#settings-save-button"),
+  settingsTestButtons: document.querySelectorAll("[data-settings-test-target]"),
+  settingsTestResult: document.querySelector("#settings-test-result"),
   actionMessage: document.querySelector("#action-message"),
   priorityCounts: document.querySelector("#priority-counts"),
   lifecycleCounts: document.querySelector("#lifecycle-counts"),
@@ -90,6 +96,10 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.holdingForm.addEventListener("submit", addHolding);
   elements.watchlistForm.addEventListener("submit", addWatchlistItem);
   elements.telegramBindingForm.addEventListener("submit", saveTelegramBinding);
+  elements.settingsForm.addEventListener("submit", saveSettings);
+  elements.settingsTestButtons.forEach((button) => {
+    button.addEventListener("click", testSettingsConnection);
+  });
   refreshAll();
 });
 
@@ -211,8 +221,12 @@ async function loadTushareStatus() {
 
 async function loadSettingsStatus(options = {}) {
   try {
-    const status = await fetchJson("/settings/status");
+    const [status, editable] = await Promise.all([
+      fetchJson("/settings/status"),
+      fetchJson("/settings/editable"),
+    ]);
     renderSettingsStatus(status);
+    renderSettingsEditor(editable);
     if (!options.silent) {
       showMessage("info", "设置状态已刷新。");
     }
@@ -221,6 +235,65 @@ async function loadSettingsStatus(options = {}) {
     if (!options.silent) {
       showMessage("error", `读取设置状态失败：${formatError(error)}`);
     }
+  }
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+  setButtonsBusy(true);
+
+  try {
+    const headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+    const token = elements.settingsAdminToken.value.trim();
+    if (token) {
+      headers["X-BaizeFinDB-Settings-Token"] = token;
+    }
+
+    const result = await fetchJson("/settings/editable", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(collectSettingsPayload()),
+    });
+    renderSettingsStatus(result.settings.status);
+    renderSettingsEditor(result.settings);
+    showMessage("info", result.restart_note || "设置已保存。");
+  } catch (error) {
+    showMessage("error", `保存设置失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+
+async function testSettingsConnection(event) {
+  const target = event.currentTarget.dataset.settingsTestTarget || "server";
+  setButtonsBusy(true);
+  elements.settingsTestResult.innerHTML = emptyState("正在测试连接。");
+
+  try {
+    const headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+    const token = elements.settingsAdminToken.value.trim();
+    if (token) {
+      headers["X-BaizeFinDB-Settings-Token"] = token;
+    }
+
+    const result = await fetchJson("/settings/connection-test", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ target }),
+    });
+    renderSettingsConnectionTest(result);
+    showMessage("info", `连接测试完成：${label(result.status)}`);
+  } catch (error) {
+    elements.settingsTestResult.innerHTML = emptyState(`连接测试失败：${formatError(error)}`);
+    showMessage("error", `连接测试失败：${formatError(error)}`);
+  } finally {
+    setButtonsBusy(false);
   }
 }
 
@@ -1333,8 +1406,180 @@ function renderSettingsStatus(status) {
     <article class="detail-card settings-boundary">
       <strong>配置边界</strong>
       <p class="summary">${escapeHtml(status?.read_only_boundary || "只读配置状态，不展示或写入密钥。")}</p>
-      <p class="muted">当前模块不从浏览器写入服务器环境；真实密钥仍放在服务器本地环境或 .env 中。</p>
+      <p class="muted">状态区只展示布尔、计数和脱敏检查；可编辑表单不会回显真实密钥。</p>
     </article>
+  `;
+}
+
+function renderSettingsEditor(editable) {
+  const fields = Array.isArray(editable?.fields) ? editable.fields : [];
+  if (!fields.length) {
+    elements.settingsFields.innerHTML = emptyState("没有可编辑设置。");
+    return;
+  }
+
+  const groups = fields.reduce((accumulator, field) => {
+    const group = field.group || "Other";
+    accumulator[group] = accumulator[group] || [];
+    accumulator[group].push(field);
+    return accumulator;
+  }, {});
+
+  const auth = editable?.auth || {};
+  const authBadge = auth.admin_token_configured
+    ? "远程写入需要 Token"
+    : "未配置 Token 时仅允许 localhost 写入";
+
+  elements.settingsFields.innerHTML = `
+    <article class="detail-card settings-boundary">
+      <div class="meta-row">
+        <span class="badge">${escapeHtml(authBadge)}</span>
+        <span class="badge">${escapeHtml(editable?.env_file || ".env")}</span>
+      </div>
+      <p class="summary">${escapeHtml(editable?.write_boundary || "仅写入服务器本地配置。")}</p>
+    </article>
+    ${Object.entries(groups)
+      .map(
+        ([group, groupFields]) => `
+          <section class="settings-field-group">
+            <h4>${escapeHtml(group)}</h4>
+            <div class="settings-field-list">
+              ${groupFields.map((field) => renderSettingsField(field)).join("")}
+            </div>
+          </section>
+        `,
+      )
+      .join("")}
+  `;
+}
+
+function renderSettingsField(field) {
+  const key = field.key || "";
+  const configuredLabel = field.configured ? "已配置" : "未配置";
+  return `
+    <label class="settings-field">
+      <span>
+        ${escapeHtml(field.label || key)}
+        <em>${escapeHtml(configuredLabel)}</em>
+      </span>
+      ${renderSettingsInput(field)}
+      <small>${escapeHtml(field.help_text || "")}</small>
+    </label>
+  `;
+}
+
+function renderSettingsInput(field) {
+  const key = escapeHtml(field.key || "");
+  const value = field.value ?? "";
+  if (field.input_type === "checkbox") {
+    return `
+      <input
+        type="checkbox"
+        data-settings-key="${key}"
+        ${value === true ? "checked" : ""}
+      />
+    `;
+  }
+
+  if (field.input_type === "select") {
+    const choices = Array.isArray(field.choices) ? field.choices : [];
+    return `
+      <select data-settings-key="${key}">
+        ${choices
+          .map(
+            (choice) => `
+              <option value="${escapeHtml(choice)}" ${choice === value ? "selected" : ""}>
+                ${escapeHtml(label(choice))}
+              </option>
+            `,
+          )
+          .join("")}
+      </select>
+    `;
+  }
+
+  if (field.secret) {
+    return `
+      <input
+        type="password"
+        data-settings-key="${key}"
+        data-settings-secret="true"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="${field.configured ? "留空不修改" : "未配置"}"
+      />
+      <span class="settings-clear-row">
+        <input type="checkbox" data-settings-clear="${key}" />
+        清空
+      </span>
+    `;
+  }
+
+  const inputType = field.input_type === "number" ? "number" : "text";
+  return `
+    <input
+      type="${inputType}"
+      data-settings-key="${key}"
+      value="${escapeHtml(value)}"
+      ${inputType === "number" ? "min=\"1\"" : ""}
+    />
+  `;
+}
+
+function collectSettingsPayload() {
+  const values = {};
+  const clear = [];
+
+  elements.settingsFields.querySelectorAll("[data-settings-clear]").forEach((control) => {
+    if (control.checked) {
+      clear.push(control.dataset.settingsClear);
+    }
+  });
+
+  elements.settingsFields.querySelectorAll("[data-settings-key]").forEach((control) => {
+    const key = control.dataset.settingsKey;
+    if (!key || clear.includes(key)) {
+      return;
+    }
+    if (control.type === "checkbox") {
+      values[key] = control.checked;
+      return;
+    }
+    if (control.dataset.settingsSecret === "true" && !control.value.trim()) {
+      return;
+    }
+    values[key] = control.value.trim();
+  });
+
+  return { values, clear };
+}
+
+function renderSettingsConnectionTest(result) {
+  const checks = Array.isArray(result?.checks) ? result.checks : [];
+  elements.settingsTestResult.innerHTML = `
+    <article class="detail-card settings-boundary">
+      <div class="meta-row">
+        <span class="badge ${statusCardClass(result?.status)}">${escapeHtml(label(result?.status || "unknown"))}</span>
+        <span class="badge">${escapeHtml(result?.target || "unknown")}</span>
+      </div>
+      <p class="summary">${escapeHtml(result?.boundary || "仅展示脱敏连接测试状态。")}</p>
+    </article>
+    <div class="settings-grid">
+      ${
+        checks.length
+          ? checks
+              .map((check) =>
+                settingsCard(
+                  `连接：${check.name || "unknown"}`,
+                  check.status || "unknown",
+                  label(check.status || "unknown"),
+                  check.detail || "后端未返回说明",
+                ),
+              )
+              .join("")
+          : emptyState("没有连接测试结果。")
+      }
+    </div>
   `;
 }
 
@@ -1350,6 +1595,8 @@ function settingsCard(name, status, value, detail) {
 
 function renderSettingsStatusUnavailable(reason) {
   elements.settingsStatus.innerHTML = emptyState(reason);
+  elements.settingsFields.innerHTML = emptyState(reason);
+  elements.settingsTestResult.innerHTML = emptyState(reason);
 }
 
 function statusCardClass(status) {
@@ -2179,6 +2426,10 @@ function setButtonsBusy(isBusy) {
   elements.dailyReportButton.disabled = isBusy;
   elements.weeklyReportButton.disabled = isBusy;
   elements.scoreSignalButton.disabled = isBusy;
+  elements.settingsSaveButton.disabled = isBusy;
+  elements.settingsTestButtons.forEach((button) => {
+    button.disabled = isBusy;
+  });
   elements.telegramRefreshButton.disabled = isBusy;
   elements.telegramDisableButton.disabled = isBusy;
   elements.commandRunButton.disabled = isBusy;

@@ -31,6 +31,8 @@ def test_frontend_index_returns_static_page() -> None:
     assert "tushare-status" in response.text
     assert "settings-panel" in response.text
     assert "settings-status" in response.text
+    assert "settings-form" in response.text
+    assert "settings-test-result" in response.text
     assert "lifecycle-counts" in response.text
     assert "market-sentiment" in response.text
     assert "stock-backtrace-evidences" in response.text
@@ -87,6 +89,11 @@ def test_frontend_assets_are_served() -> None:
     assert "/providers/tushare/readiness" in js_response.text
     assert "loadSettingsStatus" in js_response.text
     assert "/settings/status" in js_response.text
+    assert "/settings/editable" in js_response.text
+    assert "/settings/connection-test" in js_response.text
+    assert "saveSettings" in js_response.text
+    assert "testSettingsConnection" in js_response.text
+    assert "X-BaizeFinDB-Settings-Token" in js_response.text
     assert "renderSettingsStatus" in js_response.text
     assert "settings: () =>" in js_response.text
     assert "config: () =>" in js_response.text
@@ -150,6 +157,9 @@ def test_frontend_assets_are_served() -> None:
     assert "settings-panel" in css_response.text
     assert "settings-grid" in css_response.text
     assert "settings-status" in css_response.text
+    assert "settings-form-grid" in css_response.text
+    assert "settings-test-bar" in css_response.text
+    assert "settings-test-result" in css_response.text
     assert "telegram-panel" in css_response.text
     assert "score-grid" in css_response.text
     assert "score-components" in css_response.text
@@ -163,7 +173,7 @@ def test_frontend_assets_are_served() -> None:
     assert "analysis-agent-list" in css_response.text
 
 
-def test_frontend_settings_panel_uses_read_only_settings_status_contract() -> None:
+def test_frontend_settings_panel_uses_editable_settings_contract() -> None:
     client = TestClient(create_app())
 
     js_response = client.get("/assets/app.js")
@@ -171,21 +181,34 @@ def test_frontend_settings_panel_uses_read_only_settings_status_contract() -> No
     assert js_response.status_code == 200
     js_text = js_response.text
     load_start = js_text.index("async function loadSettingsStatus")
-    load_end = js_text.index("async function loadOverview")
+    load_end = js_text.index("async function saveSettings")
     load_block = js_text[load_start:load_end]
     render_start = js_text.index("function renderSettingsStatus")
     render_end = js_text.index("function renderSettingsStatusUnavailable")
     render_block = js_text[render_start:render_end]
+    save_start = js_text.index("async function saveSettings")
+    save_end = js_text.index("async function testSettingsConnection")
+    save_block = js_text[save_start:save_end]
+    test_start = js_text.index("async function testSettingsConnection")
+    test_end = js_text.index("async function loadOverview")
+    test_block = js_text[test_start:test_end]
 
     assert 'fetchJson("/settings/status")' in load_block
+    assert 'fetchJson("/settings/editable")' in load_block
     assert "renderSettingsStatus(status)" in load_block
+    assert "renderSettingsEditor(editable)" in load_block
+    assert 'fetchJson("/settings/editable"' in save_block
+    assert "collectSettingsPayload()" in save_block
+    assert "X-BaizeFinDB-Settings-Token" in save_block
+    assert 'fetchJson("/settings/connection-test"' in test_block
+    assert "renderSettingsConnectionTest(result)" in test_block
     assert "settings-grid" in render_block
     assert "token_configured" in render_block
     assert "bot_token_configured" in render_block
     assert "openai_api_key_configured" in render_block
     assert "model_api_key_configured" in render_block
     assert "read_only_boundary" in render_block
-    assert "真实密钥仍放在服务器本地环境或 .env 中" in render_block
+    assert "可编辑表单不会回显真实密钥" in render_block
     assert "TUSHARE_TOKEN" not in render_block
     assert "TELEGRAM_BOT_TOKEN" not in render_block
     assert "TELEGRAM_WEBHOOK_SECRET" not in render_block

@@ -293,6 +293,106 @@ h3 {
   margin-top: 10px;
 }
 
+.settings-form {
+  margin-top: 14px;
+  border-top: 1px solid #d8cdb5;
+  padding-top: 14px;
+}
+
+.settings-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-test-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-test-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-token-row {
+  margin-bottom: 12px;
+}
+
+.settings-field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-field-group h4 {
+  margin: 0;
+  color: var(--text-dark);
+  font-size: 14px;
+}
+
+.settings-field-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-field {
+  border: 1px solid #d8cdb5;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-dark);
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.settings-field span:first-child {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-field em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.settings-field input,
+.settings-field select,
+.settings-token-row input {
+  border: 1px solid #c7bda8;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--text-dark);
+  font: inherit;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.settings-field input[type="checkbox"] {
+  justify-self: start;
+  min-width: auto;
+}
+
+.settings-field small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-clear-row {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+}
+
 .status-card,
 .priority-card,
 .backtrace-card,
@@ -892,6 +992,7 @@ pre {
   .status-grid,
   .ops-grid,
   .settings-grid,
+  .settings-field-list,
   .ops-trend-chart,
   .ops-trend-row,
   .priority-grid,
